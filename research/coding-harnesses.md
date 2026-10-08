@@ -15,6 +15,7 @@ The two starting links are different kinds of thing, and that distinction organi
 
 - **DeepSeek-Coder is a model family.** It ships no agent loop; you plug it *into* a harness.
 - **OpenCode is a harness.** It ships no model; you plug any provider *into* it.
+- **DeepSeek now ships its own harness too:** **DeepSeek Harness (`dsh`)**, `deepseek-ai/deepseek-harness`, released Aug 13, 2026 — see §1b. Its launch slogan is literally "Model + Harness = Agent".
 
 Why the harness matters: on Terminal-Bench 2.0, the same model (e.g. GPT-5.3-Codex) scores differently under different agents (Droid 77.3% vs "Simple Codex" 75.1% in the March 2026 snapshot), and leaderboards explicitly score "harness + model as one system". Conversely, Amp's Feb 2026 essay "The Coding Agent Is Dead" argues frontier models have made the wrapper less decisive. Both effects are real; the harness matters most for safety, cost (token efficiency), ergonomics, and long-horizon reliability.
 
@@ -63,9 +64,62 @@ Fine-tuning script (`finetune_deepseekcoder.py`, DeepSpeed ZeRO-3), a Gradio dem
 
 ---
 
+## 1b. DeepSeek Harness (`dsh`) — DeepSeek's official harness
+
+**Repo:** [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) · **License:** MIT · **Stars:** ~245k† (repo page shows 245.5k stars, 29.4k forks, ~20.7k commits — an extraordinary count for a 2-month-old repo; treat as reported) · **Stack:** TypeScript monorepo (pnpm, tsdown, Vitest, oxlint; ~55 packages) + Python SDK · **Status:** developer preview — README warns "THERE WILL BE COMPATIBILITY-BREAKING CHANGES"
+
+### Timeline
+| Date | Event |
+|---|---|
+| May 15–20, 2026 | DeepSeek posts "Harness Product Manager" and "Harness R&D Engineer" jobs (Beijing) for a "DeepSeek Desktop Agent product"; named competitors: Claude Code, Cursor, Codex, Manus, Hermes, OpenClaw. Researcher Deli Chen announces a Harness team building a "Code Harness from the ground up". |
+| Aug 13, 2026 | **v0.1 developer preview**, open-sourced under MIT |
+| Sep 29–Oct 2, 2026 | **v0.2** (npm `latest` = `0.2.0-rc.2`): official desktop apps for macOS (Apple silicon; some reports also Intel) and Windows x64; Linux via npm/Web. All published versions so far are prereleases. |
+
+### Architecture — "Everything is a Plugin"
+- Built on **Cordis**, a plugin meta-framework (design paper with Peking University: *"A Programming Paradigm for Spatiotemporal Composability"*). Each registration is an effect that is unwound when its plugin unloads, so plugins can be hot-swapped mid-session.
+- *Everything* is a plugin: model adapters, the agent loop, tools, skills, sessions, storage, sandbox, scheduling/jobs, collaboration, and the UI.
+- **Profiles** choose which plugin bundles load at startup (built-ins: Web, headless, SDK, minimal SDK, ACP; custom profiles allowed). **Presets** choose which capabilities the agent sees.
+- Entry points: `npx @deepseek-ai/dsh web` (Web UI at `127.0.0.1:3080`), desktop app (can install the `dsh` command), `dsh --profile headless "job"` for one-shot/CI runs, **Python SDK** (`pip install deepseek-harness-sdk`, JSON-RPC over stdio), `--dump-config`. Requires Node.js ≥22.19.
+
+### Agent presets
+| Preset | What the agent gets |
+|---|---|
+| **Standard** (default) | Full coding agent: read/write/edit, shell, grep/search, skills, planning, goals, subagents, workflows |
+| **Code / PTC** (programmatic tool calling) | Standard + a Code Mode SDK: the model writes **TypeScript programs** that orchestrate many tool calls in one step (fewer round-trips; more side-effect risk) |
+| **Minimal** | Only persistent bash + `str_replace_editor` — for benchmarking models; used for DeepSeek's reported Terminal-Bench score |
+| **Creator** | Standard + runtime inspection; the agent can build, install, replace or remove plugins and author new presets *from chat* |
+
+### Sessions, safety, integrations
+- **Append-only, zstd-compressed JSONL session log** recording prompts, reasoning, tool calls/results, subagent work and injected context; **Trajectory view** to inspect, resume, **fork** (change one instruction and compare runs), search and replay.
+- Permissions: default **workspace-write** policy plus approval prompts; sandbox plugin (Windows sandbox diagnostics in desktop app); experimental **auto-approval reviewer** plugin. DeepSeek itself says these "reduce risk but do not guarantee isolation"; per-OS sandbox mechanics are not documented in detail.
+- **MCP**: `mcp` package and client exist, no MCP server enabled by default. **ACP** profile available.
+- **Subagents** include optional profile bundles that register **Claude Code and Codex as external subagent providers** — dsh can orchestrate other vendors' harnesses.
+- Experimental: agent teams, scheduled tasks (`schedule_create`), background jobs, voice input. Web UI previews Markdown, code, HTML, PDF, images, Office files, CSV.
+- Plugin ecosystem: GitHub topic `dsh-plugin` (~100 community plugins listed; discovery only, no security review).
+
+### Models
+Default **DeepSeek V4.1 Flash** (V4 Pro optional); bundled provider catalogs for Anthropic, OpenAI, Moonshot (Kimi) and Z.ai (GLM); any OpenAI-compatible endpoint; model switch applies to the next request without restart. Reported API pricing (off-peak, via a reseller): V4.1 Flash ≈ $0.15/M input, $0.60/M output; V4 Pro ≈ $0.66/$1.98.
+
+### Benchmarks
+DeepSeek reports **82.7 on Terminal-Bench** for V4 Flash using the **Minimal** preset (secondary sources disagree on whether that's TB 2.0 or 2.1; no primary page found). That would put a DeepSeek model + its own minimal harness level with Codex + GPT-5.5. No SWE-bench results published for dsh. Because results depend on preset, comparisons across presets aren't valid.
+
+### Strengths / weaknesses
+- **+** Fully open (MIT) official harness from a frontier lab — unlike Claude Code (closed) and Codex (open core, closed IDE extension); the most radical modularity of any harness (hot-swappable plugins, agent can extend itself); excellent observability (Trajectory, forkable logs); multi-surface (desktop, web, headless, Python SDK); cheapest first-party model pairing.
+- **−** Preview with breaking changes; GitHub Issues disabled on the repo (criticized); heavy always-on context (~13.5k input tokens on the first request of a trivial task); sandboxing weaker/less documented than Codex; plugin supply-chain risk is on the user; reported bugs (silent MSYS2 failures on Windows, hot-reload cache staleness, ~200 ms persistence lag); reviewers still rate Claude Code and Codex as more polished.
+
+### Community DeepSeek-focused harnesses (unofficial)
+| Project | Notes |
+|---|---|
+| **Codewhale** (`codewhale-hq/Codewhale`, formerly **DeepSeek-TUI** by Hunter Bown) | Rust, MIT, ~41k stars†. Began as a DeepSeek-V4 terminal agent, now provider-neutral (40+ routes, local via Ollama/vLLM/SGLang). Plan / Work / Operate modes; Ask / Auto-Review / Full Access postures; OS sandbox (Seatbelt, opt-in bubblewrap); subagents and agent teams; MCP, skills, hooks, plugins; `/undo`, `/receipts`, `/preview-request`. Not affiliated with DeepSeek. |
+| **Deep Code CLI** (`lessweb/deepcode-cli`, npm `@vegamo/deepcode-cli`) | TypeScript/Node, MIT, ~2.3k stars†. Listed in DeepSeek's API docs as an integration. Thinking-mode and `reasoningEffort` control, KV-cache-aware for cost, skills (`.agents/skills`), MCP, per-scope permissions, `/fork` `/undo`, VS Code extension sharing `~/.deepcode/settings.json`. |
+| Hobby CLIs (`holasoymalva/deepseek-cli`, `PierrunoYT/deepseek-cli`, etc.) | Small personal projects; not recommended for serious use. |
+| `opendshdesktop.com` | Unofficial community desktop distribution of dsh — don't confuse with DeepSeek's official app. |
+
+---
+
 ## 2. OpenCode (anomalyco/opencode) — the flagship open harness
 
-**Type:** Terminal/desktop/IDE coding agent · **Maker:** Anomaly (ex-SST; Jay V, Frank Wang) · **License:** MIT · **Stars:** ~212k† (largest open-source harness) · **Stack:** TypeScript on Bun (monorepo `packages/`) · **First release:** Jun 2025
+**Type:** Terminal/desktop/IDE coding agent · **Maker:** Anomaly (ex-SST; Jay V, Frank Wang) · **License:** MIT · **Stars:** ~212k† (largest community-built open-source harness; DeepSeek's official dsh repo reports more) · **Stack:** TypeScript on Bun (monorepo `packages/`) · **First release:** Jun 2025
 
 > Naming note: an older Go project called `opencode-ai/opencode` was renamed **Crush** (Charmbracelet). Some roundups conflate the two (e.g. calling OpenCode "Go"); the current OpenCode is TypeScript/Bun.
 
@@ -178,38 +232,39 @@ Provider-agnostic, 75+ providers via `/connect` (BYOK, local models). **OpenCode
 ## 4. Head-to-head comparison
 
 ### 4.1 Core matrix
-| | OpenCode | Codex CLI | Claude Code | Aider | Cline | Pi | OpenHands | Goose | Gemini CLI |
-|---|---|---|---|---|---|---|---|---|---|
-| Open source | ✅ MIT | ✅ Apache (IDE ext closed) | ❌ | ✅ Apache | ✅ Apache (JetBrains closed) | ✅ MIT | ✅ MIT | ✅ Apache | ✅ Apache (successor closed) |
-| Language | TS/Bun | Rust | TS | Python | TS | TS | Python+TS | Rust | TS |
-| Stars (≈) | 212k† | 128k† | ~120k | 49k† | 70k† | 113k† | 90k† | 55k† | ~103k |
-| Model freedom | 75+ providers | OpenAI + local | Claude (+compatible endpoints) | 100+ via LiteLLM | ~15 + any OpenAI-compat | 15+ / 300+ models | any | 15+ + ACP | Gemini only |
-| Primary UI | TUI + desktop + IDE + web | TUI + IDE + desktop + cloud | TUI + IDE + desktop + web | TUI | IDE (+CLI) | TUI / library | Web canvas | Desktop + CLI | TUI |
-| OS sandbox | ❌ (Docker opt.) | ✅ Seatbelt/bwrap/Win | ✅ (opt-in) | ❌ | ❌ | ❌ | ✅ Docker | ❌ | ✅ (opt.) |
-| Approval model | allow/ask/deny per tool | sandbox mode × approval policy, auto-reviewer | permission modes + hooks | confirm each step | approve each action | none | container boundary | per-extension | permission prompts |
-| Plan/read-only mode | ✅ plan agent | ✅ read-only | ✅ | ✅ (ask/architect) | ✅ Plan/Act | ❌ (via pkg) | — | — | ✅ |
-| Subagents | ✅ | ✅ (multi-agent) | ✅ teams | ❌ | limited | ❌ (via pkg) | ✅ multi-agent | ✅ | limited |
-| MCP | ✅ | ✅ | ✅ | ❌ native | ✅ | via ext | via agents | ✅ core | ✅ |
-| LSP | ✅ (exp.) | ❌ | via plugins | repo map instead | IDE-provided | via fork | — | — | — |
-| Undo | /undo /redo, session revert | git | checkpoints/rewind | git commits | checkpoints | session tree branch | container | — | checkpoints |
-| Headless / CI | `opencode serve` + SDK | `codex exec` + SDK | `-p` + Agent SDK | scripting | `cline` headless + SDK | library | Agent Server REST | API | non-interactive |
-| Project memory file | AGENTS.md | AGENTS.md | CLAUDE.md | conventions file | .clinerules | AGENTS/skills | — | .goosehints | GEMINI.md |
-| Cost model | BYOK / Zen | ChatGPT plan / API | Claude plan / API | BYOK | BYOK | BYOK / subscription login | BYOK | BYOK / ACP | Paid Gemini (since 2026) |
+| | OpenCode | Codex CLI | Claude Code | Aider | Cline | Pi | OpenHands | Goose | Gemini CLI | DeepSeek Harness (dsh) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Open source | ✅ MIT | ✅ Apache (IDE ext closed) | ❌ | ✅ Apache | ✅ Apache (JetBrains closed) | ✅ MIT | ✅ MIT | ✅ Apache | ✅ Apache (successor closed) | ✅ MIT |
+| Language | TS/Bun | Rust | TS | Python | TS | TS | Python+TS | Rust | TS | TS (+Python SDK) |
+| Stars (≈) | 212k† | 128k† | ~120k | 49k† | 70k† | 113k† | 90k† | 55k† | ~103k | 245k† (reported) |
+| Model freedom | 75+ providers | OpenAI + local | Claude (+compatible endpoints) | 100+ via LiteLLM | ~15 + any OpenAI-compat | 15+ / 300+ models | any | 15+ + ACP | Gemini only | DeepSeek default + Anthropic/OpenAI/Kimi/GLM catalogs + OpenAI-compat |
+| Primary UI | TUI + desktop + IDE + web | TUI + IDE + desktop + cloud | TUI + IDE + desktop + web | TUI | IDE (+CLI) | TUI / library | Web canvas | Desktop + CLI | TUI | Desktop + Web UI + headless + Python SDK |
+| OS sandbox | ❌ (Docker opt.) | ✅ Seatbelt/bwrap/Win | ✅ (opt-in) | ❌ | ❌ | ❌ | ✅ Docker | ❌ | ✅ (opt.) | ⚠️ sandbox plugin, "no isolation guarantee" |
+| Approval model | allow/ask/deny per tool | sandbox mode × approval policy, auto-reviewer | permission modes + hooks | confirm each step | approve each action | none | container boundary | per-extension | permission prompts | workspace-write + prompts, auto-reviewer (exp.) |
+| Plan/read-only mode | ✅ plan agent | ✅ read-only | ✅ | ✅ (ask/architect) | ✅ Plan/Act | ❌ (via pkg) | — | — | ✅ | ✅ planning in Standard |
+| Subagents | ✅ | ✅ (multi-agent) | ✅ teams | ❌ | limited | ❌ (via pkg) | ✅ multi-agent | ✅ | limited | ✅ (incl. Claude Code/Codex as providers) |
+| MCP | ✅ | ✅ | ✅ | ❌ native | ✅ | via ext | via agents | ✅ core | ✅ | ✅ (off by default) |
+| LSP | ✅ (exp.) | ❌ | via plugins | repo map instead | IDE-provided | via fork | — | — | — | — |
+| Undo | /undo /redo, session revert | git | checkpoints/rewind | git commits | checkpoints | session tree branch | container | — | checkpoints | fork/replay session log |
+| Headless / CI | `opencode serve` + SDK | `codex exec` + SDK | `-p` + Agent SDK | scripting | `cline` headless + SDK | library | Agent Server REST | API | non-interactive | `--profile headless` + Python SDK |
+| Project memory file | AGENTS.md | AGENTS.md | CLAUDE.md | conventions file | .clinerules | AGENTS/skills | — | .goosehints | GEMINI.md | skills / AGENTS |
+| Cost model | BYOK / Zen | ChatGPT plan / API | Claude plan / API | BYOK | BYOK | BYOK / subscription login | BYOK | BYOK / ACP | Paid Gemini (since 2026) | DeepSeek API (very cheap) / BYOK |
 
 ### 4.2 Design philosophies
 | Philosophy | Harnesses | Trade-off |
-|---|---|---|
+|---|---|---|---|
 | **Maximal, batteries-included** | Claude Code, OpenCode, Codex | Rich features (subagents, MCP, plan, LSP) at the cost of large system prompts and token usage |
 | **Minimal / hackable** | Pi, mini-swe-agent | Tiny prompt, fully inspectable, fewer tokens; you build safety and orchestration yourself |
 | **Git-as-state** | Aider | Every step reviewable and revertible; less autonomy |
 | **Human-in-the-loop IDE** | Cline, Roo, Kilo | Maximum visibility/control; slower, approval fatigue |
 | **Sandbox-first** | Codex, OpenHands | Safe autonomy; setup friction (bwrap, Docker) |
 | **Platform / orchestrator** | OpenHands Agent Canvas, Goose, Factory | Run many agents & automations; heavier infra |
+| **Plugin-kernel / self-extending** | DeepSeek Harness (Cordis) | Every component hot-swappable, agent can write its own plugins; preview instability and plugin supply-chain risk |
 
 ### 4.3 Benchmarks (harness + model as a system)
 | Benchmark | Notable results (as reported, 2026) |
 |---|---|
-| Terminal-Bench 2.0 (89 hard CLI tasks) | Codex + GPT-5.5 ~82%; ForgeCode + GPT-5.4 81.8%; Droid + GPT-5.3-Codex 77.3%; DeepSeek V4-Pro (vendor) ~67.9%; OpenHands + Opus 4.5 51.9% |
+| Terminal-Bench 2.0 (89 hard CLI tasks) | DeepSeek V4 Flash + dsh Minimal preset 82.7 (DeepSeek-reported, secondhand; TB version unclear); Codex + GPT-5.5 ~82%; ForgeCode + GPT-5.4 81.8%; Droid + GPT-5.3-Codex 77.3%; DeepSeek V4-Pro (vendor) ~67.9%; OpenHands + Opus 4.5 51.9% |
 | SWE-bench Verified | Claude Code ~80.9%, Codex ~80%, Gemini 3.1 Pro ~80.6% — effectively tied; mini-swe-agent (bash-only) >74% |
 | Aider Polyglot | GPT-5 (high) 88%, o3-pro 84.9%, Gemini 2.5 Pro 83.1% (leaderboard not refreshed for newest models) |
 | DeepSeek-Coder (2023, model-only) | 33B beats CodeLlama-34B by 5.9–10.8 pts across HumanEval/MBPP/DS-1000 |
@@ -224,6 +279,7 @@ The two original links are complementary:
 
 | Goal | Recommended pairing |
 |---|---|
+| First-party DeepSeek experience | **DeepSeek Harness (`dsh`)** + DeepSeek V4.1 Flash / V4 Pro — DeepSeek's own tuned pairing; or Deep Code CLI for a lighter terminal-only option |
 | Fully open, self-hosted stack | **OpenCode or Pi** + DeepSeek-Coder-V2-Lite / DeepSeek-V3.x / Qwen3-Coder via vLLM or Ollama |
 | Cheapest capable cloud agent | OpenCode / Cline / Aider + `deepseek-v4-flash` |
 | Editor autocomplete (FIM) | Original DeepSeek-Coder 1.3B/6.7B (FIM-trained) via Continue/Tabby-style completion plugins — agent harnesses don't need FIM |
@@ -247,11 +303,22 @@ Practical notes on running DeepSeek (or any open model) in a harness:
 - **If you're building your own harness:** start from **Pi** (libraries) or **mini-swe-agent** (reference baseline); copy OpenCode's client/server + OpenAPI pattern for multi-client UIs.
 - **If you need fleets/automation:** **OpenHands Agent Canvas** or **Goose**.
 - **Avoid new investment in Gemini CLI** for individual use; it's being retired in favor of closed Antigravity CLI.
-- **Use DeepSeek as a model, not a tool:** pick V3.x/V4 for agents, original Coder only for FIM autocomplete or fine-tuning experiments.
+- **If you want DeepSeek end-to-end:** try **DeepSeek Harness (`dsh`)** — the official, MIT-licensed harness — for prototyping and for its Trajectory/fork observability, but run it in a disposable environment and pin versions until it leaves preview. For a stable DeepSeek terminal agent today, OpenCode or Codewhale with `deepseek-v4-*` is the safer bet.
+- **Use the original DeepSeek-Coder as a model, not a tool:** pick V3.x/V4 for agents, original Coder only for FIM autocomplete or fine-tuning experiments.
 
 ---
 
 ## Sources
+- https://github.com/deepseek-ai/deepseek-harness · https://www.deepseek.com/en/harness/
+- https://www.orcarouter.ai/blog/deepseek-harness-explained
+- https://www.scriptbyai.com/deepseek-harness/
+- https://gigazine.net/gsc_news/en/20260814-deepseek-harness-v0-1/
+- https://www.marktechpost.com/2026/10/03/deepseek-harness-v0-2-brings-official-desktop-apps-to-its-open-source-agent-harness/
+- https://cryptobriefing.com/deepseek-harness-v02-desktop-app-release/
+- https://tech-ish.com/2026/10/07/deepseeks-ai-agent-now-installs-like-a-normal-app-on-mac-and-windows/
+- https://www.verdent.ai/guides/what-is-deepseek-code
+- https://github.com/Hmbown/DeepSeek-TUI (now codewhale-hq/Codewhale)
+- https://github.com/lessweb/deepcode-cli · https://api-docs.deepseek.com/quick_start/agent_integrations/deepcode/
 - https://github.com/deepseek-ai/deepseek-coder
 - https://github.com/anomalyco/opencode · https://opencode.ai/docs/ · https://opencode.ai/docs/tools/ · https://opencode.ai/docs/server/
 - https://github.com/openai/codex · https://learn.chatgpt.com/codex/sandboxing
