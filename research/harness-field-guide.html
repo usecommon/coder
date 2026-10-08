@@ -1,0 +1,464 @@
+<title>Coding Harness Field Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a field guide. One kitchen diagram teaches the parts, then one "specimen card" per agent, then a side-by-side table. */
+:root{
+  --bg:#F1F4EF; --surface:#FFFFFF; --ink:#1B231E; --muted:#56655C; --line:#D3DCD4;
+  --accent:#2E7A57; --accent-soft:#DCEDE2; --mustard:#B9811A; --mustard-soft:#F6E8C8;
+  --bad:#B4483A; --bad-soft:#F6DFDA; --fence:#2E7A57;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101512; --surface:#18201B; --ink:#E6ECE7; --muted:#9DAEA3; --line:#2C3830;
+  --accent:#61C391; --accent-soft:#1F3A2B; --mustard:#E9B54B; --mustard-soft:#3A2F17;
+  --bad:#EB8475; --bad-soft:#3D221E; --fence:#61C391; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#101512; --surface:#18201B; --ink:#E6ECE7; --muted:#9DAEA3; --line:#2C3830;
+  --accent:#61C391; --accent-soft:#1F3A2B; --mustard:#E9B54B; --mustard-soft:#3A2F17;
+  --bad:#EB8475; --bad-soft:#3D221E; --fence:#61C391; color-scheme:dark;}
+
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.55}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:40px 80px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.1;margin:0}
+h1{font-size:clamp(2.2rem,5vw,3.6rem);font-weight:800;letter-spacing:-.02em}
+h2{font-size:clamp(1.6rem,3vw,2.2rem);font-weight:700;letter-spacing:-.01em}
+h3{font-size:1.5rem;font-weight:700}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:.75rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.lede{font-size:1.2rem;max-width:62ch;color:var(--ink)}
+.muted{color:var(--muted)}
+section{margin-top:64px;display:grid;gap:20px}
+header{display:grid;gap:16px}
+.big-idea{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:8px}
+.idea{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px;display:grid;gap:6px}
+.idea b{font-family:var(--display);font-size:1.15rem}
+
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;overflow-x:auto}
+.diagram svg{display:block;min-width:620px;width:100%;height:auto}
+svg .box{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+svg .brain{fill:var(--accent-soft);stroke:var(--accent);stroke-width:2}
+svg .bell{fill:var(--mustard-soft);stroke:var(--mustard);stroke-width:2}
+svg .fence{fill:none;stroke:var(--fence);stroke-width:2;stroke-dasharray:8 6}
+svg .t{fill:var(--ink);font-family:var(--display);font-weight:700;font-size:16px}
+svg .s{fill:var(--muted);font-family:var(--body);font-size:12.5px}
+svg .lbl{fill:var(--accent);font-family:var(--mono);font-size:11px;letter-spacing:.08em}
+svg .arrow{stroke:var(--ink);stroke-width:2;fill:none}
+svg .ret{stroke:var(--accent);stroke-width:2;fill:none;stroke-dasharray:4 4}
+svg .head{fill:var(--ink)} svg .headg{fill:var(--accent)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;counter-reset:st;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:st;display:grid;gap:4px;padding:12px 14px;border-left:3px solid var(--accent);background:var(--surface);border-radius:0 8px 8px 0}
+.steps li::before{content:"Step " counter(st);font-family:var(--mono);font-size:.72rem;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+
+.glossary{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.term{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+.term svg{width:44px;height:44px}
+.term svg *{stroke:var(--accent);stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.term b{display:block;font-family:var(--display);font-size:1.05rem}
+.term span{font-size:.95rem;color:var(--muted)}
+
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filters button{font:inherit;font-size:.92rem;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 14px;border-radius:999px;cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.filters button:focus-visible,.card summary:focus-visible{outline:3px solid var(--mustard);outline-offset:2px}
+
+.cards{display:grid;gap:22px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px;display:grid;gap:16px;min-width:0}
+.card-top{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}
+.meta{font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-top:6px}
+.badge{font-family:var(--mono);font-size:.72rem;padding:4px 9px;border-radius:6px;white-space:nowrap;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.badge.warn{background:var(--bad-soft);color:var(--bad)}
+.badge.mid{background:var(--mustard-soft);color:var(--mustard)}
+.picture{font-family:var(--display);font-size:1.3rem;font-weight:500;line-height:1.3;border-left:4px solid var(--mustard);padding-left:14px;max-width:60ch}
+.picture small{display:block;font-family:var(--body);font-size:.85rem;color:var(--muted);margin-top:2px;font-weight:400}
+.grid2{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:22px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.lab{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px}
+.node{border:1.5px solid var(--line);border-radius:8px;padding:6px 10px;background:var(--bg);font-size:.86rem;line-height:1.3;min-width:0}
+.node b{display:block;font-family:var(--display);font-size:.92rem}
+.node.model{border-color:var(--accent);background:var(--accent-soft)}
+.node.fenced{border-style:dashed;border-color:var(--fence)}
+.arr{align-self:center;color:var(--muted);font-family:var(--mono)}
+.fence-note{font-size:.85rem;color:var(--muted);margin-top:8px}
+.fence-note i{font-style:normal;border-bottom:2px dashed var(--fence)}
+ol.ops{margin:0;padding-left:1.3em;display:grid;gap:4px;font-size:.96rem}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:.82rem;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink)}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:560px){.pc{grid-template-columns:1fr}}
+.pc ul{margin:0;padding-left:1.1em;display:grid;gap:3px;font-size:.95rem}
+.pc .good .lab{color:var(--accent)} .pc .bad .lab{color:var(--bad)}
+.meters{display:grid;gap:7px}
+.meter{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center;font-size:.86rem}
+.dots{display:flex;gap:4px}
+.dots span{width:100%;max-width:34px;height:10px;border-radius:3px;background:var(--line)}
+.dots span.on{background:var(--accent)}
+.warnbox{background:var(--bad-soft);color:var(--ink);border-radius:8px;padding:10px 14px;font-size:.92rem}
+.warnbox b{color:var(--bad)}
+
+.table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+table{border-collapse:collapse;width:100%;min-width:900px;font-size:.9rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;background:var(--bg);position:sticky;top:0}
+td:first-child{font-family:var(--display);font-weight:700;white-space:nowrap}
+.y{color:var(--accent);font-weight:700} .n{color:var(--bad);font-weight:700} .p{color:var(--mustard);font-weight:700}
+
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.pick div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px}
+.pick b{font-family:var(--display);font-size:1.05rem}
+.pick span{color:var(--accent);font-weight:700}
+.more{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.more div{border-top:2px solid var(--line);padding-top:10px;display:grid;gap:4px;font-size:.95rem}
+.more b{font-family:var(--display)}
+footer{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:.9rem;color:var(--muted);display:grid;gap:8px}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}.card:hover{border-color:var(--accent)}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Field guide · October 2026</p>
+  <h1>How coding agents work, explained like you're five</h1>
+  <p class="lede">Every AI coding tool has two parts. The <b>model</b> is the chef: the brain that decides what to cook. The <b>harness</b> is the kitchen: the hands, knives, fridge, fire alarm and rules around the chef. Same chef, different kitchen, very different dinner.</p>
+  <div class="big-idea">
+    <div class="idea"><b>Model = the chef</b><span class="muted">Claude, GPT, Gemini, DeepSeek, Qwen. It only thinks and talks. It can't touch anything by itself.</span></div>
+    <div class="idea"><b>Harness = the kitchen</b><span class="muted">Claude Code, OpenCode, Codex, Aider… It gives the chef hands (tools), a notebook (memory) and a fence (safety).</span></div>
+    <div class="idea"><b>Agent = chef + kitchen</b><span class="muted">DeepSeek put it as "Model + Harness = Agent". Benchmarks score the pair together, never the chef alone.</span></div>
+  </div>
+</header>
+
+<section aria-labelledby="loop-h">
+  <p class="eyebrow">Part 1</p>
+  <h2 id="loop-h">The kitchen every agent shares</h2>
+  <p class="muted" style="max-width:65ch">Strip away the logos and every tool below runs this same loop. They differ in how big the fence is, who rings the bell, how many helpers there are, and which chefs are allowed in.</p>
+  <div class="diagram" role="img" aria-label="Diagram: You ask the model. The model passes a permission check, then uses tool hands inside a sandbox fence to change your project. Results flow back to the model, which loops until done. A memory notebook and sub-agent helpers sit next to the model.">
+    <svg viewBox="0 0 720 370" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker>
+        <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="headg"/></marker>
+      </defs>
+      <rect class="box" x="16" y="150" width="118" height="64" rx="10"/>
+      <text class="t" x="75" y="177" text-anchor="middle">You</text>
+      <text class="s" x="75" y="197" text-anchor="middle">"fix the login bug"</text>
+      <rect class="box" x="196" y="18" width="128" height="54" rx="8"/>
+      <text class="t" x="260" y="42" text-anchor="middle">Notebook</text>
+      <text class="s" x="260" y="60" text-anchor="middle">memory · AGENTS.md</text>
+      <line x1="260" y1="72" x2="260" y2="116" class="ret"/>
+      <circle class="brain" cx="260" cy="182" r="64"/>
+      <text class="t" x="260" y="178" text-anchor="middle">Model</text>
+      <text class="s" x="260" y="198" text-anchor="middle">the chef's brain</text>
+      <circle class="box" cx="226" cy="306" r="16"/><circle class="box" cx="294" cy="306" r="16"/>
+      <line x1="244" y1="246" x2="232" y2="290" class="ret"/><line x1="276" y1="246" x2="288" y2="290" class="ret"/>
+      <text class="s" x="260" y="345" text-anchor="middle">helper agents (sub-agents)</text>
+      <path d="M346 182 L366 162 L386 182 L366 202 Z" class="bell"/>
+      <text class="lbl" x="366" y="148" text-anchor="middle">ASK?</text>
+      <text class="s" x="366" y="222" text-anchor="middle">permission</text>
+      <text class="s" x="366" y="238" text-anchor="middle">bell</text>
+      <rect class="fence" x="430" y="34" width="274" height="292" rx="14"/>
+      <text class="lbl" x="446" y="56">SANDBOX FENCE</text>
+      <rect class="box" x="452" y="72" width="230" height="78" rx="10"/>
+      <text class="t" x="567" y="102" text-anchor="middle">Hands = tools</text>
+      <text class="s" x="567" y="124" text-anchor="middle">read · edit · run shell · search · web</text>
+      <rect class="box" x="452" y="214" width="230" height="84" rx="10"/>
+      <text class="t" x="567" y="246" text-anchor="middle">Your project</text>
+      <text class="s" x="567" y="268" text-anchor="middle">files · tests · git</text>
+      <line x1="136" y1="182" x2="192" y2="182" class="arrow" marker-end="url(#ah)"/>
+      <line x1="326" y1="182" x2="342" y2="182" class="arrow" marker-end="url(#ah)"/>
+      <path d="M388 176 C410 150 420 120 448 112" class="arrow" marker-end="url(#ah)"/>
+      <line x1="567" y1="152" x2="567" y2="210" class="arrow" marker-end="url(#ah)"/>
+      <path d="M450 262 C380 290 330 260 312 226" class="ret" marker-end="url(#ahg)"/>
+      <text class="lbl" x="384" y="296" text-anchor="middle">RESULTS</text>
+    </svg>
+  </div>
+  <ol class="steps">
+    <li><b>You ask</b><span class="muted">Type a wish in a terminal, editor or app.</span></li>
+    <li><b>Chef thinks</b><span class="muted">The model reads your wish plus its notebook and plans.</span></li>
+    <li><b>Bell rings</b><span class="muted">Before touching anything risky, the harness checks the rules or asks you.</span></li>
+    <li><b>Hands work</b><span class="muted">Tools read files, edit code, run tests, inside the fence.</span></li>
+    <li><b>Taste it</b><span class="muted">Results (errors, test output) go back to the chef.</span></li>
+    <li><b>Repeat</b><span class="muted">Loop until done, then report back to you.</span></li>
+  </ol>
+</section>
+
+<section aria-labelledby="gl-h">
+  <p class="eyebrow">Part 2</p>
+  <h2 id="gl-h">Kitchen words in one line each</h2>
+  <div class="glossary">
+    <div class="term"><svg viewBox="0 0 44 44"><path d="M12 30 L22 12 L32 30"/><path d="M14 34h16"/></svg><div><b>Tool</b><span>A hand the chef can use: "read file", "run command", "search web".</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><rect x="7" y="9" width="30" height="26" rx="4" stroke-dasharray="4 3"/><circle cx="22" cy="22" r="4"/></svg><div><b>Sandbox</b><span>A fence. The agent can play inside it but can't wreck the rest of your computer.</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><path d="M22 8 L36 22 L22 36 L8 22 Z"/><path d="M22 17v6M22 27v1"/></svg><div><b>Permission / approval</b><span>The bell: "May I delete this?" Some kitchens ring it every time, some never.</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><circle cx="15" cy="16" r="5"/><circle cx="30" cy="16" r="5"/><path d="M7 34c1-7 15-7 16 0M22 34c1-7 15-7 16 0"/></svg><div><b>Sub-agent</b><span>A helper chef sent off to do one job (like "find every place we use this function").</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><rect x="10" y="8" width="24" height="28" rx="2"/><path d="M15 16h14M15 22h14M15 28h8"/></svg><div><b>Memory file</b><span>A notebook the chef rereads every time: AGENTS.md, CLAUDE.md, GEMINI.md.</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><path d="M10 14h24M10 22h16M10 30h8"/><path d="M32 26l4 4-4 4"/></svg><div><b>Compaction</b><span>When the notebook gets too long, squish old pages into a short summary.</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><rect x="8" y="16" width="12" height="12" rx="2"/><rect x="24" y="16" width="12" height="12" rx="2"/><path d="M20 22h4M14 10v6M30 28v6"/></svg><div><b>MCP</b><span>A universal plug, so any harness can use outside tools (databases, Slack, browsers).</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><path d="M10 12h24v16H10z"/><path d="M16 34h12M22 28v6"/></svg><div><b>Client / server</b><span>The kitchen runs in the back; the screen you type in is just a window. Many windows, one kitchen.</span></div></div>
+    <div class="term"><svg viewBox="0 0 44 44"><path d="M13 30c0-8 4-16 9-16s9 8 9 16"/><path d="M10 30h24"/><path d="M22 14V8"/></svg><div><b>Skill</b><span>A recipe card the chef pulls out only when it needs that recipe.</span></div></div>
+  </div>
+</section>
+
+<section aria-labelledby="sp-h">
+  <p class="eyebrow">Part 3</p>
+  <h2 id="sp-h">Meet the kitchens</h2>
+  <p class="muted" style="max-width:65ch">Each card has a picture to remember it by, a map of its parts, how a job runs, what it's good and bad at, and four scores out of five. The scores are this guide's judgment, comparing the tools against each other.</p>
+  <div class="filters" role="group" aria-label="Filter kitchens">
+    <button type="button" data-f="all" aria-pressed="true">All</button>
+    <button type="button" data-f="big" aria-pressed="false">Big all-in-one</button>
+    <button type="button" data-f="safe" aria-pressed="false">Safety-first</button>
+    <button type="button" data-f="ask" aria-pressed="false">Asks before acting</button>
+    <button type="button" data-f="mini" aria-pressed="false">Tiny and hackable</button>
+    <button type="button" data-f="platform" aria-pressed="false">Many-agent platforms</button>
+    <button type="button" data-f="leak" aria-pressed="false">Born from the leak</button>
+  </div>
+  <div class="cards" id="cards"></div>
+</section>
+
+<section aria-labelledby="more-h">
+  <h2 id="more-h">Also in the neighbourhood</h2>
+  <div class="more">
+    <div><b>Crush</b><span class="muted">Go, by Charmbracelet. The prettiest terminal kitchen; swap chefs mid-meal. Source-available license (FSL), not fully open.</span></div>
+    <div><b>Qwen Code</b><span class="muted">Alibaba's copy of the Gemini CLI kitchen, rebuilt for Qwen chefs. Apache-2.0, has a sandbox and hooks.</span></div>
+    <div><b>Kimi Code CLI</b><span class="muted">Python kitchen from Moonshot for the Kimi chef. Helpers and MCP, but no fence or hooks.</span></div>
+    <div><b>Deep Code CLI</b><span class="muted">Small community kitchen tuned for DeepSeek: thinking-mode dial, skills, VS Code twin.</span></div>
+    <div><b>Roo Code, Kilo Code</b><span class="muted">Cousins of Cline inside VS Code, adding "modes" (architect, coder, debugger hats).</span></div>
+    <div><b>Amp, Factory Droid</b><span class="muted">Closed, paid kitchens. Amp picks the chef for you; Factory runs a team of specialist "Droids" in the cloud.</span></div>
+  </div>
+</section>
+
+<section aria-labelledby="tb-h">
+  <p class="eyebrow">Part 4</p>
+  <h2 id="tb-h">Side by side</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Kitchen</th><th>Picture</th><th>Open source</th><th>Which chefs</th><th>Fence (sandbox)</th><th>Bell (approvals)</th><th>Helpers</th><th>MCP plug</th><th>Undo</th><th>Where you use it</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<section aria-labelledby="pk-h">
+  <h2 id="pk-h">So which kitchen should I pick?</h2>
+  <div class="pick">
+    <div><b>"I want the best result and will pay."</b><p>→ <span>Claude Code</span> or <span>Codex CLI</span> with their own top models.</p></div>
+    <div><b>"I want free choice of model, fully open."</b><p>→ <span>OpenCode</span>. Add Docker and set edit/bash to "ask" for strange repos.</p></div>
+    <div><b>"Safety matters most; let it run alone."</b><p>→ <span>Codex CLI</span> (real OS fence) or <span>OpenHands</span> (a box per job).</p></div>
+    <div><b>"I want to see and approve every change."</b><p>→ <span>Cline</span> in your editor, or <span>Aider</span> with git.</p></div>
+    <div><b>"I want to learn how agents work, or build one."</b><p>→ <span>mini-swe-agent</span> first, then <span>Pi</span>.</p></div>
+    <div><b>"I want DeepSeek end to end, cheaply."</b><p>→ <span>DeepSeek Harness</span> to explore; <span>OpenCode</span> or <span>Codewhale</span> for steady daily work.</p></div>
+    <div><b>"I need a fleet running jobs from Slack and GitHub."</b><p>→ <span>OpenHands Agent Canvas</span> or <span>Goose</span>.</p></div>
+    <div><b>"What about the leaked Claude Code copies?"</b><p>→ <span>Read them to learn, don't depend on them.</span> Legal and security risk; clean options above do the same jobs.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>Facts are as of 8 October 2026, drawn from each project's GitHub page and docs plus 2026 comparison articles. Star counts are rounded and move fast. Scores are judgments for comparison, not measurements.</p>
+  <p>Detailed reports with every source live next to this page in the repo: <code>research/coding-harnesses.md</code>, <code>research/claude-code-leak-derivatives.md</code>, <code>research/claude-code-leak-who-leveraged.md</code>.</p>
+</footer>
+</div>
+
+<script>
+const K = [
+{ id:"claude", name:"Claude Code", tags:["big"], meta:"Anthropic · closed source · TypeScript · Feb 2025", badge:["Closed","mid"],
+  pic:"A big restaurant kitchen with a head chef, sous-chefs, recipe cards and a strict safety inspector.", picSub:"Only Anthropic's chefs (Claude) may cook here.",
+  how:"You talk to Claude in the terminal, desktop app, IDE or web. A loop calls the model, runs tools, feeds results back. Permission modes and hooks decide what needs your OK. It can send helper agents (even whole teams in separate git worktrees), load skills only when needed, and squash long chats with several layers of compaction.",
+  arch:[["You","terminal · IDE · desktop · web"],["Agent loop","plan mode · hooks · skills"],["Helpers","sub-agents · agent teams"],["Tools","~40: files, bash, web, LSP, MCP",1],["Claude only","Anthropic, Bedrock, Vertex",0,1]],
+  fence:"Permission modes plus an optional OS sandbox. A model double-checks risky shell commands.",
+  ops:["Reads CLAUDE.md and your git status","Plans (optionally in read-only plan mode)","Edits and runs tests, asking per your permission mode","Spawns helpers for side quests; compacts when the chat gets long"],
+  feats:["Sub-agents & teams","Skills","Hooks","MCP","Plan mode","Checkpoints/rewind","Cloud & scheduled sessions","Code review"],
+  pros:["Most polished, most loved in surveys","Huge extension ecosystem (skills, hooks, MCP, plugins)","Strong long-task reliability"],
+  cons:["Closed source; system prompt not fully visible","Claude models only","Costs add up; plan limits"],
+  m:{Safety:4,"Model freedom":1,Power:5,"Easy to start":4},
+  t:["n","Claude (and compatible endpoints)","p Optional","y Modes + hooks","y Teams","y","y Rewind","Terminal, IDE, desktop, web"] },
+
+{ id:"opencode", name:"OpenCode", tags:["big"], meta:"Anomaly (ex-SST) · MIT · TypeScript/Bun · ~212k★", badge:["MIT","ok"],
+  pic:"A food truck with a radio. The kitchen runs in the back; any number of windows (terminal, desktop, IDE, web) can take orders.", picSub:"Any chef from 75+ providers can cook.",
+  how:"Starting OpenCode starts two things: a small local server (the kitchen) and a terminal screen (one window). Everything talks over HTTP, so IDE plugins, the desktop app or your own scripts can drive the same agent. Press Tab to swap between the Build chef (can change things) and the Plan chef (look, don't touch).",
+  arch:[["Windows","TUI · desktop · IDE · web · SDK"],["Server","HTTP API + live events"],["Agents","build · plan · @general"],["Tools","bash, edit, grep, LSP, MCP"],["Any model","75+ providers, local too",0,1]],
+  fence:"No fence by default; every tool is allowed until you set allow/ask/deny. Use Docker for isolation.",
+  ops:["/init writes AGENTS.md about your project","Tab to Plan: it explores and proposes","Tab to Build: it edits and runs commands","/undo or /share the session when done"],
+  feats:["Client/server","OpenAPI SDK","Plan & Build agents","LSP code smarts","MCP","Custom tools & plugins","/share links","Zen curated models"],
+  pros:["Biggest open-source community","Any model, including local","Easy to embed and script (server + SDK)"],
+  cons:["Permissive by default, no sandbox","Fast-moving, many open issues","LSP tool still experimental"],
+  m:{Safety:2,"Model freedom":5,Power:4,"Easy to start":4},
+  t:["y MIT","Any (75+ providers)","n Docker optional","p allow/ask/deny","y","y","y /undo","Terminal, desktop, IDE, web"] },
+
+{ id:"codex", name:"Codex CLI", tags:["big","safe"], meta:"OpenAI · Apache-2.0 · Rust · ~128k★", badge:["Apache-2.0","ok"],
+  pic:"A chef working inside a glass box. It can cook freely in the box but can't reach the rest of the house.", picSub:"Built for OpenAI chefs; local ones allowed.",
+  how:"The Rust engine wraps every command in your operating system's own sandbox (Seatbelt on Mac, bubblewrap on Linux, a native sandbox on Windows). You pick a box size (read-only, workspace-write, or full access) and a bell rule (ask when stepping outside, or never ask). A reviewer agent can even answer the bell for you.",
+  arch:[["You","terminal · IDE · desktop · cloud"],["Rust core","agent loop + AGENTS.md"],["OS sandbox","Seatbelt · bubblewrap · Windows",1],["Tools","shell, patch, MCP",1],["OpenAI","GPT-5.x-Codex; Ollama ok",0,1]],
+  fence:"Strongest fence here: real OS-level sandbox, default 'workspace-write'.",
+  ops:["Choose sandbox mode and approval policy","Agent works freely inside the workspace","Asks before going outside the box (or auto-reviewer decides)","codex exec runs the same thing in CI"],
+  feats:["OS sandbox","Auto-review approvals","AGENTS.md","MCP","codex exec for CI","Cloud tasks","PR review"],
+  pros:["Best safety model","Fast and token-efficient","Top Terminal-Bench scores with GPT-5.5"],
+  cons:["Mostly OpenAI models","IDE extension is closed source","Sandbox setup on some Linux distros"],
+  m:{Safety:5,"Model freedom":2,Power:5,"Easy to start":4},
+  t:["y Apache-2.0","OpenAI + local","y OS-level","y Modes + reviewer","y","y","p git","Terminal, IDE, desktop, cloud"] },
+
+{ id:"aider", name:"Aider", tags:["ask"], meta:"Paul Gauthier · Apache-2.0 · Python · ~49k★", badge:["Apache-2.0","ok"],
+  pic:"Cooking with a friend who takes a photo after every step and glues it in a scrapbook.", picSub:"The scrapbook is git: every change is a commit you can undo.",
+  how:"You add files to the chat, Aider shows the model a map of your whole repo (function names, not whole files), and the model replies with edits. Aider applies them and makes a git commit with a message. It can lint and run tests after each change and try to fix what breaks. Architect mode lets a smart chef plan while a cheaper chef types.",
+  arch:[["You","terminal · editor comments · voice"],["Repo map","tree-sitter summary of code"],["Edit formats","diff · whole · architect"],["Git","auto-commit every edit"],["Any model","100+ via LiteLLM",0,1]],
+  fence:"No sandbox. Safety comes from asking you at each step and from git history.",
+  ops:["/add the files to work on","Describe the change","Review the diff it applies","It commits; /undo if you dislike it"],
+  feats:["Repo map","Auto git commits","Architect mode","Lint/test fix loop","Voice input","Watch mode (AI! comments)","Polyglot benchmark"],
+  pros:["Cheapest on tokens","Every edit reviewable and revertible","Works with almost any model"],
+  cons:["Pair-programmer, not autonomous","No native MCP","Reported dormant since Aug 2025"],
+  m:{Safety:4,"Model freedom":5,Power:3,"Easy to start":3},
+  t:["y Apache-2.0","Any (100+)","n","y Each step","n","n","y git","Terminal"] },
+
+{ id:"cline", name:"Cline", tags:["ask"], meta:"Cline Bot Inc. · Apache-2.0 · TypeScript · ~70k★", badge:["Apache-2.0","ok"],
+  pic:"A polite chef in your own kitchen (your editor) who says \"may I?\" before every chop, and takes save-game snapshots.", picSub:"Bring any chef you like.",
+  how:"Cline lives inside VS Code (also a CLI and JetBrains). In Plan mode it reads your code and writes a strategy; in Act mode it does it. Every file edit and terminal command pops up for approval with a visual diff unless you turn on auto-approve. Checkpoints snapshot the workspace so you can roll back any step.",
+  arch:[["You","VS Code · CLI · JetBrains · desktop"],["Plan / Act","two modes"],["Approval UI","diff per action"],["Tools","files, terminal, browser, MCP"],["Any model","Anthropic, OpenAI, Ollama…",0,1]],
+  fence:"No OS sandbox. You are the fence: approve each action, roll back with checkpoints.",
+  ops:["Describe the task in the side panel","Plan mode drafts a strategy","Act mode proposes each edit/command for approval","Restore a checkpoint if something goes wrong"],
+  feats:["Plan/Act","Per-action approval","Checkpoints","Browser use","MCP manager","Headless CLI for CI","SDK"],
+  pros:["Best in-editor visibility","Easy undo with checkpoints","Wide model choice"],
+  cons:["Approval fatigue","Token-heavy","JetBrains plugin not open source"],
+  m:{Safety:4,"Model freedom":4,Power:4,"Easy to start":4},
+  t:["y Apache-2.0","Any","n","y Every action","p","y","y Checkpoints","Editor, terminal"] },
+
+{ id:"pi", name:"Pi", tags:["mini"], meta:"Mario Zechner / Earendil · MIT · TypeScript · ~113k★", badge:["MIT","ok"],
+  pic:"A camping stove with four tools in a pouch. Tiny, light, and you build whatever else you want.", picSub:"Any chef, 300+ models.",
+  how:"Pi gives the model just four hands: read, write, edit and bash, with a system prompt under 1,000 tokens. No helpers, no plan mode, no permission bell built in; you add them as packages. Chats are saved as trees, so you can branch from any point and try another path. Its parts are reusable libraries (pi-ai, pi-agent-core, pi-tui) used by other projects like OpenClaw.",
+  arch:[["You","terminal"],["Tiny loop","<1k-token prompt"],["4 tools","read · write · edit · bash"],["Packages","skills, extensions, themes"],["Any model","15+ providers",0,1]],
+  fence:"No fence and no bell. Runs as you; use Docker if you need isolation.",
+  ops:["/login to a provider","Ask; it reads and edits with 4 tools","Branch the session tree to try alternatives","Add packages for sub-agents, plan mode, etc."],
+  feats:["4 tools","Tiny prompt","Branching session tree","npm/git packages","Reusable libraries"],
+  pros:["Uses very few tokens","Easy to read and hack","Great base to build your own"],
+  cons:["No safety rails out of the box","Fewer built-in features","You assemble it yourself"],
+  m:{Safety:1,"Model freedom":5,Power:2,"Easy to start":3},
+  t:["y MIT","Any (15+ providers)","n","n","p Via packages","p Via packages","y Branch tree","Terminal, library"] },
+
+{ id:"mini", name:"mini-swe-agent", tags:["mini"], meta:"Princeton & Stanford SWE-agent team · MIT · Python · ~8k★", badge:["MIT","ok"],
+  pic:"A chef with only a hammer: one terminal, nothing else, and it still fixes three out of four bugs.", picSub:"Any chef; doesn't even need tool-calling.",
+  how:"About 100 lines of Python. The model writes a bash command in plain text, the harness runs it with subprocess, and pastes the output back. That's the whole thing: one tool, a straight-line history, no special API. It still scores over 74% on SWE-bench Verified, which shows how much the model does by itself.",
+  arch:[["Task","GitHub issue or prompt"],["~100-line loop","linear history"],["bash only","subprocess.run"],["Any model","no tool-calling needed",0,1]],
+  fence:"No fence. Usually run inside a container for benchmarks.",
+  ops:["Give it an issue","Model replies with one bash command","Harness runs it, returns output","Repeat until it submits"],
+  feats:["Bash only","~100 lines","Works with any LM","Benchmark baseline"],
+  pros:["Easiest to understand completely","Great for research and teaching","Model-agnostic"],
+  cons:["No safety","No comforts (no editor, no UI)","Not a daily-driver"],
+  m:{Safety:1,"Model freedom":5,Power:2,"Easy to start":3},
+  t:["y MIT","Any","n","n","n","n","n","Terminal, scripts"] },
+
+{ id:"openhands", name:"OpenHands", tags:["safe","platform"], meta:"All Hands AI · MIT · Python + TS · ~90k★", badge:["MIT","ok"],
+  pic:"An airport control tower. Each plane (agent job) gets its own hangar (a Docker box), and the tower watches them all.", picSub:"Any chef, and it can even fly other harnesses.",
+  how:"Agent Canvas is a web control center. It talks to Agent Servers, which run agents (OpenHands' own, or Claude Code, Codex, Gemini through ACP). In Docker mode every conversation gets its own container, so mistakes stay in that box. An automation server starts jobs from schedules, Slack, GitHub, Linear or Notion.",
+  arch:[["You","web canvas · CLI"],["Agent Canvas","control center"],["Agent Servers","REST API"],["Docker box","one per conversation",1],["Any agent/model","OpenHands, Claude Code, Codex via ACP",0,1]],
+  fence:"Strong: a container per job.",
+  ops:["Open the canvas, pick an agent","Each conversation spins up its own container","Automations trigger jobs from Slack/GitHub/schedules","Review results and PRs in the canvas"],
+  feats:["Container per job","Runs many agent brands (ACP)","Automations","Slack/GitHub/Linear/Notion","Self-hosted or cloud"],
+  pros:["Safe by design","Runs fleets and automations","Model and agent agnostic"],
+  cons:["Heavier to set up and host","Trails top closed harnesses on Terminal-Bench","More moving parts"],
+  m:{Safety:4,"Model freedom":5,Power:4,"Easy to start":2},
+  t:["y MIT","Any + other agents","y Docker","p","y Many agents","p Via agents","p Container","Web, CLI"] },
+
+{ id:"goose", name:"Goose", tags:["platform"], meta:"Block → Linux Foundation (AAIF) · Apache-2.0 · Rust · ~55k★", badge:["Apache-2.0","ok"],
+  pic:"A Swiss Army knife with 70+ attachments that click on through one universal plug (MCP).", picSub:"Any chef; can even borrow your Claude/ChatGPT/Gemini subscription via ACP.",
+  how:"Goose is a general helper, not only for code. Its core is small; almost every ability is an MCP extension (GitHub, databases, browsers, docs). Recipes save a whole workflow so others can rerun it. It runs as a desktop app, a CLI, or embedded through an API, and is now run by a neutral foundation.",
+  arch:[["You","desktop · CLI · API"],["Rust core","agent loop"],["Extensions","70+ via MCP"],["Recipes","shareable workflows"],["Any model","15+ providers + ACP",0,1]],
+  fence:"No strong sandbox; control comes from which extensions you enable.",
+  ops:["Pick a provider","Turn on the extensions you need","Ask, or run a saved recipe","Share the recipe with your team"],
+  feats:["MCP-first","70+ extensions","Recipes","Desktop + CLI","Neutral governance"],
+  pros:["Very extensible","Neutral, foundation-run","Good beyond coding"],
+  cons:["Less coding-specialised","Safety depends on extensions","Fewer coding comforts (LSP, etc.)"],
+  m:{Safety:2,"Model freedom":4,Power:3,"Easy to start":4},
+  t:["y Apache-2.0","Any (15+) + ACP","n","p","y","y Core","n","Desktop, terminal"] },
+
+{ id:"dsh", name:"DeepSeek Harness", tags:["platform"], meta:"DeepSeek · MIT · TypeScript + Python SDK · preview v0.2", badge:["Preview","mid"],
+  pic:"A LEGO kitchen. Every piece (the chef's seat, the hands, the fridge, even the walls) is a brick you can swap while cooking.", picSub:"DeepSeek chef by default; others welcome.",
+  how:"Built on the Cordis plugin framework: the loop, tools, memory, sandbox, scheduler and UI are all plugins that can be hot-swapped. Presets choose which bricks the agent sees: Standard, Code (the model writes TypeScript that calls many tools at once), Minimal (bash + editor, used for benchmarks) and Creator (the agent builds new bricks from chat). Every run is saved as a replayable, forkable log.",
+  arch:[["You","desktop · web · headless · Python SDK"],["Cordis kernel","everything is a plugin"],["Presets","Standard · Code · Minimal · Creator"],["Plugins","tools, sandbox, memory, jobs"],["DeepSeek V4.1","+ Anthropic, OpenAI, Kimi, GLM",0,1]],
+  fence:"Workspace-write by default with prompts; DeepSeek says its sandbox does not guarantee isolation.",
+  ops:["npx @deepseek-ai/dsh web, or the desktop app","Pick a preset","Watch the Trajectory view; fork a run to compare","Add plugins, or let Creator mode build one"],
+  feats:["Hot-swap plugins","4 presets","Trajectory replay & fork","Can run Claude Code/Codex as helpers","Scheduled jobs","Python SDK"],
+  pros:["Most modular design here","Great run history for debugging","Cheap first-party model"],
+  cons:["Preview: breaking changes","High fixed token overhead","GitHub Issues disabled; plugin risk is yours"],
+  m:{Safety:3,"Model freedom":4,Power:4,"Easy to start":3},
+  t:["y MIT","DeepSeek + catalogs + any OpenAI-compatible","p Plugin","y + auto-reviewer","y","p Off by default","y Fork/replay","Desktop, web, headless"] },
+
+{ id:"gemini", name:"Gemini CLI → Antigravity", tags:["big"], meta:"Google · Apache-2.0 (old) / closed (new) · ~103k★", badge:["Retired for individuals","warn"],
+  pic:"A free public kitchen that closed its doors to walk-ins and moved to a new members-only building next door.", picSub:"Gemini chefs only.",
+  how:"Gemini CLI was an open terminal agent with a 1M-token context, plan mode and MCP, and a generous free tier. On 18 June 2026 Google ended access for individuals and moved them to the closed-source, Go-based Antigravity CLI. The open repo is still maintained for paying enterprise API users, and its code lives on in forks like Qwen Code.",
+  arch:[["You","terminal"],["Agent loop","plan mode · GEMINI.md"],["Tools","files, shell, MCP"],["Gemini only","1M context",0,1]],
+  fence:"Optional sandbox and permission prompts.",
+  ops:["(Enterprise) set a paid Gemini API key","Ask in the terminal","Approve tool use","Individuals: migrate to Antigravity or a fork"],
+  feats:["1M context","Plan mode","MCP","Checkpoints","GEMINI.md"],
+  pros:["Huge context window","Open code to learn from and fork"],
+  cons:["Individual access ended June 2026","Gemini models only","Reported to use more tokens per task"],
+  m:{Safety:3,"Model freedom":1,Power:3,"Easy to start":2},
+  t:["p Old one yes, new no","Gemini","p Optional","y","p","y","y Checkpoints","Terminal"] },
+
+{ id:"codewhale", name:"Codewhale", tags:["safe"], meta:"Hunter Bown (ex-DeepSeek-TUI) · MIT · Rust · ~41k★", badge:["MIT","ok"],
+  pic:"A fishing boat that started out catching one kind of fish (DeepSeek) and now takes any catch, with a safety rail on deck.", picSub:"Any chef, 40+ routes and local models.",
+  how:"A Rust terminal agent with three gears: Plan (look around), Work (edit and run), Operate (drive a goal through planned, checked steps). Three trust levels: Ask, Auto-Review, Full Access. Commands run in the OS sandbox where available, and receipts, undo and request previews let you audit what was sent and done.",
+  arch:[["You","terminal"],["Modes","Plan · Work · Operate"],["Postures","Ask · Auto-Review · Full",0],["OS sandbox","Seatbelt / bubblewrap",1],["Any model","40+ routes, local too",0,1]],
+  fence:"Seatbelt on macOS; bubblewrap on Linux if you opt in.",
+  ops:["Pick a provider","Tab between Plan, Work, Operate","Shift+Tab to set the trust level","/receipts and /undo to review or revert"],
+  feats:["3 modes","Auto-review","OS sandbox","Sub-agents & teams","MCP, skills, hooks","Receipts & request preview"],
+  pros:["Open, fast, sandboxed","Any model","Good audit tools"],
+  cons:["Younger, smaller community","Linux sandbox is opt-in"],
+  m:{Safety:4,"Model freedom":5,Power:4,"Easy to start":4},
+  t:["y MIT","Any (40+)","y OS (opt-in Linux)","y + auto-review","y","y","y /undo","Terminal"] },
+
+{ id:"claw", name:"claw-code", tags:["leak"], meta:"ultraworkers (ex-instructkr) · MIT · Rust + Python · ~195k★", badge:["Leak-inspired","mid"],
+  pic:"A model ship built overnight from photos of a famous ship. Nice to study, not for sailing.", picSub:"Anthropic API or any OpenAI-compatible/local chef.",
+  how:"After Claude Code's source leaked in March 2026, a developer used AI (OpenAI's Codex) to rewrite its design from scratch in Python, then Rust. It hit 100k stars in a day. Today it calls itself an \"agent-managed museum exhibit\" kept up with no human intervention. It has sessions, config, a health check, and parity tests between the Python and Rust versions.",
+  arch:[["You","claw CLI"],["Rust workspace","rewritten harness"],["Parity tests","Python ↔ Rust"],["Tools","files, shell (smaller set)"],["Anthropic / local","API key, Ollama, vLLM",0,1]],
+  fence:"Little built-in safety; there's a container workflow.",
+  ops:["Build from source with cargo","Set ANTHROPIC_API_KEY or a local endpoint","claw doctor to check setup","Use for study, not production"],
+  feats:["Rust + Python","Parity harness","Local models","Skills installs"],
+  pros:["Readable reference for harness design","Open and local-friendly"],
+  cons:["Self-described not production","AI 'clean room' is legally untested","Smaller toolset"],
+  m:{Safety:2,"Model freedom":4,Power:2,"Easy to start":2},
+  t:["y MIT","Anthropic + OpenAI-compatible","p Container","p","n","p","n","Terminal"],
+  warn:"Built from studying leaked proprietary code. No court has decided whether AI-made 'clean room' rewrites are safe." },
+
+{ id:"openclaude", name:"OpenClaude", tags:["leak"], meta:"Gitlawb · MIT on changes only · TypeScript · ~34k★", badge:["Uses leaked code","warn"],
+  pic:"The famous ship's real engine, pulled out and dropped into a different hull that burns any fuel.", picSub:"Any chef: GPT, Gemini, DeepSeek, Ollama, Bedrock…",
+  how:"OpenClaude starts from the leaked Claude Code codebase and swaps the model layer for an OpenAI-compatible shim and many providers. You keep Claude Code's tools (bash, edit, grep, agents, tasks, MCP) and add provider profiles, a gRPC server and a VS Code extension. Its README says the original code still belongs to Anthropic.",
+  arch:[["You","terminal · VS Code · gRPC"],["Leaked harness","modified Claude Code"],["Provider shim","OpenAI-compatible"],["Tools","Claude Code's set + MCP"],["Any model","15+ backends",0,1]],
+  fence:"Inherits Claude Code's checks from a March 2026 snapshot, without Anthropic's later security fixes.",
+  ops:["npm install -g @gitlawb/openclaude","/provider to pick a model","Use like Claude Code","Hope the snapshot's bugs are patched by the community"],
+  feats:["Claude Code UX","Any model","gRPC server","VS Code extension","Repo map"],
+  pros:["Most complete 'Claude Code with any model'","Familiar workflow"],
+  cons:["Derived from leaked copyrighted code","Misses Anthropic's later security fixes","Could be taken down"],
+  m:{Safety:2,"Model freedom":5,Power:4,"Easy to start":3},
+  t:["p Changes only","Any (15+)","p Inherited","y","y","y","p","Terminal, VS Code"],
+  warn:"Contains Anthropic's leaked code. Legal, security and takedown risk; not suitable for company use." }
+];
+
+const cardsEl=document.getElementById("cards"), tbody=document.getElementById("tbody");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function dots(n){let h="";for(let i=1;i<=5;i++)h+=`<span class="${i<=n?"on":""}"></span>`;return `<div class="dots" aria-label="${n} of 5">${h}</div>`}
+function flow(a){return a.map((n,i)=>`${i?'<span class="arr" aria-hidden="true">→</span>':''}<div class="node${n[2]?" fenced":""}${n[3]?" model":""}"><b>${esc(n[0])}</b>${esc(n[1])}</div>`).join("")}
+cardsEl.innerHTML=K.map(k=>`
+<article class="card" data-tags="${k.tags.join(" ")}" id="${k.id}">
+  <div class="card-top"><div><h3>${esc(k.name)}</h3><p class="meta">${esc(k.meta)}</p></div><span class="badge ${k.badge[1]==="warn"?"warn":k.badge[1]==="mid"?"mid":""}">${esc(k.badge[0])}</span></div>
+  <p class="picture">${esc(k.pic)}<small>${esc(k.picSub)}</small></p>
+  ${k.warn?`<p class="warnbox"><b>Careful:</b> ${esc(k.warn)}</p>`:""}
+  <div class="grid2">
+    <div style="display:grid;gap:16px;min-width:0">
+      <div><p class="lab">How it works</p><p>${esc(k.how)}</p></div>
+      <div><p class="lab">Parts map</p><div class="flow">${flow(k.arch)}</div><p class="fence-note"><i>Fence</i>: ${esc(k.fence)}</p></div>
+      <div><p class="lab">A job, step by step</p><ol class="ops">${k.ops.map(o=>`<li>${esc(o)}</li>`).join("")}</ol></div>
+    </div>
+    <div style="display:grid;gap:16px;align-content:start;min-width:0">
+      <div><p class="lab">Scores</p><div class="meters">${Object.entries(k.m).map(([l,v])=>`<div class="meter"><span>${l}</span>${dots(v)}</div>`).join("")}</div></div>
+      <div><p class="lab">Features</p><div class="chips">${k.feats.map(f=>`<span class="chip">${esc(f)}</span>`).join("")}</div></div>
+      <div class="pc"><div class="good"><p class="lab">Good at</p><ul>${k.pros.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div><div class="bad"><p class="lab">Watch out</p><ul>${k.cons.map(p=>`<li>${esc(p)}</li>`).join("")}</ul></div></div>
+    </div>
+  </div>
+</article>`).join("");
+
+function cell(v){const m=/^([ynp])(?: (.*))?$/.exec(v);if(!m)return esc(v);const sym={y:"Yes",n:"No",p:"Partly"}[m[1]];return `<span class="${m[1]}">${sym}</span>${m[2]?` <span class="muted">${esc(m[2])}</span>`:""}`}
+tbody.innerHTML=K.map(k=>`<tr><td><a href="#${k.id}" style="color:inherit">${esc(k.name)}</a></td><td>${esc(k.pic.split(".")[0])}</td>${k.t.map((v,i)=>`<td>${i===1||i===7?esc(v):cell(v)}</td>`).join("")}</tr>`).join("");
+
+const btns=[...document.querySelectorAll(".filters button")];
+function setFilter(f){btns.forEach(b=>b.setAttribute("aria-pressed",b.dataset.f===f));document.querySelectorAll(".card").forEach(c=>{c.hidden=!(f==="all"||c.dataset.tags.split(" ").includes(f))});try{localStorage.setItem("hfg-filter",f)}catch(e){}}
+btns.forEach(b=>b.addEventListener("click",()=>setFilter(b.dataset.f)));
+try{const s=localStorage.getItem("hfg-filter");if(s&&btns.some(b=>b.dataset.f===s))setFilter(s)}catch(e){}
+</script>
