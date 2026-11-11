@@ -22,11 +22,14 @@ function setup(script: ConstructorParameters<typeof MockProvider>[0], over = {})
 
 describe("agent loop", () => {
   test("runs tools until the model stops, and persists the session", async () => {
-    const { ws, mock, agent, events } = setup([
+    const { ws, mock, agent, events } = setup(
+      [
       { text: "Creating it.", toolCalls: [{ name: "write", input: { path: "hello.txt", content: "hi" } }] },
       { toolCalls: [{ name: "read", input: { path: "hello.txt" } }] },
       { text: "Done: wrote hello.txt." },
-    ]);
+      ],
+      { review: true },
+    );
     const r = await agent.send("make hello.txt");
     // Files changed, so the agent asked the model to review once before finishing.
     expect(mock.requests).toHaveLength(4);
@@ -158,7 +161,7 @@ describe("agent loop", () => {
   });
 
   test("no review when nothing changed, and review can be turned off", async () => {
-    const { mock, agent } = setup([{ text: "Just answering." }]);
+    const { mock, agent } = setup([{ text: "Just answering." }], { review: true });
     await agent.send("what is this?");
     expect(mock.requests).toHaveLength(1);
     const off = setup([{ toolCalls: [{ name: "write", input: { path: "a.txt", content: "x" } }] }, { text: "done" }], { review: false });

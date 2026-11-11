@@ -73,7 +73,7 @@ export const DEFAULT_CONFIG: Config = {
   compactAt: 120_000,
   maxToolOutput: 30_000,
   maxSteps: 60,
-  review: true,
+  review: false,
   mcp: {},
   pricing: {},
 };
