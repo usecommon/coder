@@ -10,7 +10,7 @@
 //
 // Usage: bun run.ts --agents galley,opencode --langs python,go,rust [--limit N] [--concurrency 6] [--oracle]
 import { spawn, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statfsSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const args = Object.fromEntries(
@@ -197,8 +197,26 @@ const jobs = (ORACLE ? ["oracle"] : AGENTS).flatMap((agent) => all.map((t) => ({
 jobs.sort((a, b) => all.indexOf(a.t) - all.indexOf(b.t) || a.agent.localeCompare(b.agent));
 console.log(`${jobs.length} runs (${all.length} tasks × ${ORACLE ? 1 : AGENTS.length} agents), concurrency ${CONC}`);
 
+/** Delete build outputs and caches after grading (Rust targets alone are ~100 MB per task); keep logs and sessions. */
+function pruneArtifacts(dir: string) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (!e.isDirectory()) continue;
+    const p = join(dir, e.name);
+    if (["target", "cache", "xdg-cache", "node_modules", "__pycache__"].includes(e.name)) rmSync(p, { recursive: true, force: true });
+    else pruneArtifacts(p);
+  }
+}
+
+/** Refuse to start a job when the disk is nearly full: a full disk silently turns runs into failures. */
+function assertDiskSpace() {
+  const st = statfsSync(OUT);
+  const freeGb = (st.bavail * st.bsize) / 1e9;
+  if (freeGb < 3) throw new Error(`only ${freeGb.toFixed(1)} GB free in ${OUT}; stopping so results aren't corrupted`);
+}
+
 let finished = 0;
 await pool(jobs, CONC, async ({ agent, t }) => {
+  assertDiskSpace();
   const run = join(OUT, "runs", agent, t.lang, t.name);
   const ws = join(run, "ws");
   rmSync(run, { recursive: true, force: true });
@@ -210,6 +228,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     for (let k = 0; k < t.files.solution.length && k < t.files.example.length; k++) cpSync(join(t.dir, t.files.example[k]!), join(ws, t.files.solution[k]!));
   } else a = await runAgent(agent, t, ws, run);
   const g = await grade(t, ws, run);
+  pruneArtifacts(run);
   const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code };
   appendFileSync(resultsFile, JSON.stringify(r) + "\n");
   finished++;
