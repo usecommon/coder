@@ -1,0 +1,27 @@
+{
+  "name": "galley",
+  "version": "0.1.0",
+  "description": "A safety-first, model-agnostic coding agent for the terminal",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "galley": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build src/cli.ts --compile --outfile dist/galley"
+  },
+  "engines": {
+    "bun": ">=1.1"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

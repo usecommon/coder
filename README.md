@@ -4,7 +4,11 @@ Research on AI coding agents and the "harnesses" around them, compiled October 2
 
 **Core idea:** an AI coding agent is a *model* (the brain, e.g. Claude, GPT, DeepSeek) plus a *harness* (everything around it: the agent loop, tools, memory, context compaction, permissions, sandbox, UI and integrations). Benchmarks score the pair together, and the harness largely decides safety, cost and reliability.
 
-## Contents
+## Galley: our OpenCode-class agent
+
+[`galley/`](galley/) is a working MVP of a coding agent comparable to OpenCode. It is TypeScript on Bun, provider-agnostic, and **safety-first**: commands run in an OS sandbox with the network off, file tools are confined to the workspace, plan mode is read-only at the OS level, and `/undo` reverts a turn. It is **cheap-model friendly** (short cacheable prompt, cost and cache tracking, compaction) and supports **parallel and background work** (sub-agents, `--detach`, `--worktree`). See [`galley/README.md`](galley/README.md) and the plan in [`galley/PLAN.md`](galley/PLAN.md).
+
+## Research contents
 
 | File | What it covers |
 |---|---|

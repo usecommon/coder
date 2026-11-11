@@ -1,0 +1,42 @@
+// A deliberately short system prompt. It is byte-stable for a given workspace and mode so providers can cache it.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { Mode } from "../safety/permission.ts";
+import type { SandboxKind } from "../safety/sandbox.ts";
+
+export function loadProjectInstructions(workspace: string): string | undefined {
+  for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+    const p = join(workspace, name);
+    if (existsSync(p)) return readFileSync(p, "utf8").slice(0, 20_000);
+  }
+  return undefined;
+}
+
+export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: SandboxKind; subagent?: boolean }): string {
+  const lines = [
+    `You are Galley, a coding agent working in the project at ${o.workspace} (${process.platform}).`,
+    "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
+    "- Change code with edit (exact text, include enough context to be unique) or write (new files). Keep changes focused.",
+    "- Verify with bash: run the project's tests, type checker or linter when they exist.",
+    o.sandbox === "none"
+      ? "- bash runs without a sandbox, so each command needs the user's approval. Prefer read-only commands."
+      : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.",
+    "- Use task to run independent read-only investigations in parallel.",
+    "- If a tool returns an error, read it and adjust instead of repeating the same call.",
+    "- Be concise. When finished, say what changed and how you verified it.",
+  ];
+  if (o.mode === "plan")
+    lines.push(
+      o.subagent
+        ? "You are a read-only helper. Investigate and answer the task precisely, citing file paths and line numbers. You cannot change files."
+        : "You are in PLAN mode: you cannot change files. Investigate, then give a concrete step-by-step plan with the files to change.",
+    );
+  const project = loadProjectInstructions(o.workspace);
+  if (project) lines.push("", "Project instructions (from AGENTS.md):", project);
+  return lines.join("\n");
+}
+
+export const INIT_PROMPT =
+  "Analyze this repository and write AGENTS.md at the root: a short guide for coding agents covering the project's purpose, " +
+  "layout, how to build, test and lint (exact commands), code style conventions, and anything surprising. Keep it under 60 lines. " +
+  "If AGENTS.md exists, improve it instead of replacing useful content.";

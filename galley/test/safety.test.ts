@@ -1,0 +1,118 @@
+import { describe, expect, test } from "bun:test";
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { confine, PathError } from "../src/safety/paths.ts";
+import { evaluate, PermissionGate, splitCommand } from "../src/safety/permission.ts";
+import { detectSandbox, exec, scrubEnv } from "../src/safety/sandbox.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
+import { tempDir } from "./helpers.ts";
+
+describe("path confinement", () => {
+  const ws = tempDir();
+  mkdirSync(join(ws, "src"));
+  mkdirSync(join(ws, ".git"));
+  const outside = tempDir();
+
+  test("allows paths inside the workspace, including new files", () => {
+    expect(confine(ws, "src/a.ts")).toBe(join(ws, "src/a.ts"));
+    expect(confine(ws, "new/dir/file.txt", { write: true })).toBe(join(ws, "new/dir/file.txt"));
+  });
+  test("rejects .. and absolute escapes", () => {
+    expect(() => confine(ws, "../x")).toThrow(PathError);
+    expect(() => confine(ws, "/etc/passwd")).toThrow(PathError);
+  });
+  test("rejects symlinks that point outside", () => {
+    symlinkSync(outside, join(ws, "link"));
+    expect(() => confine(ws, "link/secret.txt")).toThrow(PathError);
+  });
+  test("blocks writes into .git but allows reads", () => {
+    expect(confine(ws, ".git/config")).toBe(join(ws, ".git/config"));
+    expect(() => confine(ws, ".git/hooks/pre-commit", { write: true })).toThrow("inside .git");
+  });
+});
+
+describe("permission rules", () => {
+  const rules = DEFAULT_CONFIG.permission;
+  test("judges compound commands by their strictest segment", () => {
+    expect(splitCommand("npm test && git push origin main | cat")).toEqual(["npm test", "git push origin main", "cat"]);
+    expect(evaluate({ tool: "bash", subject: "npm test" }, rules, "build")).toBe("allow");
+    expect(evaluate({ tool: "bash", subject: "npm test && git push origin main" }, rules, "build")).toBe("ask");
+    expect(evaluate({ tool: "bash", subject: "ls; sudo rm -rf /" }, rules, "build")).toBe("deny");
+  });
+  test("plan mode denies tools that change things", () => {
+    expect(evaluate({ tool: "edit", subject: "a.ts" }, rules, "plan")).toBe("deny");
+    expect(evaluate({ tool: "read", subject: "a.ts" }, rules, "plan")).toBe("allow");
+    expect(evaluate({ tool: "mcp_github_create_issue", subject: "{}" }, rules, "plan")).toBe("deny");
+  });
+  test("wildcard tool rules and unknown tools", () => {
+    expect(evaluate({ tool: "mcp_db_query", subject: "{}" }, rules, "build")).toBe("ask");
+    expect(evaluate({ tool: "mystery", subject: "" }, rules, "build")).toBe("ask");
+  });
+  test("gate asks once per 'always' answer and enforces the floor", async () => {
+    let asked = 0;
+    const gate = new PermissionGate(rules, async () => (asked++, "always"));
+    const req = { tool: "bash", subject: "git push", reason: "x" };
+    expect((await gate.check(req)).ok).toBe(true);
+    expect((await gate.check(req)).ok).toBe(true);
+    expect(asked).toBe(1);
+    const strict = new PermissionGate(rules, undefined);
+    expect(await strict.check({ tool: "bash", subject: "ls" }, "ask")).toEqual({ ok: false, why: expect.stringContaining("needs approval") });
+  });
+});
+
+describe("environment scrubbing", () => {
+  test("removes secrets but keeps the rest", () => {
+    const env = scrubEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "s", GITHUB_TOKEN: "t", HOME: "/h" });
+    expect(env).toEqual({ PATH: "/bin", HOME: "/h" });
+  });
+});
+
+const hasSandbox = detectSandbox() === "bwrap";
+describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
+  const ws = tempDir();
+  mkdirSync(join(ws, ".git"));
+  writeFileSync(join(ws, ".git", "HEAD"), "ref: main\n");
+  const outside = tempDir();
+  const run = (cmd: string, o: Partial<Parameters<typeof exec>[1]> = {}) =>
+    exec(cmd, { cwd: ws, workspace: ws, readOnly: false, network: false, timeoutMs: 10_000, kind: "bwrap", ...o });
+
+  test("can write inside the workspace", async () => {
+    const r = await run("echo hi > made.txt && cat made.txt");
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(join(ws, "made.txt"), "utf8")).toBe("hi\n");
+  });
+  test("cannot write outside the workspace", async () => {
+    const r = await run(`echo x > ${outside}/escape.txt`);
+    expect(r.exitCode).not.toBe(0);
+    expect(existsSync(join(outside, "escape.txt"))).toBe(false);
+  });
+  test(".git is read-only", async () => {
+    const r = await run("echo evil > .git/hooks-pre-commit");
+    expect(r.exitCode).not.toBe(0);
+  });
+  test("plan mode makes the workspace read-only", async () => {
+    const r = await run("touch plan.txt", { readOnly: true });
+    expect(r.exitCode).not.toBe(0);
+    expect(existsSync(join(ws, "plan.txt"))).toBe(false);
+  });
+  test("network is off by default", async () => {
+    const r = await run("cat /proc/net/dev; timeout 3 bash -c 'echo > /dev/tcp/1.1.1.1/53' && echo CONNECTED || echo BLOCKED");
+    const ifaces = r.output.split("\n").filter((l) => /^\s*[\w.-]+:\s+\d/.test(l)).map((l) => l.split(":")[0]!.trim());
+    expect(ifaces).toEqual(["lo"]);
+    expect(r.output).toContain("BLOCKED");
+  });
+  test("network can be granted", async () => {
+    const r = await run("cat /proc/net/dev", { network: true });
+    expect(r.output.split("\n").filter((l) => /^\s*[\w.-]+:\s+\d/.test(l)).length).toBeGreaterThan(1);
+  });
+  test("secrets are not visible", async () => {
+    process.env.FAKE_API_KEY = "sekret";
+    const r = await run("env");
+    expect(r.output).not.toContain("sekret");
+    delete process.env.FAKE_API_KEY;
+  });
+  test("timeouts kill the command", async () => {
+    const r = await run("sleep 5", { timeoutMs: 300 });
+    expect(r.timedOut).toBe(true);
+  });
+});
