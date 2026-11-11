@@ -100,6 +100,8 @@ export function exec(command: string, o: ExecOptions): Promise<ExecResult> {
   const sandboxed = o.kind !== "none";
   const env: Record<string, string> = { ...scrubEnv(process.env), ...(o.cacheDir && sandboxed ? cacheEnv(o.cacheDir) : {}) };
   // Without network, tell package managers to use their caches and fail fast instead of retrying.
+  // A read-only workspace can't hold build output; send Cargo's target dir to the cache.
+  if (sandboxed && o.readOnly && o.cacheDir) env.CARGO_TARGET_DIR = join(o.cacheDir, "cargo-target-ro");
   if (sandboxed && !o.network) Object.assign(env, { CARGO_NET_OFFLINE: "true", GOPROXY: "off", npm_config_offline: "true" });
     const child = spawn(file, args, { cwd: o.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";

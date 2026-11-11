@@ -42,6 +42,8 @@ export interface Config {
   maxSteps: number;
   /** After a turn that changed files, ask the model once to check its work against the request. */
   review: boolean;
+  /** After a turn that changed files, have a fresh read-only helper test the change against the request. */
+  verify: boolean;
   mcp: Record<string, McpServerConfig>;
   pricing: Record<string, Price>;
 }
@@ -74,6 +76,7 @@ export const DEFAULT_CONFIG: Config = {
   maxToolOutput: 30_000,
   maxSteps: 60,
   review: false,
+  verify: true,
   mcp: {},
   pricing: {},
 };

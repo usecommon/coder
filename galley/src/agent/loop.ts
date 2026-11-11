@@ -13,7 +13,7 @@ import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import type { Tool, ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
 import { compactionCut, summarize } from "./compact.ts";
-import { REVIEW_PROMPT, systemPrompt } from "./prompt.ts";
+import { REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
 
 export interface AgentOptions {
   cfg: Config;
@@ -93,6 +93,7 @@ export class Agent {
     let stopReason: StopReason = "end_turn";
     let reviewed = false;
 
+    passes: for (let pass = 0; pass < 2; pass++) {
     for (let step = 0; step < cfg.maxSteps; step++) {
       if (signal?.aborted) {
         stopReason = "other";
@@ -143,6 +144,21 @@ export class Agent {
           : await this.runTools(res.toolCalls, signal);
       this.session.addMessage({ role: "tool", results });
       if (step === cfg.maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${cfg.maxSteps} steps.` });
+    }
+
+      // Independent verification: a fresh read-only helper checks the change against the request.
+      if (pass === 0 && cfg.verify && !this.o.subagent && stopReason === "end_turn" && this.undo.changedThisTurn() > 0 && !signal?.aborted) {
+        const report = await this.runSubagent("verify the change", verifyPrompt(text), signal);
+        if (/VERDICT:\s*FAIL/i.test(report)) {
+          this.emit({ type: "notice", level: "info", text: "An independent check found problems; fixing them." });
+          this.session.addMessage({
+            role: "user",
+            content: `An independent reviewer checked your change against the request and reported:\n\n${report}\n\nCheck each point yourself (the reviewer can be wrong). Fix the real problems, re-run your checks, and give a brief final summary.`,
+          });
+          continue passes;
+        }
+      }
+      break;
     }
 
     this.emit({ type: "turn_end", usage: turnUsage, costUsd: turnCost, stopReason });

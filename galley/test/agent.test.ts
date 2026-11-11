@@ -144,6 +144,57 @@ describe("agent loop", () => {
     expect(Session.load(ws, agent.session.id).messages).toEqual(agent.session.messages);
   });
 
+  test("an independent verifier can send the agent back to fix problems", async () => {
+    const seen: string[] = [];
+    const v: Provider = {
+      id: "verif",
+      async chat(req) {
+        const first = (req.messages[0] as any).content as string;
+        const u = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
+        if (first.startsWith("You are independently verifying")) {
+          seen.push("verifier");
+          expect(req.tools.map((t) => t.name)).not.toContain("write");
+          return { text: "add(2,3) returned -1, expected 5.\nVERDICT: FAIL", toolCalls: [], usage: u, stopReason: "end_turn" };
+        }
+        const last = req.messages.at(-1)!;
+        if (last.role === "user" && (last as any).content.includes("independent reviewer")) {
+          seen.push("fix");
+          return { text: "", toolCalls: [{ id: "f", name: "write", input: { path: "m.js", content: "a+b" }, rawInput: "{}" }], usage: u, stopReason: "tool_use" };
+        }
+        if (last.role === "tool") return { text: "Done.", toolCalls: [], usage: u, stopReason: "end_turn" };
+        seen.push("implement");
+        return { text: "", toolCalls: [{ id: "w", name: "write", input: { path: "m.js", content: "a-b" }, rawInput: "{}" }], usage: u, stopReason: "tool_use" };
+      },
+    };
+    registerProvider(v);
+    const ws = tempDir();
+    const agent = new Agent({ cfg: testConfig({ model: "verif/x", verify: true }), workspace: ws, session: Session.create(ws, "verif/x") });
+    await agent.send("implement add");
+    expect(seen).toEqual(["implement", "verifier", "fix"]);
+    expect(readFileSync(join(ws, "m.js"), "utf8")).toBe("a+b");
+  });
+
+  test("a passing verification ends the turn", async () => {
+    let verifierCalls = 0;
+    registerProvider({
+      id: "vpass",
+      async chat(req) {
+        const u = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
+        if ((req.messages[0] as any).content.startsWith("You are independently verifying")) {
+          verifierCalls++;
+          return { text: "All good.\nVERDICT: PASS", toolCalls: [], usage: u, stopReason: "end_turn" };
+        }
+        if (req.messages.at(-1)!.role === "tool") return { text: "Done.", toolCalls: [], usage: u, stopReason: "end_turn" };
+        return { text: "", toolCalls: [{ id: "w", name: "write", input: { path: "a.txt", content: "x" }, rawInput: "{}" }], usage: u, stopReason: "tool_use" };
+      },
+    });
+    const ws = tempDir();
+    const agent = new Agent({ cfg: testConfig({ model: "vpass/x", verify: true }), workspace: ws, session: Session.create(ws, "vpass/x") });
+    const r = await agent.send("write a");
+    expect(verifierCalls).toBe(1);
+    expect(r.text).toBe("Done.");
+  });
+
   test("transient provider errors are retried", async () => {
     let calls = 0;
     registerProvider({

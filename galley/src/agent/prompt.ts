@@ -47,3 +47,13 @@ export const REVIEW_PROMPT =
   "each explicit requirement: names, signatures and parameter order, return types and output formats, edge cases, and error " +
   "behaviour (which errors, when, and with what messages). If anything is missing or wrong, fix it and re-run your checks. " +
   "Then reply with a brief final summary.";
+
+/** Instructions for the independent verifier helper. */
+export const verifyPrompt = (request: string) =>
+  "You are independently verifying another engineer's change. They were asked:\n\n<request>\n" +
+  request +
+  "\n</request>\n\nTheir change is already in the workspace. Without trusting their summary, work out what correct behaviour the request " +
+  "requires (names, signatures, return types, output formats, edge cases and error behaviour), read the code, and test it: write " +
+  "test scripts under /tmp (the workspace is read-only for you; copy the project to /tmp if a test must sit next to the code) and " +
+  "run them. Only report problems you confirmed by running code or that clearly contradict the request. End your reply with " +
+  "'VERDICT: PASS' or 'VERDICT: FAIL', and for FAIL list each problem as: input, expected, actual.";

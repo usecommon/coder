@@ -10,7 +10,7 @@ export function tempDir(prefix = "galley-test-"): string {
 process.env.GALLEY_DATA_DIR = tempDir("galley-data-");
 
 export function testConfig(over: Partial<Config> = {}): Config {
-  return { ...structuredClone(DEFAULT_CONFIG), model: "mock/test", ...over };
+  return { ...structuredClone(DEFAULT_CONFIG), model: "mock/test", verify: false, ...over };
 }
 
 /** Build a fetch that answers every request with the given SSE events. */
