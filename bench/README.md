@@ -18,12 +18,14 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 | Prompt | Aider's benchmark prompt plus the exercise's `.docs`, identical for both agents. One attempt, with no test feedback from the harness. |
 | Agent mode | Headless and auto-approving: `galley run --yes`, `opencode run --auto` |
 | Limits | 10 minutes per task; 6 runs in parallel, with agents interleaved per task |
-| Containment | Each agent runs inside an outer bubblewrap sandbox: system read-only, only its workspace and state directories writable, package managers offline (`CARGO_NET_OFFLINE`, `GOPROXY=off`; crates pre-fetched). Galley also applies its own inner sandbox (network off) to its commands, as it does in normal use. |
+| Containment | Each agent runs inside an outer bubblewrap sandbox: system read-only, only its workspace and state directories writable, package managers offline (`CARGO_NET_OFFLINE`, `GOPROXY=off`; crates pre-fetched). **There is no internet access.** Each agent gets a private network namespace whose only way out is a Unix socket to the logging proxy (relayed inside the sandbox by `forward.ts`), so only the DeepSeek API is reachable. Galley also applies its own inner sandbox to its commands, as it does in normal use. |
 | Grading | Official tests restored, then run in a network-less sandbox: `pytest`, `go test ./...`, `cargo test -- --include-ignored` |
 | Accounting | Both agents call DeepSeek through `proxy.ts`, which logs the usage DeepSeek reports (prompt tokens, cache hits, completion tokens). Costs are computed from those counts at DeepSeek list prices: $0.15 per million for cache-miss input, $0.003 per million for cache-hit input, $0.60 per million for output. |
 | Harness check | An oracle run graded each exercise's reference solution: 96 of 103 passed. Six Rust references use crates their own `Cargo.toml` doesn't declare; agents are told to use only the standard library, so this doesn't affect them. The seventh is `rust/macros`. |
 
 ## Caveats
+
+- **Run 1 allowed internet access and is discarded.** Both agents downloaded the hidden official tests from GitHub: OpenCode on 35 tasks, Galley on 3. The published numbers come from run 2, with no internet access. See [RESULTS.md](RESULTS.md).
 
 - **This is not an official leaderboard number.** It is one model, three of six languages, and one attempt per task with no retries. Aider's leaderboard scores two attempts with test feedback, so its numbers aren't comparable.
 - **One run per agent.** Model sampling varies between runs, so treat differences of a few tasks as noise; the report includes a paired significance test.
@@ -35,8 +37,8 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 ```bash
 git clone https://github.com/Aider-AI/polyglot-benchmark
 npm i opencode-ai@1.19.5                       # OpenCode binary: node_modules/opencode-ai/bin/opencode.exe
-PORT=8799 LOG=proxy.jsonl bun proxy.ts &       # needs DEEPSEEK_API_KEY in the environment of run.ts
-POLYGLOT=./polyglot-benchmark OPENCODE_BIN=... OC_CACHE_SEED=<opencode cache dir with models.json> \
+PORT=8799 SOCK=/tmp/p.sock LOG=proxy.jsonl bun proxy.ts &   # agents need DEEPSEEK_API_KEY
+POLYGLOT=./polyglot-benchmark OPENCODE_BIN=... OC_CACHE_SEED=<opencode cache dir with models.json> PROXY_SOCK=/tmp/p.sock \
   bun run.ts --langs python,go,rust --concurrency 6 --out results
 bun report.ts results/results.jsonl proxy.jsonl > RESULTS.md
 ```
