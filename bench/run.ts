@@ -32,6 +32,8 @@ const GALLEY = args.galley ?? join(import.meta.dir, "..", "galley", "src", "cli.
 const OPENCODE = args.opencode ?? process.env.OPENCODE_BIN!;
 const OC_CACHE_SEED = args["oc-cache"] ?? process.env.OC_CACHE_SEED;
 const ORACLE = args.oracle === "true";
+/** Extra flags for Galley, e.g. "--verify". */
+const GALLEY_ARGS = (args["galley-args"] ?? process.env.GALLEY_ARGS ?? "").split(" ").filter(Boolean);
 /** Unix socket of the logging proxy. When set, agents run with no network at all except this socket. */
 const SOCK = args.sock ?? process.env.PROXY_SOCK;
 
@@ -148,7 +150,7 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     mkdirSync(cfgDir, { recursive: true });
     writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ providers: { deepseek: { baseURL: `${PROXY}/${tag}` } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
-    cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws];
+    cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS];
   } else if (agent === "opencode") {
     const cfgDir = join(run, "config", "opencode");
     mkdirSync(cfgDir, { recursive: true });
