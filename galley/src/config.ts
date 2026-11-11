@@ -76,7 +76,7 @@ export const DEFAULT_CONFIG: Config = {
   maxToolOutput: 30_000,
   maxSteps: 60,
   review: false,
-  verify: true,
+  verify: false,
   mcp: {},
   pricing: {},
 };

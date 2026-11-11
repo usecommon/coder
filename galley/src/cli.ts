@@ -35,6 +35,7 @@ Options:
   --detach                         (run) run in the background; follow with "galley show <id>"
   --worktree                       (run) work in a new git worktree on branch galley/<session>
   --json                           (run) print events as JSON lines
+  --verify                         after changes, have a fresh read-only helper test them against the request (2-3x cost)
   --reasoning                      show the model's reasoning summaries
   --cwd <dir>                      workspace (default: current directory)
   --no-sandbox                     run commands without the OS sandbox (every command then asks)`;
@@ -106,6 +107,7 @@ async function main() {
   const overrides: Partial<Config> = {};
   if (typeof flags.model === "string") overrides.model = flags.model;
   if (flags["no-sandbox"]) overrides.sandbox = "off";
+  if (flags.verify) overrides.verify = true;
   const cfg = loadConfig(workspace, overrides);
 
   if (cmd === "doctor") return doctor(cfg, workspace);
@@ -198,7 +200,7 @@ function detach(workspace: string, cfg: Config, flags: Args["flags"], task: stri
   const args = [...self, "run", task, "--cwd", workspace];
   if (session) args.push("--session-id", session.id);
   for (const f of ["model"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
-  for (const f of ["yes", "plan", "worktree", "no-sandbox"]) if (flags[f]) args.push(`--${f}`);
+  for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify"]) if (flags[f]) args.push(`--${f}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", fd, fd], cwd: workspace });
   child.unref();
   console.log(`Started background run ${session ? `in session ${session.id}` : ""} (pid ${child.pid}).`);
