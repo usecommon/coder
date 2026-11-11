@@ -14,9 +14,10 @@ export const DEFAULT_PRICES: Record<string, Price> = {
   "anthropic/claude-sonnet-5-5": { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
   "anthropic/claude-haiku-5-5": { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
   "anthropic/claude-fable-5-2": { input: 8, output: 40, cacheRead: 0.2, cacheWrite: 10 },
-  // Approximate: check your provider's current price list and override in config.
-  "deepseek/deepseek-v4-flash": { input: 0.15, output: 0.6, cacheRead: 0.015 },
-  "deepseek/deepseek-v4-pro": { input: 0.66, output: 1.98, cacheRead: 0.066 },
+  // DeepSeek list prices as published in the models.dev catalog (Nov 2026); override in config if yours differ.
+  "deepseek/deepseek-flash": { input: 0.15, output: 0.6, cacheRead: 0.003 },
+  "deepseek/deepseek-v4-flash": { input: 0.15, output: 0.6, cacheRead: 0.003 },
+  "deepseek/deepseek-v4-pro": { input: 0.66, output: 1.98, cacheRead: 0.022 },
 };
 
 export function costUsd(model: string, u: Usage, prices: Record<string, Price> = DEFAULT_PRICES): number {

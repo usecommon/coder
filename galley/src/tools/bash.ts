@@ -1,4 +1,7 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { exec } from "../safety/sandbox.ts";
+import { projectDir } from "../session/store.ts";
 import { ToolError, truncate, type Tool } from "./types.ts";
 
 export const bashTool: Tool = {
@@ -31,6 +34,8 @@ export const bashTool: Tool = {
     const r = await ctx.gate.check({ tool: "bash", subject: command, reason }, floor);
     if (!r.ok) throw new ToolError(r.why);
     const timeoutMs = Math.min(Number(input.timeout ?? 120), 600) * 1000;
+    const cacheDir = join(projectDir(ctx.workspace), "cache");
+    mkdirSync(cacheDir, { recursive: true });
     const res = await exec(command, {
       cwd: ctx.cwd,
       workspace: ctx.workspace,
@@ -39,6 +44,7 @@ export const bashTool: Tool = {
       timeoutMs,
       signal: ctx.signal,
       kind: sandboxed ? ctx.sandbox : "none",
+      cacheDir,
     });
     let out = truncate(res.output.trimEnd(), ctx.cfg.maxToolOutput);
     if (res.timedOut) out += `\n[timed out after ${timeoutMs / 1000}s]`;

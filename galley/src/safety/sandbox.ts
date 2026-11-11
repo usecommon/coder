@@ -14,6 +14,8 @@ export interface ExecOptions {
   timeoutMs: number;
   signal?: AbortSignal;
   kind: SandboxKind;
+  /** Writable directory for build caches (Go, pip, npm…), kept between commands. */
+  cacheDir?: string;
 }
 
 export interface ExecResult {
@@ -46,9 +48,21 @@ export function scrubEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   return out;
 }
 
-export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" | "network">, command: string): string[] {
+/** Point common tool caches at the writable cache dir (the home directory is read-only in the sandbox). */
+export function cacheEnv(cacheDir: string): Record<string, string> {
+  return {
+    XDG_CACHE_HOME: cacheDir,
+    GOCACHE: join(cacheDir, "go-build"),
+    PIP_CACHE_DIR: join(cacheDir, "pip"),
+    npm_config_cache: join(cacheDir, "npm"),
+    PYTHONPYCACHEPREFIX: join(cacheDir, "pycache"),
+  };
+}
+
+export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" | "network" | "cacheDir">, command: string): string[] {
   const ws = realpathSync(o.workspace);
   const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"];
+  if (o.cacheDir) args.push("--bind", o.cacheDir, o.cacheDir);
   args.push(o.readOnly ? "--ro-bind" : "--bind", ws, ws);
   if (existsSync(join(ws, ".git"))) args.push("--ro-bind", join(ws, ".git"), join(ws, ".git"));
   if (!o.network) args.push("--unshare-net");
@@ -56,10 +70,11 @@ export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" 
   return args;
 }
 
-export function seatbeltProfile(o: Pick<ExecOptions, "workspace" | "readOnly" | "network">): string {
+export function seatbeltProfile(o: Pick<ExecOptions, "workspace" | "readOnly" | "network" | "cacheDir">): string {
   const ws = realpathSync(o.workspace);
   const q = (s: string) => JSON.stringify(s);
   const rules = ["(version 1)", "(allow default)", "(deny file-write*)", '(allow file-write* (literal "/dev/null") (subpath "/private/tmp") (subpath "/private/var/folders"))'];
+  if (o.cacheDir) rules.push(`(allow file-write* (subpath ${q(o.cacheDir)}))`);
   if (!o.readOnly) rules.push(`(allow file-write* (subpath ${q(ws)}))`, `(deny file-write* (subpath ${q(join(ws, ".git"))}))`);
   if (!o.network) rules.push("(deny network*)");
   return rules.join("");
@@ -79,7 +94,11 @@ export function exec(command: string, o: ExecOptions): Promise<ExecResult> {
     args = ["-c", command];
   }
   return new Promise((resolveP) => {
-    const child = spawn(file, args, { cwd: o.cwd, env: scrubEnv(process.env), detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const sandboxed = o.kind !== "none";
+  const env: Record<string, string> = { ...scrubEnv(process.env), ...(o.cacheDir && sandboxed ? cacheEnv(o.cacheDir) : {}) };
+  // Without network, tell package managers to use their caches and fail fast instead of retrying.
+  if (sandboxed && !o.network) Object.assign(env, { CARGO_NET_OFFLINE: "true", GOPROXY: "off", npm_config_offline: "true" });
+    const child = spawn(file, args, { cwd: o.cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     let timedOut = false;
     const onData = (b: Buffer) => {

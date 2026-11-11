@@ -111,6 +111,15 @@ describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
     expect(r.output).not.toContain("sekret");
     delete process.env.FAKE_API_KEY;
   });
+  test("build caches go to a writable cache dir (home stays read-only)", async () => {
+    const cacheDir = tempDir("galley-cache-");
+    writeFileSync(join(ws, "go.mod"), "module m\n\ngo 1.21\n");
+    writeFileSync(join(ws, "m.go"), "package main\nfunc main() { println(\"built\") }\n");
+    const r = await run("go run . 2>&1; touch ~/.galley-probe 2>&1 || echo HOME_RO", { cacheDir, timeoutMs: 60_000 });
+    expect(r.output).toContain("built");
+    expect(r.output).toContain("HOME_RO");
+    expect(existsSync(join(cacheDir, "go-build"))).toBe(true);
+  });
   test("timeouts kill the command", async () => {
     const r = await run("sleep 5", { timeoutMs: 300 });
     expect(r.timedOut).toBe(true);
