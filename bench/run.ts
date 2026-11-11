@@ -229,6 +229,14 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     // Sanity check of the harness: the reference solution must pass.
     for (let k = 0; k < t.files.solution.length && k < t.files.example.length; k++) cpSync(join(t.dir, t.files.example[k]!), join(ws, t.files.solution[k]!));
   } else a = await runAgent(agent, t, ws, run);
+  // If the agent never reached the model (proxy down), the run says nothing about the agent: fail loudly.
+  if (agent !== "oracle" && SOCK) {
+    const log = existsSync(join(run, "agent.log")) ? readFileSync(join(run, "agent.log"), "utf8") : "";
+    if (log.includes("Internal Server Error") && log.includes(new URL(PROXY).host)) {
+      console.error(`infrastructure error: ${agent} ${t.lang}/${t.name} could not reach the model proxy; not recording a result`);
+      return;
+    }
+  }
   const g = await grade(t, ws, run);
   pruneArtifacts(run);
   const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code };
