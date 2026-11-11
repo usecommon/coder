@@ -35,7 +35,9 @@ export const bashTool: Tool = {
     if (!r.ok) throw new ToolError(r.why);
     const timeoutMs = Math.min(Number(input.timeout ?? 120), 600) * 1000;
     const cacheDir = join(projectDir(ctx.workspace), "cache");
+    const tmpDir = join(projectDir(ctx.workspace), "tmp");
     mkdirSync(cacheDir, { recursive: true });
+    mkdirSync(tmpDir, { recursive: true });
     const res = await exec(command, {
       cwd: ctx.cwd,
       workspace: ctx.workspace,
@@ -45,6 +47,7 @@ export const bashTool: Tool = {
       signal: ctx.signal,
       kind: sandboxed ? ctx.sandbox : "none",
       cacheDir,
+      tmpDir,
     });
     let out = truncate(res.output.trimEnd(), ctx.cfg.maxToolOutput);
     if (res.timedOut) out += `\n[timed out after ${timeoutMs / 1000}s]`;

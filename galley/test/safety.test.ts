@@ -120,6 +120,14 @@ describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
     expect(r.output).toContain("HOME_RO");
     expect(existsSync(join(cacheDir, "go-build"))).toBe(true);
   });
+  test("/tmp persists between commands but is private to the sandbox", async () => {
+    const tmpDir = tempDir("galley-tmp-");
+    expect((await run("echo scratch > /tmp/t.py", { tmpDir })).exitCode).toBe(0);
+    const r = await run("cat /tmp/t.py", { tmpDir });
+    expect(r.output).toBe("scratch\n");
+    expect(readFileSync(join(tmpDir, "t.py"), "utf8")).toBe("scratch\n");
+    expect(existsSync("/tmp/t.py")).toBe(false);
+  });
   test("timeouts kill the command", async () => {
     const r = await run("sleep 5", { timeoutMs: 300 });
     expect(r.timedOut).toBe(true);

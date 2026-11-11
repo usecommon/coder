@@ -16,6 +16,8 @@ export interface ExecOptions {
   kind: SandboxKind;
   /** Writable directory for build caches (Go, pip, npm…), kept between commands. */
   cacheDir?: string;
+  /** Private directory mounted at /tmp, so scratch files persist between commands without touching the host's /tmp. */
+  tmpDir?: string;
 }
 
 export interface ExecResult {
@@ -59,9 +61,10 @@ export function cacheEnv(cacheDir: string): Record<string, string> {
   };
 }
 
-export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" | "network" | "cacheDir">, command: string): string[] {
+export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" | "network" | "cacheDir" | "tmpDir">, command: string): string[] {
   const ws = realpathSync(o.workspace);
-  const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"];
+  const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"];
+  args.push(...(o.tmpDir ? ["--bind", o.tmpDir, "/tmp"] : ["--tmpfs", "/tmp"]));
   if (o.cacheDir) args.push("--bind", o.cacheDir, o.cacheDir);
   args.push(o.readOnly ? "--ro-bind" : "--bind", ws, ws);
   if (existsSync(join(ws, ".git"))) args.push("--ro-bind", join(ws, ".git"), join(ws, ".git"));
