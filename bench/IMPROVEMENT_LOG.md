@@ -9,7 +9,7 @@ The goal was to improve Galley until it beats OpenCode on the Polyglot benchmark
 - **Only general agent improvements.** Nothing specific to Exercism or this benchmark.
 - **Measuring noise.** After round 1 showed ±4-task swings between identical setups, each change got 2 dev runs.
 
-Raw per-task results and per-request token usage for every round are in [`data/rounds/`](data/rounds/). Total model spend for the rounds was **$6.82** at DeepSeek list prices.
+Raw per-task results and per-request token usage for every round are in [`data/rounds/`](data/rounds/). Total model spend for the rounds and the scale test was **$11.01** at DeepSeek list prices.
 
 ## Rounds
 
@@ -41,6 +41,27 @@ Raw per-task results and per-request token usage for every round are in [`data/r
 3. **The real wins were robustness fixes found by reading transcripts:** a persistent private `/tmp` inside the sandbox, retrying when a stream drops, and harness fixes on the benchmark side.
 4. **Cost.** Galley consistently sends about 3× fewer input tokens. Whether that makes it cheaper overall depends on how much output the model generates in a given run; per solved task the two have been between equal and about 30% in Galley's favour.
 
-## Status after 6 of the allowed 20 rounds
+## Round 7: the verifier at scale
 
-By the criteria fixed at the start, **Galley has not been shown to beat OpenCode on pass rate**: the agents are statistically tied. Further loop and prompt tweaks are unlikely to clear the noise on this benchmark with this model, so the remaining rounds were paused pending a decision on direction.
+The verifier had the best dev mean in round 5, so it was tested on all 101 tasks: Galley `--verify` twice, and OpenCode twice more, giving 4 OpenCode runs in total. During this run a stale proxy socket broke 42 of the Galley runs; they were discarded and re-run, and the harness now refuses to record a result when the agent couldn't reach the model.
+
+| Tasks | Galley `--verify` (2 runs) | OpenCode (4 runs) | Difference [95% CI] | Sign test |
+|---|---|---|---|---|
+| All 101 | 69, 64 → 65.8% | 65, 72, 69, 68 → 67.8% | −2.0 pts [−7.9, 3.7] | p = 0.49 |
+| Holdout 54 | 36, 33 → 63.9% | 34, 36, 33, 35 → 63.9% | 0.0 pts | p = 1.00 |
+
+**The verifier's dev gain did not hold up at scale**, and it roughly doubles cost ($1.32 vs $0.67 per full run). It stays an opt-in `--verify` flag and is not the default.
+
+## Final standing (Galley defaults vs OpenCode 1.19.5, DeepSeek-V4.1-Flash, no internet)
+
+| | Galley (2 full runs) | OpenCode (4 full runs) |
+|---|---|---|
+| Pass rate, all 101 tasks | **68.8%** (68, 71) | **67.8%** (65, 72, 69, 68) |
+| Holdout (54) | 64.8% | 63.9% |
+| Difference | +1.0 pts, 95% CI [−5.7, 5.9], sign test p = 0.63 | |
+| Cost per full run | **$0.67** | $0.76 |
+| Input tokens per run | about 11–12M | about 32M |
+
+**Verdict after 7 rounds (of 20 allowed):** by the criteria fixed in advance, **Galley is not better than OpenCode on pass rate. They are tied**, within about ±6 points with 95% confidence. Galley achieves that tie with about 12% lower cost per run, about 3× fewer input tokens, and a sandbox that keeps the agent offline by default.
+
+None of the harness changes moved pass rate beyond run-to-run noise: self-review, contract guidance, the verifier, and the lean verifier. With this model and benchmark, pass rate looks bound by the model. Further rounds of the same kind were stopped because the evidence says they won't change the verdict. A different model (for example Claude, where Galley's Anthropic-specific features apply) or a different benchmark would be needed to separate the two.
