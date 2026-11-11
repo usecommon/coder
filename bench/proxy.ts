@@ -48,6 +48,8 @@ async function handle(req: Request): Promise<Response> {
         thinking: b.thinking,
       };
     } catch {}
+    // Optional: keep full request bodies for protocol inspection (never includes headers or keys).
+    if (process.env.DUMP_DIR && bodyText) appendFileSync(`${process.env.DUMP_DIR}/${tag}.jsonl`, bodyText + "\n");
     const headers = new Headers(req.headers);
     headers.delete("host");
     headers.delete("content-length");
