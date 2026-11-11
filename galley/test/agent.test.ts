@@ -28,9 +28,11 @@ describe("agent loop", () => {
       { text: "Done: wrote hello.txt." },
     ]);
     const r = await agent.send("make hello.txt");
-    expect(r.text).toBe("Done: wrote hello.txt.");
+    // Files changed, so the agent asked the model to review once before finishing.
+    expect(mock.requests).toHaveLength(4);
+    expect((mock.requests[3]!.messages.at(-1) as Extract<Message, { role: "user" }>).content).toContain("check your work");
+    expect(r.text).toBe("Done.");
     expect(readFileSync(join(ws, "hello.txt"), "utf8")).toBe("hi");
-    expect(mock.requests).toHaveLength(3);
     const last = mock.requests[2]!.messages;
     expect(last.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant", "tool"]);
     expect((last[4] as Extract<Message, { role: "tool" }>).results[0]!.content).toContain("1\thi");
@@ -38,9 +40,9 @@ describe("agent loop", () => {
     expect(events.at(-1)!.type).toBe("turn_end");
 
     const reloaded = Session.load(ws, agent.session.id);
-    expect(reloaded.messages).toHaveLength(6);
+    expect(reloaded.messages).toHaveLength(8);
     expect(reloaded.title).toBe("make hello.txt");
-    expect(reloaded.usage.inputTokens).toBe(300);
+    expect(reloaded.usage.inputTokens).toBe(400);
   });
 
   test("undo reverts the last turn's file changes", async () => {
@@ -139,8 +141,33 @@ describe("agent loop", () => {
     expect(Session.load(ws, agent.session.id).messages).toEqual(agent.session.messages);
   });
 
+  test("transient provider errors are retried", async () => {
+    let calls = 0;
+    registerProvider({
+      id: "flaky",
+      chat: async () => {
+        if (calls++ === 0) throw Object.assign(new Error("socket closed"), { status: undefined });
+        return { text: "recovered", toolCalls: [], usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 }, stopReason: "end_turn" };
+      },
+    });
+    const ws = tempDir();
+    const agent = new Agent({ cfg: testConfig({ model: "flaky/x" }), workspace: ws, session: Session.create(ws, "flaky/x") });
+    const r = await agent.send("hi");
+    expect(r.text).toBe("recovered");
+    expect(calls).toBe(2);
+  });
+
+  test("no review when nothing changed, and review can be turned off", async () => {
+    const { mock, agent } = setup([{ text: "Just answering." }]);
+    await agent.send("what is this?");
+    expect(mock.requests).toHaveLength(1);
+    const off = setup([{ toolCalls: [{ name: "write", input: { path: "a.txt", content: "x" } }] }, { text: "done" }], { review: false });
+    await off.agent.send("write");
+    expect(off.mock.requests).toHaveLength(2);
+  });
+
   test("provider errors end the turn with a notice", async () => {
-    registerProvider({ id: "boom", chat: async () => Promise.reject(new Error("HTTP 401 invalid key")) });
+    registerProvider({ id: "boom", chat: async () => Promise.reject(Object.assign(new Error("HTTP 401 invalid key"), { status: 401 })) });
     const ws = tempDir();
     const events: AgentEvent[] = [];
     const agent = new Agent({ cfg: testConfig({ model: "boom/x" }), workspace: ws, session: Session.create(ws, "boom/x"), onEvent: (e) => events.push(e) });

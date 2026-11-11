@@ -23,6 +23,11 @@ export class UndoLog {
     this.current!.push({ path, before: existsSync(path) ? readFileSync(path, "utf8") : null });
   }
 
+  /** Number of files changed so far in the current turn. */
+  changedThisTurn(): number {
+    return this.current?.length ?? 0;
+  }
+
   /** Restore files changed in the most recent turn that changed anything. Returns the restored paths. */
   undo(): string[] {
     while (this.turns.length) {

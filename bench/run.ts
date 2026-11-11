@@ -42,6 +42,11 @@ interface Task {
   files: { solution: string[]; test: string[]; example: string[]; editor?: string[] };
 }
 
+/** Deterministic split so improvements are developed on "dev" and confirmed on untouched "holdout" tasks. */
+export const splitOf = (key: string) => (BigInt("0x" + new Bun.CryptoHasher("sha256").update(key).digest("hex")) % 2n === 0n ? "dev" : "holdout");
+const SPLIT = args.split ?? "all";
+const ONLY = args.only ? new Set(args.only.split(",")) : undefined;
+
 function tasks(): Task[] {
   const out: Task[] = [];
   for (const lang of LANGS) {
@@ -49,6 +54,9 @@ function tasks(): Task[] {
     for (const name of readdirSync(root).sort().slice(0, LIMIT)) {
       const dir = join(root, name);
       const files = JSON.parse(readFileSync(join(dir, ".meta", "config.json"), "utf8")).files;
+      const key = `${lang}/${name}`;
+      if (SPLIT !== "all" && splitOf(key) !== SPLIT) continue;
+      if (ONLY && !ONLY.has(key)) continue;
       out.push({ lang, name, dir, files });
     }
   }
@@ -68,7 +76,9 @@ function prompt(t: Task): string {
   );
 }
 
-const hidden = (t: Task) => [...t.files.test, ...(t.lang === "go" ? (t.files.editor ?? []) : [])];
+// Hide the tests. Go "editor" files are visible to the solver unless they are test files (e.g. cases_test.go);
+// others (interfaces.go, relations.go, ...) are part of the exercise's API.
+const hidden = (t: Task) => [...t.files.test, ...(t.files.editor ?? []).filter((f) => f.endsWith("_test.go"))];
 
 function prepare(t: Task, ws: string) {
   rmSync(ws, { recursive: true, force: true });

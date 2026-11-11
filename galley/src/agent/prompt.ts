@@ -40,3 +40,10 @@ export const INIT_PROMPT =
   "Analyze this repository and write AGENTS.md at the root: a short guide for coding agents covering the project's purpose, " +
   "layout, how to build, test and lint (exact commands), code style conventions, and anything surprising. Keep it under 60 lines. " +
   "If AGENTS.md exists, improve it instead of replacing useful content.";
+
+/** Sent once at the end of a turn that changed files, before the agent reports back. */
+export const REVIEW_PROMPT =
+  "Before you finish, check your work against the original request. Re-read the request and the code you changed, then go through " +
+  "each explicit requirement: names, signatures and parameter order, return types and output formats, edge cases, and error " +
+  "behaviour (which errors, when, and with what messages). If anything is missing or wrong, fix it and re-run your checks. " +
+  "Then reply with a brief final summary.";

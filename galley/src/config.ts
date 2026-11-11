@@ -40,6 +40,8 @@ export interface Config {
   /** Max characters of a tool result kept in context. */
   maxToolOutput: number;
   maxSteps: number;
+  /** After a turn that changed files, ask the model once to check its work against the request. */
+  review: boolean;
   mcp: Record<string, McpServerConfig>;
   pricing: Record<string, Price>;
 }
@@ -71,6 +73,7 @@ export const DEFAULT_CONFIG: Config = {
   compactAt: 120_000,
   maxToolOutput: 30_000,
   maxSteps: 60,
+  review: true,
   mcp: {},
   pricing: {},
 };

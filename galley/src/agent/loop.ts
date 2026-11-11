@@ -4,6 +4,7 @@ import type { Config } from "../config.ts";
 import type { AgentEvent, AgentEventInput, Message, StopReason, ToolCall, ToolResult, Usage } from "../core/types.ts";
 import { addUsage, emptyUsage } from "../core/types.ts";
 import { getProvider, splitModel } from "../provider/index.ts";
+import type { Provider } from "../provider/types.ts";
 import { costUsd, DEFAULT_PRICES } from "../provider/pricing.ts";
 import { PermissionGate, type Approver, type Mode } from "../safety/permission.ts";
 import { detectSandbox, type SandboxKind } from "../safety/sandbox.ts";
@@ -12,7 +13,7 @@ import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import type { Tool, ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
 import { compactionCut, summarize } from "./compact.ts";
-import { systemPrompt } from "./prompt.ts";
+import { REVIEW_PROMPT, systemPrompt } from "./prompt.ts";
 
 export interface AgentOptions {
   cfg: Config;
@@ -90,6 +91,7 @@ export class Agent {
     let turnCost = 0;
     let finalText = "";
     let stopReason: StopReason = "end_turn";
+    let reviewed = false;
 
     for (let step = 0; step < cfg.maxSteps; step++) {
       if (signal?.aborted) {
@@ -100,13 +102,7 @@ export class Agent {
       const system = systemPrompt({ workspace: this.workspace, mode: this.mode, sandbox: this.sandbox, subagent: this.o.subagent });
       let res;
       try {
-        res = await provider.chat(
-          { model, system, messages: this.session.messages, tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: cfg.effort, signal },
-          {
-            onText: (t) => this.emit({ type: "text", text: t }),
-            onReasoning: (t) => this.emit({ type: "reasoning", text: t }),
-          },
-        );
+        res = await this.chatWithRetry(provider, model, system, signal);
       } catch (err) {
         if (signal?.aborted) {
           stopReason = "other";
@@ -133,6 +129,12 @@ export class Agent {
       }
       if (!res.toolCalls.length) {
         if (res.stopReason === "max_tokens") this.emit({ type: "notice", level: "warn", text: "The reply hit the output token limit." });
+        // Self-review: once per turn, if files changed, ask the model to check its work against the request.
+        else if (cfg.review && !reviewed && this.undo.changedThisTurn() > 0) {
+          reviewed = true;
+          this.session.addMessage({ role: "user", content: REVIEW_PROMPT });
+          continue;
+        }
         break;
       }
       const results =
@@ -145,6 +147,28 @@ export class Agent {
 
     this.emit({ type: "turn_end", usage: turnUsage, costUsd: turnCost, stopReason });
     return { text: finalText, stopReason, usage: turnUsage, costUsd: turnCost };
+  }
+
+  /** Call the model, retrying transient failures (dropped connections, 429, 5xx) twice with backoff. */
+  private async chatWithRetry(provider: Provider, model: string, system: string, signal?: AbortSignal) {
+    const cfg = this.o.cfg;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await provider.chat(
+          { model, system, messages: this.session.messages, tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: cfg.effort, signal },
+          {
+            onText: (t) => this.emit({ type: "text", text: t }),
+            onReasoning: (t) => this.emit({ type: "reasoning", text: t }),
+          },
+        );
+      } catch (err) {
+        const status = (err as { status?: number }).status;
+        const transient = status === undefined || status === 408 || status === 429 || status >= 500;
+        if (signal?.aborted || !transient || attempt >= 2) throw err;
+        this.emit({ type: "notice", level: "warn", text: `Model request failed (${(err as Error).message.slice(0, 120)}); retrying.` });
+        await new Promise((r) => setTimeout(r, 1500 * 3 ** attempt));
+      }
+    }
   }
 
   private async runTools(calls: ToolCall[], signal?: AbortSignal): Promise<ToolResult[]> {

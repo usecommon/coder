@@ -3,12 +3,15 @@
 import { readFileSync } from "node:fs";
 
 const [resultsPath, proxyPath] = process.argv.slice(2);
-const exclude = new Set((process.argv.find((a) => a.startsWith("--exclude="))?.slice(10) ?? "rust/macros").split(",").filter(Boolean));
+const exclude = new Set((process.argv.find((a) => a.startsWith("--exclude="))?.slice(10) ?? "rust/macros,go/octal").split(",").filter(Boolean));
 // DeepSeek list prices (USD per 1M tokens) for deepseek-flash: cache miss input, cache hit input, output.
 const PRICE = { miss: 0.15, hit: 0.003, out: 0.6 };
 
 const lines = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const results = lines(resultsPath!).filter((r) => !exclude.has(`${r.lang}/${r.name}`));
+const split = process.argv.find((a) => a.startsWith("--split="))?.slice(8) ?? "all";
+const splitOf = (key: string) => (BigInt("0x" + new Bun.CryptoHasher("sha256").update(key).digest("hex")) % 2n === 0n ? "dev" : "holdout");
+const inSplit = (key: string) => split === "all" || splitOf(key) === split;
+const results = lines(resultsPath!).filter((r) => !exclude.has(`${r.lang}/${r.name}`) && inSplit(`${r.lang}/${r.name}`));
 const calls = lines(proxyPath!);
 const agents = [...new Set(results.map((r) => r.agent))].sort();
 const langs = [...new Set(results.map((r) => r.lang))];
@@ -39,7 +42,7 @@ const usage = (agent: string, filter?: (tag: string) => boolean) => {
   for (const c of calls) {
     if (!c.tag?.startsWith(`${agent}__`)) continue;
     const [, lang, name] = c.tag.split("__");
-    if (exclude.has(`${lang}/${name}`)) continue;
+    if (exclude.has(`${lang}/${name}`) || !inSplit(`${lang}/${name}`)) continue;
     if (filter && !filter(c.tag)) continue;
     u.requests++;
     if (c.status !== 200) u.errors++;
