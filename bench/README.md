@@ -44,3 +44,19 @@ bun report.ts results/results.jsonl proxy.jsonl > RESULTS.md
 ```
 
 Raw per-task results and per-request usage are in [`data/`](data/).
+
+## Running the Claude Sonnet 5.5 comparison (new session)
+
+The API key must be available as the environment variable `BENCH_ANTHROPIC_API_KEY`: add it in the cloud environment's settings and start a new session. The two agents send the key to the Anthropic API only through `proxy.ts`. Neither ever sees your other credentials.
+
+```bash
+apt-get install -y bubblewrap        # if bwrap is missing
+bench/setup.sh                       # benchmark, OpenCode 1.19.5, Rust crates -> /tmp/bench-work
+export MODEL=anthropic/claude-sonnet-5-5 PRICES=claude-sonnet-5-5
+LIMIT=1 LANGS=python bench/round.sh sonnet-smoke     # one task per agent: check cost per task first
+bench/round.sh sonnet-1 && bench/round.sh sonnet-2   # 2 full runs, both agents (about $50 estimated)
+bun bench/pooled.ts --a galley:/tmp/bench-work/rounds/sonnet-1/results.jsonl,/tmp/bench-work/rounds/sonnet-2/results.jsonl \
+                    --b opencode:/tmp/bench-work/rounds/sonnet-1/results.jsonl,/tmp/bench-work/rounds/sonnet-2/results.jsonl
+```
+
+Both agents run at the same reasoning effort, `high` by default and set with `--effort`: Galley through its `effort` setting, OpenCode through `--variant`. Each request is priced by the model that served it; OpenCode titles sessions with Claude Haiku 5.5. The runner refuses to start if the benchmark checkout or the output directory sits outside `/tmp`, where agents could read the reference solutions.

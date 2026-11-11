@@ -4,8 +4,15 @@ import { readFileSync } from "node:fs";
 
 const [resultsPath, proxyPath] = process.argv.slice(2);
 const exclude = new Set((process.argv.find((a) => a.startsWith("--exclude="))?.slice(10) ?? "rust/macros,go/octal").split(",").filter(Boolean));
-// DeepSeek list prices (USD per 1M tokens) for deepseek-flash: cache miss input, cache hit input, output.
-const PRICE = { miss: 0.15, hit: 0.003, out: 0.6 };
+// List prices, USD per 1M tokens: uncached input, cache read, cache write, output. Choose with --prices=<model>.
+const PRICES: Record<string, { miss: number; hit: number; write: number; out: number }> = {
+  "deepseek-flash": { miss: 0.15, hit: 0.003, write: 0.15, out: 0.6 },
+  "claude-sonnet-5-5": { miss: 2, hit: 0.1, write: 2.5, out: 10 },
+  "claude-opus-5-5": { miss: 4, hit: 0.2, write: 5, out: 20 },
+  "claude-haiku-5-5": { miss: 0.1, hit: 0.01, write: 0.125, out: 0.5 },
+};
+const priceName = process.argv.find((a) => a.startsWith("--prices="))?.slice(9) ?? "deepseek-flash";
+const PRICE = PRICES[priceName] ?? (() => { throw new Error(`unknown --prices=${priceName}; known: ${Object.keys(PRICES).join(", ")}`); })();
 
 const lines = (p: string) => readFileSync(p, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
 const split = process.argv.find((a) => a.startsWith("--split="))?.slice(8) ?? "all";
@@ -38,7 +45,7 @@ function mcnemar(b: number, c: number): number {
 }
 
 const usage = (agent: string, filter?: (tag: string) => boolean) => {
-  const u = { requests: 0, prompt: 0, hit: 0, out: 0, reasoning: 0, errors: 0 };
+  const u = { requests: 0, prompt: 0, hit: 0, write: 0, out: 0, reasoning: 0, errors: 0, cost: 0 };
   for (const c of calls) {
     if (!c.tag?.startsWith(`${agent}__`)) continue;
     const [, lang, name] = c.tag.split("__");
@@ -47,12 +54,28 @@ const usage = (agent: string, filter?: (tag: string) => boolean) => {
     u.requests++;
     if (c.status !== 200) u.errors++;
     const x = c.usage ?? {};
-    u.prompt += x.prompt_tokens ?? 0;
-    u.hit += x.prompt_cache_hit_tokens ?? x.prompt_tokens_details?.cached_tokens ?? 0;
+    // Price each request by the model it actually used (e.g. OpenCode titles sessions with a small model).
+    const P = PRICES[c.req?.model] ?? PRICE;
+    if (x.input_tokens !== undefined) {
+      // Anthropic: input_tokens excludes cache reads and writes.
+      const read = x.cache_read_input_tokens ?? 0;
+      const write = x.cache_creation_input_tokens ?? 0;
+      u.prompt += x.input_tokens + read + write;
+      u.hit += read;
+      u.write += write;
+      u.out += x.output_tokens ?? 0;
+      u.cost += (x.input_tokens * P.miss + read * P.hit + write * P.write + (x.output_tokens ?? 0) * P.out) / 1e6;
+      continue;
+    }
+    const prompt = x.prompt_tokens ?? 0;
+    const hit = x.prompt_cache_hit_tokens ?? x.prompt_tokens_details?.cached_tokens ?? 0;
+    u.prompt += prompt;
+    u.hit += hit;
     u.out += x.completion_tokens ?? 0;
+    u.cost += ((prompt - hit) * P.miss + hit * P.hit + (x.completion_tokens ?? 0) * P.out) / 1e6;
     u.reasoning += x.completion_tokens_details?.reasoning_tokens ?? 0;
   }
-  return { ...u, cost: ((u.prompt - u.hit) * PRICE.miss + u.hit * PRICE.hit + u.out * PRICE.out) / 1e6 };
+  return u;
 };
 
 const by = (agent: string) => results.filter((r) => r.agent === agent);

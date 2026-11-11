@@ -28,6 +28,12 @@ const CONC = Number(args.concurrency ?? 6);
 const AGENT_TIMEOUT = Number(args.timeout ?? 600) * 1000;
 const MODEL = args.model ?? "deepseek/deepseek-flash";
 const PROXY = args.proxy ?? "http://127.0.0.1:8799";
+const PROVIDER = MODEL.split("/")[0]!;
+/** Reasoning effort for both agents (Anthropic models): Galley's `effort`, OpenCode's `--variant`. */
+const EFFORT = args.effort ?? "high";
+/** Where each agent's API key comes from. Anthropic keys are read from BENCH_ANTHROPIC_API_KEY. */
+const keyEnv = (): Record<string, string> =>
+  PROVIDER === "anthropic" ? { ANTHROPIC_API_KEY: process.env.BENCH_ANTHROPIC_API_KEY ?? "" } : { DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ?? "" };
 const GALLEY = args.galley ?? join(import.meta.dir, "..", "galley", "src", "cli.ts");
 const OPENCODE = args.opencode ?? process.env.OPENCODE_BIN!;
 const OC_CACHE_SEED = args["oc-cache"] ?? process.env.OC_CACHE_SEED;
@@ -143,12 +149,13 @@ const baseEnv = (run: string): Record<string, string> => ({
 async function runAgent(agent: string, t: Task, ws: string, run: string) {
   const tag = `${agent}__${t.lang}__${t.name}`;
   mkdirSync(join(run, "cache"), { recursive: true });
-  const env = { ...baseEnv(run), DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY! };
+  const env = { ...baseEnv(run), ...keyEnv() };
   let cmd: string[];
   if (agent === "galley") {
     const cfgDir = join(run, "config", "galley");
     mkdirSync(cfgDir, { recursive: true });
-    writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ providers: { deepseek: { baseURL: `${PROXY}/${tag}` } } }));
+    // Anthropic's SDK appends /v1/messages itself; OpenAI-compatible clients append /chat/completions.
+    writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ effort: EFFORT, providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}` } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
     cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS];
   } else if (agent === "opencode") {
@@ -156,11 +163,11 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     mkdirSync(cfgDir, { recursive: true });
     writeFileSync(
       join(cfgDir, "opencode.json"),
-      JSON.stringify({ $schema: "https://opencode.ai/config.json", autoupdate: false, share: "disabled", provider: { deepseek: { options: { baseURL: `${PROXY}/${tag}` } } } }),
+      JSON.stringify({ $schema: "https://opencode.ai/config.json", autoupdate: false, share: "disabled", provider: { [PROVIDER]: { options: { baseURL: PROVIDER === "anthropic" ? `${PROXY}/${tag}/v1` : `${PROXY}/${tag}` } } } }),
     );
     if (OC_CACHE_SEED) cpSync(OC_CACHE_SEED, join(run, "xdg-cache"), { recursive: true });
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), XDG_DATA_HOME: join(run, "xdg-data"), XDG_STATE_HOME: join(run, "xdg-state"), XDG_CACHE_HOME: join(run, "xdg-cache") });
-    cmd = [OPENCODE, "run", "--model", MODEL, "--auto", "--format", "json", prompt(t)];
+    cmd = [OPENCODE, "run", "--model", MODEL, "--auto", "--format", "json", ...(PROVIDER === "anthropic" ? ["--variant", EFFORT] : []), prompt(t)];
   } else throw new Error(`unknown agent ${agent}`);
   const readable = agent === "opencode" ? [dirname(dirname(OPENCODE))] : [];
   if (!SOCK) return bwrap(cmd, { cwd: ws, writable: [ws, run], readable, network: true, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, "agent.log") });
@@ -190,6 +197,11 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   }));
 }
 
+// Agents see the host filesystem read-only except /tmp, which their sandbox replaces. The benchmark checkout
+// holds the hidden tests and reference solutions, so it must live under /tmp or agents could read the answers.
+if (!ORACLE && !POLYGLOT.startsWith("/tmp/")) throw new Error(`POLYGLOT must be under /tmp so agents can't read the reference solutions (got ${POLYGLOT})`);
+if (!ORACLE && !OUT.startsWith("/tmp/")) throw new Error(`--out must be under /tmp so agents can't read other runs' solutions (got ${OUT})`);
+if (!ORACLE && !Object.values(keyEnv())[0]) throw new Error(`no API key for ${PROVIDER}: set ${PROVIDER === "anthropic" ? "BENCH_ANTHROPIC_API_KEY" : "DEEPSEEK_API_KEY"}`);
 const all = tasks();
 mkdirSync(OUT, { recursive: true });
 const resultsFile = join(OUT, ORACLE ? "oracle.jsonl" : "results.jsonl");

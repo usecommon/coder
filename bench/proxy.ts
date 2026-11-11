@@ -8,7 +8,8 @@ const port = Number(process.env.PORT ?? 8799);
 const log = process.env.LOG ?? "proxy.jsonl";
 
 function usageFrom(text: string): any {
-  // Streaming: take the last chunk that carries usage. Non-streaming: the body's usage.
+  // OpenAI-style streams: the last chunk carrying usage. Anthropic streams: usage from message_start
+  // (input and cache counts), updated by message_delta (cumulative output). Non-streaming: the body's usage.
   let usage: any;
   for (const line of text.split("\n")) {
     const l = line.trim();
@@ -17,7 +18,9 @@ function usageFrom(text: string): any {
     if (d === "[DONE]") continue;
     try {
       const j = JSON.parse(d);
-      if (j.usage) usage = j.usage;
+      if (j.type === "message_start" && j.message?.usage) usage = { ...j.message.usage };
+      else if (j.type === "message_delta" && j.usage) usage = { ...usage, ...Object.fromEntries(Object.entries(j.usage).filter(([, v]) => v != null)) };
+      else if (j.usage) usage = j.usage;
     } catch {}
   }
   if (!usage) {
