@@ -53,13 +53,21 @@ async function handle(req: Request): Promise<Response> {
     headers.delete("content-length");
     headers.set("accept-encoding", "identity");
     const started = Date.now();
-    const upstream = await fetch(target, { method: req.method, headers, body: bodyText });
+    const record = (r: object) => appendFileSync(log, JSON.stringify({ tag, path: rest.join("/"), ms: Date.now() - started, req: reqInfo, ...r }) + "\n");
+    let upstream: Response;
+    try {
+      upstream = await fetch(target, { method: req.method, headers, body: bodyText });
+    } catch (err) {
+      // A dropped upstream connection must not take the proxy down; the agent sees a retryable 502.
+      record({ status: 502, error: String(err) });
+      return new Response(JSON.stringify({ error: { message: `upstream: ${err}` } }), { status: 502, headers: { "content-type": "application/json" } });
+    }
     if (!upstream.body) return upstream;
     const [toClient, toLog] = upstream.body.tee();
-    (async () => {
-      const text = await new Response(toLog).text();
-      appendFileSync(log, JSON.stringify({ tag, path: rest.join("/"), status: upstream.status, ms: Date.now() - started, req: reqInfo, usage: usageFrom(text), error: upstream.ok ? undefined : text.slice(0, 300) }) + "\n");
-    })();
+    new Response(toLog)
+      .text()
+      .then((text) => record({ status: upstream.status, usage: usageFrom(text), error: upstream.ok ? undefined : text.slice(0, 300) }))
+      .catch((err) => record({ status: upstream.status, error: `stream: ${err}` }));
     // fetch() already decoded the body; drop encoding/length headers so the client doesn't decode twice.
     const outHeaders = new Headers(upstream.headers);
     outHeaders.delete("content-encoding");
@@ -68,7 +76,10 @@ async function handle(req: Request): Promise<Response> {
   }
 }
 
-Bun.serve({ port, hostname: "127.0.0.1", idleTimeout: 0, fetch: handle });
+process.on("unhandledRejection", (err) => console.error("unhandled:", err));
+process.on("uncaughtException", (err) => console.error("uncaught:", err));
+const onError = (err: Error) => new Response(JSON.stringify({ error: { message: `proxy: ${err.message}` } }), { status: 502 });
+Bun.serve({ port, hostname: "127.0.0.1", idleTimeout: 0, fetch: handle, error: onError });
 // Sandboxed agents have no network at all; they reach this proxy through a Unix socket.
-if (process.env.SOCK) Bun.serve({ unix: process.env.SOCK, idleTimeout: 0, fetch: handle });
+if (process.env.SOCK) Bun.serve({ unix: process.env.SOCK, idleTimeout: 0, fetch: handle, error: onError });
 console.log(`proxy on 127.0.0.1:${port}${process.env.SOCK ? ` and ${process.env.SOCK}` : ""} -> ${UPSTREAM}, logging to ${log}`);
