@@ -28,11 +28,8 @@ function usageFrom(text: string): any {
   return usage;
 }
 
-Bun.serve({
-  port,
-  hostname: "127.0.0.1",
-  idleTimeout: 0,
-  async fetch(req) {
+async function handle(req: Request): Promise<Response> {
+  {
     const url = new URL(req.url);
     const [, tag, ...rest] = url.pathname.split("/");
     const target = `${UPSTREAM}/${rest.join("/")}${url.search}`;
@@ -68,6 +65,10 @@ Bun.serve({
     outHeaders.delete("content-encoding");
     outHeaders.delete("content-length");
     return new Response(toClient, { status: upstream.status, headers: outHeaders });
-  },
-});
-console.log(`proxy on 127.0.0.1:${port} -> ${UPSTREAM}, logging to ${log}`);
+  }
+}
+
+Bun.serve({ port, hostname: "127.0.0.1", idleTimeout: 0, fetch: handle });
+// Sandboxed agents have no network at all; they reach this proxy through a Unix socket.
+if (process.env.SOCK) Bun.serve({ unix: process.env.SOCK, idleTimeout: 0, fetch: handle });
+console.log(`proxy on 127.0.0.1:${port}${process.env.SOCK ? ` and ${process.env.SOCK}` : ""} -> ${UPSTREAM}, logging to ${log}`);

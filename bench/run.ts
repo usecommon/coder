@@ -32,6 +32,8 @@ const GALLEY = args.galley ?? join(import.meta.dir, "..", "galley", "src", "cli.
 const OPENCODE = args.opencode ?? process.env.OPENCODE_BIN!;
 const OC_CACHE_SEED = args["oc-cache"] ?? process.env.OC_CACHE_SEED;
 const ORACLE = args.oracle === "true";
+/** Unix socket of the logging proxy. When set, agents run with no network at all except this socket. */
+const SOCK = args.sock ?? process.env.PROXY_SOCK;
 
 interface Task {
   lang: string;
@@ -149,7 +151,12 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     cmd = [OPENCODE, "run", "--model", MODEL, "--auto", "--format", "json", prompt(t)];
   } else throw new Error(`unknown agent ${agent}`);
   const readable = agent === "opencode" ? [dirname(dirname(OPENCODE))] : [];
-  return bwrap(cmd, { cwd: ws, writable: [ws, run], readable, network: true, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, "agent.log") });
+  if (!SOCK) return bwrap(cmd, { cwd: ws, writable: [ws, run], readable, network: true, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, "agent.log") });
+  // No internet: a private network namespace whose only way out is the proxy socket, relayed by forward.ts.
+  const port = new URL(PROXY).port;
+  const wrapped = ["bash", "-c", `PORT=${port} PROXY_SOCK="$1" "$2" "$3" & i=0; until (exec 3<>/dev/tcp/127.0.0.1/${port}) 2>/dev/null || [ $i -ge 50 ]; do i=$((i+1)); sleep 0.1; done; shift 3; exec "$@"`, "bash", SOCK, process.execPath, join(import.meta.dir, "forward.ts"), ...cmd];
+  for (const k of Object.keys(env)) if (/proxy/i.test(k)) delete env[k];
+  return bwrap(wrapped, { cwd: ws, writable: [ws, run, dirname(SOCK)], readable, network: false, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, "agent.log") });
 }
 
 async function grade(t: Task, ws: string, run: string) {
