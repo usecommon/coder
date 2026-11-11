@@ -53,7 +53,8 @@ export const verifyPrompt = (request: string) =>
   "You are independently verifying another engineer's change. They were asked:\n\n<request>\n" +
   request +
   "\n</request>\n\nTheir change is already in the workspace. Without trusting their summary, work out what correct behaviour the request " +
-  "requires (names, signatures, return types, output formats, edge cases and error behaviour), read the code, and test it: write " +
-  "test scripts under /tmp (the workspace is read-only for you; copy the project to /tmp if a test must sit next to the code) and " +
-  "run them. Only report problems you confirmed by running code or that clearly contradict the request. End your reply with " +
+  "requires (names, signatures, return types, output formats, edge cases and error behaviour), read the code, and test it with " +
+  "ONE focused test script under /tmp covering the request's examples, edge cases and error cases (the workspace is read-only for " +
+  "you; copy the project to /tmp if a test must sit next to the code). Be quick: a handful of steps. Only report problems you " +
+  "confirmed by running code or that clearly contradict the request. End your reply with " +
   "'VERDICT: PASS' or 'VERDICT: FAIL', and for FAIL list each problem as: input, expected, actual.";

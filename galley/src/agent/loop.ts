@@ -28,6 +28,8 @@ export interface AgentOptions {
   name?: string;
   subagent?: boolean;
   model?: string;
+  /** Step limit for this agent (defaults to cfg.maxSteps). */
+  maxSteps?: number;
 }
 
 export interface TurnResult {
@@ -94,7 +96,8 @@ export class Agent {
     let reviewed = false;
 
     passes: for (let pass = 0; pass < 2; pass++) {
-    for (let step = 0; step < cfg.maxSteps; step++) {
+    const maxSteps = this.o.maxSteps ?? cfg.maxSteps;
+    for (let step = 0; step < maxSteps; step++) {
       if (signal?.aborted) {
         stopReason = "other";
         break;
@@ -143,12 +146,12 @@ export class Agent {
           ? res.toolCalls.map<ToolResult>((c) => ({ callId: c.id, name: c.name, isError: true, content: "Your output was cut off at the token limit, so this call was not run. Retry with a smaller change." }))
           : await this.runTools(res.toolCalls, signal);
       this.session.addMessage({ role: "tool", results });
-      if (step === cfg.maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${cfg.maxSteps} steps.` });
+      if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });
     }
 
       // Independent verification: a fresh read-only helper checks the change against the request.
       if (pass === 0 && cfg.verify && !this.o.subagent && stopReason === "end_turn" && this.undo.changedThisTurn() > 0 && !signal?.aborted) {
-        const report = await this.runSubagent("verify the change", verifyPrompt(text), signal);
+        const report = await this.runSubagent("verify the change", verifyPrompt(text), signal, 12);
         if (/VERDICT:\s*FAIL/i.test(report)) {
           this.emit({ type: "notice", level: "info", text: "An independent check found problems; fixing them." });
           this.session.addMessage({
@@ -212,7 +215,7 @@ export class Agent {
     return out;
   }
 
-  private async runSubagent(description: string, prompt: string, signal?: AbortSignal): Promise<string> {
+  private async runSubagent(description: string, prompt: string, signal?: AbortSignal, maxSteps?: number): Promise<string> {
     const model = this.o.cfg.smallModel ?? this.model;
     const child = new Agent({
       ...this.o,
@@ -221,6 +224,7 @@ export class Agent {
       subagent: true,
       name: `task:${description}`,
       model,
+      maxSteps,
     });
     child.session.setTitle(`task: ${description}`);
     const r = await child.send(prompt, signal);
