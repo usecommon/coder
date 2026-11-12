@@ -56,7 +56,9 @@ Use `-m provider/model` or set `"model"` in `galley.json`.
 
 The non-Anthropic model names are examples; check your provider's current model list.
 
-For Anthropic models, Galley uses adaptive thinking with an explicit effort level (`"effort"`, default `high`), caches the system prompt and conversation, streams tool inputs eagerly and validates them before running, and turns on the API's server-side refusal fallbacks for the models that support them. Thinking blocks are replayed unchanged. You can turn off fallbacks per provider in code (`AnthropicProvider({ fallbacks: false })`).
+For Anthropic models, Galley uses adaptive thinking with an explicit effort level (`"effort"`, default `medium`: on Claude Sonnet 5.5 it scored the same as `high` in our benchmark at 15% lower cost), caches the system prompt and conversation, streams tool inputs eagerly and validates them before running, and turns on the API's server-side refusal fallbacks for the models that support them. Thinking blocks are replayed unchanged. You can turn off fallbacks per provider in code (`AnthropicProvider({ fallbacks: false })`).
+
+For DeepSeek, Galley sends the model's earlier reasoning back between tool calls, as DeepSeek's thinking mode expects. In our benchmark this changed neither pass rate nor cost. Turn it off with `"sendReasoning": false` under `providers.deepseek`; other OpenAI-compatible providers get it only if you set it to `true`.
 
 ## Using it
 
@@ -83,7 +85,7 @@ galley serve --port 4096              # HTTP + SSE server (see below)
 {
   "model": "deepseek/deepseek-v4-flash",
   "smallModel": "deepseek/deepseek-v4-flash",   // sub-agents and compaction
-  "effort": "high",
+  "effort": "medium",
   "permission": {
     "edit": "allow",
     "bash": { "*": "allow", "git push*": "ask", "rm -rf *": "ask", "sudo *": "deny" },
@@ -137,7 +139,7 @@ src/
 ## Development
 
 ```bash
-bun test          # 55 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
+bun test          # 61 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
 bun run typecheck
 ```
 

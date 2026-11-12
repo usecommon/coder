@@ -50,7 +50,9 @@ export interface Config {
 
 export const DEFAULT_CONFIG: Config = {
   model: "anthropic/claude-opus-5-5",
-  effort: "high",
+  // Measured on Claude Sonnet 5.5: the same pass rate as "high" at 15% lower cost (bench/RESULTS-clean.md).
+  // It is also the API's own default for Claude Opus 5.5 and Haiku 5.5.
+  effort: "medium",
   providers: {},
   permission: {
     read: "allow",

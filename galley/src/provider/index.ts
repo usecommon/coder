@@ -5,9 +5,11 @@ import { OpenAICompatProvider } from "./openai-compat.ts";
 import type { Provider } from "./types.ts";
 
 /** Built-in OpenAI-compatible presets. Add your own under `providers` in galley.json. */
-export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string }> = {
+export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string; sendReasoning?: boolean }> = {
   openai: { baseURL: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY" },
-  deepseek: { baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY" },
+  // DeepSeek's thinking mode expects earlier reasoning to be sent back while tools are in use. Measured over
+  // three benchmark rounds it changed neither pass rate nor cost (bench/RESULTS-clean.md).
+  deepseek: { baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY", sendReasoning: true },
   openrouter: { baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" },
   qwen: { baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", apiKeyEnv: "DASHSCOPE_API_KEY" },
   moonshot: { baseURL: "https://api.moonshot.ai/v1", apiKeyEnv: "MOONSHOT_API_KEY" },
@@ -23,6 +25,23 @@ export function splitModel(ref: string): { provider: string; model: string } {
   return { provider: ref.slice(0, i), model: ref.slice(i + 1) };
 }
 
+/** Options for an OpenAI-compatible provider: the user's settings in galley.json over the built-in preset. */
+export function compatOptions(id: string, cfg: Config) {
+  const pc = cfg.providers[id] ?? {};
+  const preset = PRESETS[id];
+  const baseURL = pc.baseURL ?? preset?.baseURL;
+  if (!baseURL) throw new Error(`Unknown provider "${id}". Add it under "providers" in galley.json with a baseURL.`);
+  const keyEnv = pc.apiKeyEnv ?? preset?.apiKeyEnv;
+  return {
+    id,
+    baseURL,
+    apiKey: keyEnv ? process.env[keyEnv] : undefined,
+    headers: pc.headers,
+    sendReasoning: pc.sendReasoning ?? preset?.sendReasoning,
+    includeUsage: pc.includeUsage,
+  };
+}
+
 const cache = new Map<string, Provider>();
 
 export function getProvider(id: string, cfg: Config): Provider {
@@ -35,18 +54,7 @@ export function getProvider(id: string, cfg: Config): Provider {
   } else if (id === "mock") {
     p = new MockProvider(() => ({ text: "This is the mock provider. Set a real model with --model provider/model." }));
   } else {
-    const preset = PRESETS[id];
-    const baseURL = pc.baseURL ?? preset?.baseURL;
-    if (!baseURL) throw new Error(`Unknown provider "${id}". Add it under "providers" in galley.json with a baseURL.`);
-    const keyEnv = pc.apiKeyEnv ?? preset?.apiKeyEnv;
-    p = new OpenAICompatProvider({
-      id,
-      baseURL,
-      apiKey: keyEnv ? process.env[keyEnv] : undefined,
-      headers: pc.headers,
-      sendReasoning: pc.sendReasoning,
-      includeUsage: pc.includeUsage,
-    });
+    p = new OpenAICompatProvider(compatOptions(id, cfg));
   }
   cache.set(id, p);
   return p;

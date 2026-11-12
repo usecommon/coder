@@ -4,7 +4,9 @@ import type { Message } from "../src/core/types.ts";
 import { AnthropicProvider, toAnthropicMessages } from "../src/provider/anthropic.ts";
 import { OpenAICompatProvider, toOpenAIMessages } from "../src/provider/openai-compat.ts";
 import { costUsd } from "../src/provider/pricing.ts";
-import { sseFetch } from "./helpers.ts";
+import { compatOptions } from "../src/provider/index.ts";
+import { DEFAULT_CONFIG } from "../src/config.ts";
+import { sseFetch, testConfig } from "./helpers.ts";
 
 const history: Message[] = [
   { role: "user", content: "fix it" },
@@ -132,4 +134,21 @@ test("cost uses cache prices", () => {
   const usd = costUsd("anthropic/claude-opus-5-5", { inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0 });
   expect(usd).toBeCloseTo(4.2);
   expect(costUsd("unknown/model", { inputTokens: 5, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBe(0);
+});
+
+describe("defaults chosen from benchmark results", () => {
+  test("DeepSeek sends earlier reasoning back unless the user turns it off; other providers don't", () => {
+    expect(compatOptions("deepseek", testConfig()).sendReasoning).toBe(true);
+    expect(compatOptions("deepseek", testConfig({ providers: { deepseek: { sendReasoning: false } } })).sendReasoning).toBe(false);
+    expect(compatOptions("openai", testConfig()).sendReasoning).toBeUndefined();
+    expect(compatOptions("mine", testConfig({ providers: { mine: { baseURL: "http://localhost:1/v1" } } })).sendReasoning).toBeUndefined();
+  });
+  test("a user's provider settings win over the preset", () => {
+    const o = compatOptions("deepseek", testConfig({ providers: { deepseek: { baseURL: "http://127.0.0.1:9/x" } } }));
+    expect(o.baseURL).toBe("http://127.0.0.1:9/x");
+    expect(o.sendReasoning).toBe(true);
+  });
+  test("the default effort is medium", () => {
+    expect(DEFAULT_CONFIG.effort).toBe("medium");
+  });
 });

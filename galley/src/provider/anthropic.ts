@@ -75,7 +75,7 @@ export class AnthropicProvider implements Provider {
     };
     if (adaptive) {
       params.thinking = { type: "adaptive", display: "summarized" };
-      params.output_config = { effort: req.effort ?? "high" };
+      params.output_config = { effort: req.effort ?? "medium" };
     }
     if (useFallbacks) {
       params.betas = ["server-side-fallback-2026-07-01"];
