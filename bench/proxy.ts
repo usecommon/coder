@@ -54,6 +54,7 @@ async function handle(req: Request): Promise<Response> {
         extra: Object.keys(b).filter((k) => !["model", "messages", "tools", "stream", "stream_options"].includes(k)),
         reasoning_effort: b.reasoning_effort,
         thinking: b.thinking,
+        effort: b.output_config?.effort,
         // how many earlier assistant messages carry their reasoning back to the model
         reasoning_msgs: b.messages?.filter((m: any) => m.role === "assistant" && typeof m.reasoning_content === "string" && m.reasoning_content.length > 0).length,
       };
