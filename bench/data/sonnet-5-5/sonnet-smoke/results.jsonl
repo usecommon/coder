@@ -1,0 +1,6 @@
+{"agent":"galley","lang":"rust","name":"accumulate","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":6524,"gradeExit":0}
+{"agent":"galley","lang":"python","name":"affine-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":7997,"gradeExit":0}
+{"agent":"opencode","lang":"rust","name":"accumulate","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":11810,"gradeExit":0}
+{"agent":"opencode","lang":"python","name":"affine-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":12658,"gradeExit":0}
+{"agent":"opencode","lang":"go","name":"alphametics","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24995,"gradeExit":0}
+{"agent":"galley","lang":"go","name":"alphametics","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":21300,"gradeExit":0}

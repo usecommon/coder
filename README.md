@@ -8,7 +8,11 @@ Research on AI coding agents and the "harnesses" around them, compiled October 2
 
 [`galley/`](galley/) is a working MVP of a coding agent comparable to OpenCode. It is TypeScript on Bun, provider-agnostic, and **safety-first**: commands run in an OS sandbox with the network off, file tools are confined to the workspace, plan mode is read-only at the OS level, and `/undo` reverts a turn. It is **cheap-model friendly** (short cacheable prompt, cost and cache tracking, compaction) and supports **parallel and background work** (sub-agents, `--detach`, `--worktree`). See [`galley/README.md`](galley/README.md) and the plan in [`galley/PLAN.md`](galley/PLAN.md).
 
-**Benchmark:** on 102 Aider Polyglot tasks (Python, Go and Rust) with DeepSeek-V4.1-Flash and no internet access, Galley solved **66.7%** and OpenCode **61.8%**. That gap is not statistically significant. Galley used **3× fewer input tokens** and cost about **33% less per solved task**. See [`bench/RESULTS.md`](bench/RESULTS.md).
+**Benchmark** (102 Aider Polyglot tasks in Python, Go and Rust, no internet, repeated runs):
+- **DeepSeek-V4.1-Flash:** Galley 68.8% vs OpenCode 67.8%, a statistical tie; Galley about 12% cheaper.
+- **Claude Sonnet 5.5:** Galley 87.1% vs OpenCode 90.1%, also a tie (p = 0.29); Galley **2.4× cheaper** ($2.78 vs $6.70 per run).
+
+Details: [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md).
 
 ## Research contents
 

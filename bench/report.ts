@@ -118,7 +118,7 @@ if (agents.length === 2) {
 }
 const perReq = agents.map((a) => {
   const u = usage(a);
-  return `${a}: ${k(u.prompt / Math.max(u.requests, 1))} input tokens per request, ${pct(u.hit, u.prompt)} served from DeepSeek's cache, ${u.errors} API errors`;
+  return `${a}: ${k(u.prompt / Math.max(u.requests, 1))} input tokens per request, ${pct(u.hit, u.prompt)} served from the provider's prompt cache, ${u.errors} API errors`;
 });
 out.push(`### Token profile\n`);
 for (const p of perReq) out.push(`- ${p}`);
