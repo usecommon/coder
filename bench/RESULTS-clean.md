@@ -113,6 +113,7 @@ Parts are rounded. About $14 was planned. The overrun is the discarded round and
 - **One cheap model, one version of each agent, three languages.** `deepseek-flash` is an alias and can change.
 - **Galley changed during the campaign,** each time for a fault, not to raise the score: as root it now drops capabilities; it can run inside another sandbox; it stops processes a command leaves behind. The three rounds reported here all ran on the final version.
 - **In this harness Galley's sandbox runs nested,** sharing the process list with Galley itself. On an ordinary machine it has a process list of its own.
+- **Six of the 101 tasks shipped write-ups of solution approaches** in a hidden folder of the workspace, and both agents read them. Found after these rounds. Without those six tasks the result is the same: Galley 68.8%, OpenCode 62.5%, a lead of 6.3 points (p = 0.009). The folders are removed in later runs.
 - **Twelve task-runs ran at once on four CPUs.** Slow builds may have pushed a few task-runs over the time limit; the limit hit all arms.
 
 ## Data and how to reproduce

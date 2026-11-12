@@ -6,7 +6,7 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 
 [Aider Polyglot](https://github.com/Aider-AI/polyglot-benchmark): 225 of Exercism's hardest exercises in six languages. This run uses the **Python (34), Go (39) and Rust (30)** sets: 103 tasks, 102 scored.
 - `rust/macros` is excluded because its compile-failure tests can't run offline.
-- JavaScript, Java and C++ were skipped because their per-exercise toolchain setup (npm, Gradle, CMake) adds network and setup dependencies to the sandbox.
+- JavaScript (49), Java (47) and C++ (26) were left out of the first comparisons because they need test dependencies inside the sandbox. `setup.sh` now fetches those once (jest and babel; JUnit and AssertJ as a read-only Gradle cache), and `--langs javascript,java,cpp` runs them. They serve as the fresh tasks for confirming results: neither agent was run on them while Galley was being developed.
 
 ## Protocol
 
@@ -14,15 +14,15 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 |---|---|
 | Model | `deepseek/deepseek-flash` (DeepSeek-V4.1-Flash), default reasoning effort, for both agents |
 | Versions | OpenCode 1.19.5 (npm `opencode-ai`); Galley at this commit |
-| Workspace | Exercise files with the **tests and `.meta` (reference solution) removed** |
+| Workspace | Exercise files with the **tests and `.meta` (reference solution) removed**. Since 12 November 2026 the `.approaches` and `.articles` folders are removed too: six of the Python and Go exercises shipped write-ups of solution approaches there, which both agents could read in earlier runs. |
 | Prompt | Aider's benchmark prompt plus the exercise's `.docs`, identical for both agents. One attempt, with no test feedback from the harness. |
 | Agent mode | Headless and auto-approving: `galley run --yes`, `opencode run --auto` |
-| Limits | 10 minutes per task; 6 runs in parallel, with agents interleaved per task |
+| Limits | 10 minutes per task; several task-runs in parallel, with agents interleaved per task. Since 12 November 2026 each task-run is capped at 4 GB of memory, so a runaway test program cannot starve the others. |
 | Containment (since 12 November 2026) | Each agent runs inside a bubblewrap sandbox that contains only the operating system, the language toolchains, the agent's own program, its workspace and its own state folders. Nothing else on the machine is mounted: not the operator's home directory, not this repository, not other tasks or runs. The agent is an unprivileged user with no capabilities. Package managers are offline (`CARGO_NET_OFFLINE`, `GOPROXY=off`; crates pre-fetched). **There is no internet access.** The only way out is a Unix socket to the logging proxy (relayed inside the sandbox by `forward.ts`), so only the model API is reachable. Galley also applies its own inner sandbox to its commands, as it does in normal use. Runs before this date used a weaker sandbox; see below. |
 | API keys | Agents never hold a real key. They send a placeholder; `proxy.ts` (or the machine's network layer) puts the real key on the request outside the sandbox. |
 | Self-test | Before every round, `run.ts --selftest` plants files an agent must never see (another task's workspace, the results file, a line of a real hidden test) and searches for them from inside the sandbox, tries the known ways out, and checks the toolchains. The round does not start unless it passes. |
 | Leak audit | After every round, `audit_leaks.py` reads each transcript for signs that an agent reached hidden tests anyway. Its count is reported next to the pass rate. |
-| Grading | Official tests restored, then run in a network-less sandbox: `pytest`, `go test ./...`, `cargo test -- --include-ignored` |
+| Grading | Official tests restored, every skipped test switched on, then run in a network-less sandbox: `pytest`, `go test ./...`, `cargo test -- --include-ignored`, and for the added languages `jest`, `gradle test` and `cmake` + `make` (the commands Aider's benchmark uses, kept offline) |
 | Accounting | Both agents call DeepSeek through `proxy.ts`, which logs the usage DeepSeek reports (prompt tokens, cache hits, completion tokens). Costs are computed from those counts at DeepSeek list prices: $0.15 per million for cache-miss input, $0.003 per million for cache-hit input, $0.60 per million for output. These are the off-peak prices. DeepSeek bills double on weekdays 01:00 to 04:00 and 06:00 to 10:00 UTC; reports use the off-peak price throughout so that runs compare like for like, and `analyze_rounds.py` also shows what each round was billed. |
 | Harness check | An oracle run graded each exercise's reference solution: 96 of 103 passed. Six Rust references use crates their own `Cargo.toml` doesn't declare; agents are told to use only the standard library, so this doesn't affect them. The seventh is `rust/macros`. |
 

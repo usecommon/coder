@@ -10,7 +10,8 @@ weekdays 01:00-04:00 and 06:00-10:00 UTC; the "billed" column applies that to ea
 Prints per-round pass counts and costs per arm, then every pairwise pooled comparison (per-task means over the
 rounds each arm ran, difference, bootstrap 95% interval over tasks, two-sided sign test over tasks)."""
 import json, sys, math, random, collections, os, datetime
-EXCL = {("rust", "macros"), ("go", "octal")}
+# Tasks left out of scoring. BENCH_EXCLUDE="lang/name,lang/name" replaces the default list.
+EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
 PRICES = {"deepseek": dict(miss=0.15, hit=0.003, write=0.15, out=0.60), "sonnet": dict(miss=2.0, hit=0.10, write=2.5, out=10.0)}
 price_name, base, rounds, arms = sys.argv[1], sys.argv[2], sys.argv[3].split(","), sys.argv[4:]
 P = PRICES[price_name]

@@ -14,7 +14,7 @@
 // Usage: bun run.ts --agents galley,opencode --langs python,go,rust [--limit N] [--concurrency 6] [--oracle]
 //        bun run.ts --selftest        checks that the sandbox hides what it must (run before every round)
 import { spawn } from "node:child_process";
-import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmSync, statfsSync, writeFileSync, appendFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, rmdirSync, rmSync, statfsSync, symlinkSync, writeFileSync, appendFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 const args = Object.fromEntries(
@@ -48,6 +48,13 @@ const SELFTEST = args.selftest === "true";
 const GALLEY_ARGS = (args["galley-args"] ?? process.env.GALLEY_ARGS ?? "").split(" ").filter(Boolean);
 /** Unix socket of the logging proxy. When set, agents run with no network at all except this socket. */
 const SOCK = args.sock ?? process.env.PROXY_SOCK;
+/** Pre-fetched dependencies, made by setup.sh, shown read-only in every sandbox: the JavaScript exercises'
+ *  node_modules (jest, babel) and a Gradle dependency cache for the Java exercises (JUnit, AssertJ). */
+const DEPS = args.deps ?? process.env.BENCH_DEPS ?? (POLYGLOT ? join(dirname(POLYGLOT), "deps") : "");
+const JS_MODULES = join(DEPS, "js", "node_modules");
+const GRADLE_RO_CACHE = join(DEPS, "gradle-ro");
+/** A Gradle home that has already compiled the exercises' build script; copied for each task so Gradle starts warm. */
+const GRADLE_HOME = join(DEPS, "gradle-home");
 /** The proxy's log. When set, a result is recorded only if the agent got at least one answer from the model. */
 const PROXY_LOG = args["proxy-log"] ?? process.env.PROXY_LOG;
 
@@ -111,13 +118,40 @@ function prompt(t: Task): string {
 // others (interfaces.go, relations.go, ...) are part of the exercise's API.
 const hidden = (t: Task) => [...t.files.test, ...(t.files.editor ?? []).filter((f) => f.endsWith("_test.go"))];
 
-function prepare(t: Task, ws: string) {
+function prepare(t: Task, ws: string, run: string) {
   rmSync(ws, { recursive: true, force: true });
   mkdirSync(dirname(ws), { recursive: true });
   cpSync(t.dir, ws, { recursive: true });
-  rmSync(join(ws, ".meta"), { recursive: true, force: true });
+  // .meta holds the reference solution; a few exercises also ship write-ups of solution approaches.
+  for (const d of [".meta", ".approaches", ".articles"]) rmSync(join(ws, d), { recursive: true, force: true });
   for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
   if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
+  // JavaScript: the exercises expect node_modules (jest, babel) next to the code.
+  if (t.lang === "javascript") symlinkSync(JS_MODULES, join(ws, "node_modules"));
+  if (t.lang === "java") {
+    // The wrapper would download Gradle; offline, hand over to the installed one.
+    writeFileSync(join(ws, "gradlew"), '#!/bin/sh\n# This machine is offline: use the installed Gradle rather than download the wrapper\'s.\nexec gradle --offline "$@"\n');
+    chmodSync(join(ws, "gradlew"), 0o755);
+    gradleHome(join(run, "cache", "gradle"));
+  }
+}
+
+/** A Gradle home of its own for each task-run: warm when setup has made the template, with a modest heap. */
+function gradleHome(dir: string) {
+  rmSync(dir, { recursive: true, force: true });
+  if (existsSync(GRADLE_HOME)) cpSync(GRADLE_HOME, dir, { recursive: true });
+  else mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "gradle.properties"), "org.gradle.jvmargs=-Xmx384m -XX:MaxMetaspaceSize=256m\norg.gradle.workers.max=2\n");
+}
+
+/** The official tests mark all but the first test as skipped; a run for grading takes every test. */
+function unskip(t: Task, ws: string) {
+  for (const f of hidden(t)) {
+    const p = join(ws, f);
+    const src = readFileSync(p, "utf8");
+    if (t.lang === "javascript") writeFileSync(p, src.replace(/\bxtest\(/g, "test(").replace(/\bxit\(/g, "it(").replace(/\btest\.skip\(/g, "test("));
+    if (t.lang === "java") writeFileSync(p, src.replace(/^[ \t]*@Disabled\([^)]*\)[ \t]*\r?\n/gm, ""));
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -177,7 +211,7 @@ function boxArgs(o: Box): string[] {
   for (const d of ETC_HIDE_DIRS) a.push("--tmpfs", d);
   a.push("--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/var/tmp", "--dir", "/run", "--dir", HOME);
   if (boxUser.home) a.push("--dir", boxUser.home);
-  for (const r of o.readable ?? []) a.push("--ro-bind", r, r);
+  for (const r of [...(o.readable ?? []), ...[JS_MODULES, GRADLE_RO_CACHE].filter((d) => existsSync(d))]) a.push("--ro-bind", r, r);
   for (const w of o.writable) a.push("--bind", w, w);
   if (!o.network) a.push("--unshare-net");
   // Everything not mounted above lives on an empty in-memory root; make that read-only too.
@@ -185,17 +219,60 @@ function boxArgs(o: Box): string[] {
   return a;
 }
 
+// A memory cap per sandbox. Without one, a single runaway program (a test that allocates without end) can use
+// all the memory the machine allows, and the kernel then kills something: usually the runaway, not always.
+const TASK_MEMORY_GB = Number(args["task-memory-gb"] ?? process.env.BENCH_TASK_MEMORY_GB ?? 4);
+/** The memory cgroup this process is in, if child groups can be made under it (cgroup v1). */
+const CGROUP_BASE = (() => {
+  try {
+    const line = readFileSync("/proc/self/cgroup", "utf8").split("\n").find((l) => l.split(":")[1] === "memory");
+    if (!line) return undefined;
+    const base = "/sys/fs/cgroup/memory" + line.split(":").slice(2).join(":");
+    const probe = join(base, `bench-probe-${process.pid}`);
+    mkdirSync(probe);
+    rmdirSync(probe);
+    return base;
+  } catch {
+    return undefined;
+  }
+})();
+let cgroupCount = 0;
+function memoryCap(): { wrap: (cmd: string[]) => string[]; done: () => number } {
+  if (!CGROUP_BASE || !TASK_MEMORY_GB) return { wrap: (c) => c, done: () => 0 };
+  const cg = join(CGROUP_BASE, `bench-${process.pid}-${cgroupCount++}`);
+  try {
+    mkdirSync(cg);
+    writeFileSync(join(cg, "memory.limit_in_bytes"), String(Math.round(TASK_MEMORY_GB * 2 ** 30)));
+  } catch {
+    return { wrap: (c) => c, done: () => 0 };
+  }
+  return {
+    // Join the group first, then become the command: everything it starts is counted against the cap.
+    wrap: (c) => ["bash", "-c", 'echo $$ > "$0"/cgroup.procs && exec "$@"', cg, ...c],
+    /** Remove the group; returns how many times the kernel killed something in it for exceeding the cap. */
+    done: () => {
+      let kills = 0;
+      try {
+        kills = Number(/oom_kill (\d+)/.exec(readFileSync(join(cg, "memory.oom_control"), "utf8"))?.[1] ?? 0);
+        rmdirSync(cg);
+      } catch {}
+      return kills;
+    },
+  };
+}
+
 /** Values that must never enter a sandbox: every secret-looking variable of the harness's own environment. */
 const SECRETS = Object.entries(process.env).filter(([k, v]) => v && v.length >= 12 && /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL/i.test(k)).map(([, v]) => v!);
 
 /** Run a command in the sandbox. */
-function box(cmd: string[], o: Box): Promise<{ code: number | null; timedOut: boolean; ms: number }> {
+function box(cmd: string[], o: Box): Promise<{ code: number | null; timedOut: boolean; ms: number; memoryKills: number }> {
   for (const [k, v] of Object.entries(o.env)) if (SECRETS.some((s) => v.includes(s))) throw new Error(`refusing to start: ${k} would carry a secret into the sandbox`);
-  const a = [...boxArgs(o), ...cmd];
+  const cap = memoryCap();
+  const [file, ...a] = cap.wrap(["bwrap", ...boxArgs(o), ...cmd]);
   const started = Date.now();
   return new Promise((resolve) => {
     const out = o.stdout ? Bun.file(o.stdout).writer() : undefined;
-    const child = spawn("bwrap", a, { env: o.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(file!, a, { env: o.env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     child.stdout.on("data", (b) => out?.write(b));
     child.stderr.on("data", (b) => out?.write(b));
     let timedOut = false;
@@ -208,7 +285,7 @@ function box(cmd: string[], o: Box): Promise<{ code: number | null; timedOut: bo
     child.on("close", async (code) => {
       clearTimeout(timer);
       await out?.end();
-      resolve({ code, timedOut, ms: Date.now() - started });
+      resolve({ code, timedOut, ms: Date.now() - started, memoryKills: cap.done() });
     });
   });
 }
@@ -233,6 +310,11 @@ const baseEnv = (run: string): Record<string, string> => ({
   CARGO_NET_OFFLINE: "true",
   PYTHONPYCACHEPREFIX: join(run, "cache", "pycache"),
   PYTHONDONTWRITEBYTECODE: "1",
+  npm_config_offline: "true",
+  npm_config_update_notifier: "false",
+  npm_config_cache: join(run, "cache", "npm"),
+  GRADLE_USER_HOME: join(run, "cache", "gradle"),
+  GRADLE_RO_DEP_CACHE: GRADLE_RO_CACHE,
 });
 
 /** What an agent's process needs beyond the toolchains: its own program, and the relay to the model proxy. */
@@ -292,10 +374,31 @@ async function grade(t: Task, ws: string, run: string) {
     mkdirSync(dirname(join(ws, f)), { recursive: true });
     cpSync(join(t.dir, f), join(ws, f));
   }
-  const cmd =
-    t.lang === "python" ? ["pytest", "-q", "-p", "no:cacheprovider"] : t.lang === "go" ? ["go", "test", "./..."] : t.lang === "rust" ? ["cargo", "test", "--", "--include-ignored"] : [];
+  unskip(t, ws);
+  // The same commands as Aider's benchmark, with Gradle and npm kept offline.
+  const cmds: Record<string, string[]> = {
+    python: ["pytest", "-q", "-p", "no:cacheprovider"],
+    go: ["go", "test", "./..."],
+    rust: ["cargo", "test", "--", "--include-ignored"],
+    javascript: ["bash", "-c", "node node_modules/jest/bin/jest.js ./*"],
+    java: ["gradle", "--offline", "--no-daemon", "test"],
+    cpp: ["bash", "-c", 'mkdir -p build && cd build && cmake -DEXERCISM_RUN_ALL_TESTS=1 -G "Unix Makefiles" .. && make'],
+  };
+  const cmd = cmds[t.lang] ?? [];
   mkdirSync(join(run, "cache"), { recursive: true });
-  return box(cmd, { cwd: ws, writable: [ws, join(run, "cache")], network: false, env: baseEnv(run), timeoutMs: 300_000, stdout: join(run, "grade.log") });
+  const env = baseEnv(run);
+  if (t.lang === "java") {
+    // Grade with a Gradle home the agent never touched.
+    env.GRADLE_USER_HOME = join(run, "cache", "gradle-grade");
+    gradleHome(env.GRADLE_USER_HOME);
+  }
+  const g = await box(cmd, { cwd: ws, writable: [ws, join(run, "cache")], network: false, env, timeoutMs: 300_000, stdout: join(run, "grade.log") });
+  // The first Java reference solution graded leaves behind a warm Gradle home: keep it as the template.
+  if (ORACLE && t.lang === "java" && g.code === 0 && !existsSync(GRADLE_HOME)) {
+    cpSync(env.GRADLE_USER_HOME!, GRADLE_HOME, { recursive: true, filter: (src) => !/\/daemon(\/|$)|\.lock$|gradle\.properties$/.test(src) });
+    console.log(`kept a warm Gradle home as ${GRADLE_HOME}`);
+  }
+  return g;
 }
 
 /** How many answers the model gave this task-run since `since` (from the proxy's log). */
@@ -322,6 +425,17 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
 // ---------------------------------------------------------------------------------------------------------
 // Self-test: plant things an agent must never see, then look for them from inside the sandbox.
 // ---------------------------------------------------------------------------------------------------------
+
+const TOOL_CHECKS = [
+  "git --version",
+  "rg --version",
+  ...(LANGS.includes("python") ? ["python3 --version", "pytest --version"] : []),
+  ...(LANGS.includes("go") ? ["go version"] : []),
+  ...(LANGS.includes("rust") ? ["cargo --version", "rustc --version"] : []),
+  ...(LANGS.includes("javascript") ? ["node --version", `test -f ${JS_MODULES}/jest/bin/jest.js`] : []),
+  ...(LANGS.includes("java") ? ["javac -version", "gradle --offline --version", `test -d ${GRADLE_RO_CACHE}/modules-2`] : []),
+  ...(LANGS.includes("cpp") ? ["g++ --version", "cmake --version", "make --version"] : []),
+];
 
 async function selftest(): Promise<boolean> {
   const token = (n: string) => `CANARY-${n}-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
@@ -372,7 +486,7 @@ touch ok.txt 2>/dev/null || fail "workspace not writable"
 # Network: nothing but loopback.
 (timeout 3 bash -c 'echo > /dev/tcp/1.1.1.1/53') 2>/dev/null && fail "internet reachable"
 # Toolchains still work.
-for c in "python3 --version" "pytest --version" "go version" "cargo --version" "rustc --version" "git --version" "rg --version"; do $c >/dev/null 2>&1 || fail "tool broken: $c"; done
+${TOOL_CHECKS.map((c) => `${c} >/dev/null 2>&1 || fail ${JSON.stringify("tool broken: " + c)}`).join("\n")}
 env | grep -iE 'key|token|secret|password' | grep -v ${JSON.stringify(PLACEHOLDER_KEY)} | sed 's/=.*//' | while read n; do fail "secret-looking variable in environment: $n"; done
 echo "probe finished"
 `;
@@ -453,7 +567,7 @@ function pruneArtifacts(dir: string) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (!e.isDirectory()) continue;
     const p = join(dir, e.name);
-    if (["target", "cache", "xdg-cache", "node_modules", "__pycache__"].includes(e.name)) rmSync(p, { recursive: true, force: true });
+    if (["target", "cache", "xdg-cache", "node_modules", "__pycache__", "build", ".gradle"].includes(e.name)) rmSync(p, { recursive: true, force: true });
     else pruneArtifacts(p);
   }
 }
@@ -470,16 +584,18 @@ let infraErrors = 0;
 await pool(jobs, CONC, async ({ agent, t }) => {
   assertDiskSpace();
   const run = join(OUT, "runs", agent, t.lang, t.name);
-  const ws = join(run, "ws");
+  // The workspace folder carries the exercise's name: the C++ build files derive their file names from it.
+  const ws = join(run, "ws", t.name);
   // Start every attempt from an empty folder: nothing from an earlier attempt (logs, graded tests) is left.
   rmSync(run, { recursive: true, force: true });
   mkdirSync(run, { recursive: true });
-  prepare(t, ws);
-  let a = { code: 0 as number | null, timedOut: false, ms: 0 };
+  prepare(t, ws, run);
+  let a = { code: 0 as number | null, timedOut: false, ms: 0, memoryKills: 0 };
   const started = Date.now();
   if (agent === "oracle") {
     // Sanity check of the harness: the reference solution must pass.
-    for (let k = 0; k < t.files.solution.length && k < t.files.example.length; k++) cpSync(join(t.dir, t.files.example[k]!), join(ws, t.files.solution[k]!));
+    // Reference files map onto the solution files in order; any extra ones (helper classes) go alongside.
+    t.files.example.forEach((ex, k) => cpSync(join(t.dir, ex), k < t.files.solution.length ? join(ws, t.files.solution[k]!) : join(ws, dirname(t.files.solution[0]!), basename(ex))));
   } else a = await runAgent(agent, t, ws, run);
   // If the agent never got an answer from the model (proxy down, key rejected), the run says nothing about
   // the agent: fail loudly instead of recording a failed task.
@@ -496,7 +612,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
   }
   const g = await grade(t, ws, run);
   pruneArtifacts(run);
-  const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started };
+  const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started, memoryKills: a.memoryKills + g.memoryKills };
   appendFileSync(resultsFile, JSON.stringify(r) + "\n");
   finished++;
   console.log(`[${finished}/${jobs.length}] ${agent.padEnd(8)} ${t.lang}/${t.name}: ${r.pass ? "PASS" : "fail"} (${Math.round(a.ms / 1000)}s${a.timedOut ? ", timed out" : ""})`);
