@@ -2,6 +2,8 @@
 
 *Run on 11 November 2026. Model: DeepSeek-V4.1-Flash (`deepseek-flash`) for both agents. Tasks: 102 Python, Go and Rust exercises. Protocol and caveats: [README.md](README.md).*
 
+> **Correction, 12 November 2026 (token and cost figures).** In these runs OpenCode auto-loaded 14 unrelated skills from this machine's `~/.claude/skills` folder and listed them in its system prompt, about 4,000 extra tokens on every request. That inflated its input-token count by roughly 13% and its cost by an estimated 6% (about $0.05 per run, because DeepSeek's cached input is very cheap). On a clean machine Galley's cost advantage on DeepSeek is therefore small. Pass rates are reported as measured. The harness now hides the host's agent configuration from both agents.
+
 ## Headline (clean run: no internet access for either agent)
 
 | Agent | Pass rate | Python | Go | Rust | Median time / task | Model requests | Input tokens (cache hit) | Output tokens | Cost | Cost per solved task |

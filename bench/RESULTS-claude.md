@@ -2,6 +2,8 @@
 
 *Run on 12 November 2026. Model: Claude Sonnet 5.5 (`claude-sonnet-5-5`) for both agents, both at **high** reasoning effort. Tasks: the same 101 scored Aider Polyglot exercises (Python, Go, Rust) as the DeepSeek comparison. Protocol: [README.md](README.md): no internet access, hidden tests, sandboxed grading, token usage as reported by Anthropic. Two full runs per agent.*
 
+> **Correction, 12 November 2026 (cost figures).** In these runs OpenCode auto-loaded 14 unrelated skills from this machine's `~/.claude/skills` folder (document, spreadsheet and browser skills) and listed them in its system prompt: about 13,000 of its 21,800 system-prompt characters, roughly 4,400 extra tokens on every request. On a clean machine that listing would not be there. It cost OpenCode an estimated **$1.25 per run**, so its clean cost is about **$5.5 per run** and Galley's advantage is about **2.0×**, not the 2.4× measured below. Pass rates are reported as measured; whether the extra text affected them is unknown. The harness now hides the host's agent configuration from both agents, and a clean OpenCode re-run is needed to replace the estimate.
+
 ## Headline
 
 | | Galley | OpenCode 1.19.5 |

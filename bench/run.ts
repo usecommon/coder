@@ -97,9 +97,16 @@ function prepare(t: Task, ws: string) {
   if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
 }
 
+const HOST_AGENT_DIRS = [".claude", ".agents", ".codex", ".opencode", ".config/opencode", ".config/galley", ".gemini"]
+  .map((d) => join(process.env.HOME ?? "/root", d))
+  .filter((d) => existsSync(d));
+
 /** Run a command in bubblewrap: read-only system, listed dirs writable, optional network. */
 function bwrap(cmd: string[], o: { cwd: string; writable: string[]; readable?: string[]; network: boolean; env: Record<string, string>; timeoutMs: number; stdout?: string }): Promise<{ code: number | null; timedOut: boolean; ms: number }> {
   const a = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp"];
+  // Hide the host user's agent configuration. OpenCode auto-loads skills from ~/.claude/skills (and reads other
+  // agents' config dirs); on a developer machine that silently adds unrelated instructions to its prompt.
+  for (const d of HOST_AGENT_DIRS) a.push("--tmpfs", d);
   // A private /tmp hides the host's /tmp, so re-expose anything needed from there (read-only).
   for (const r of o.readable ?? []) a.push("--ro-bind", r, r);
   for (const w of o.writable) a.push("--bind", w, w);
@@ -155,7 +162,9 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     const cfgDir = join(run, "config", "galley");
     mkdirSync(cfgDir, { recursive: true });
     // Anthropic's SDK appends /v1/messages itself; OpenAI-compatible clients append /chat/completions.
-    writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ effort: EFFORT, providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}` } } }));
+    // GALLEY_PROVIDER_OPTS (JSON) adds provider options for an experiment, e.g. '{"sendReasoning":true}'.
+    const extra = JSON.parse(process.env.GALLEY_PROVIDER_OPTS ?? "{}");
+    writeFileSync(join(cfgDir, "config.json"), JSON.stringify({ effort: EFFORT, providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
     cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS];
   } else if (agent === "opencode") {
