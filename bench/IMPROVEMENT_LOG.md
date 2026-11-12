@@ -88,3 +88,27 @@ After the leak was found, the benchmark sandbox was rebuilt and both agents were
 **Verdict by the rule fixed in advance:** on DeepSeek the lead and the significance conditions are met on these tasks and the cost condition is not. The tasks are also the ones Galley was developed on. Confirmation needs fresh tasks.
 
 None of Galley's earlier improvement rounds explains the lead: the Galley measured here is essentially the default configuration of rounds 3 and 7. What changed is the measurement. OpenCode had been reading hidden tests, and in the first valid comparison it scored about 4 points lower than before.
+
+## Round 9: bringing Galley's DeepSeek cost under OpenCode's (design, written before running)
+
+Round 8 left one condition of the win rule unmet on DeepSeek: Galley cost 11% more per round than OpenCode ($0.65 against $0.58). Two settings might close that gap. Both are off by default until measured.
+
+| Setting | What it does | Why it might help |
+|---|---|---|
+| `lean` | A system prompt that names no project, so it and the tool list are identical in every session; the working directory and a short file listing go in the first message; guidance to skip commentary between steps, to edit existing files, and to save and re-run test scripts | More of each request is served from the provider's cache; less output |
+| low reasoning effort | Sends `reasoning_effort: low` to DeepSeek (its default is `high`) | Reasoning is about half of Galley's cost on DeepSeek |
+
+**Design.** Four Galley arms side by side, all 101 tasks, two rounds, outside peak hours: `galley` (today's default), `galley-lean`, `galley-low`, `galley-leanlow`. No OpenCode arm: its cost is known, and the comparison that decides the rule is the confirmation run.
+
+**Rule, fixed in advance.**
+- The effect of each setting is measured on the two arms that have it against the two that don't, pooled over both rounds.
+- A setting is adopted if it lowers cost per task and its effect on the pass rate is not below −2.0 points.
+- The adopted combination must cost at least 12% less per task than `galley` in these rounds. If none does, nothing changes.
+
+Two rounds cannot detect a drop of 2 or 3 points with any confidence. The rule is a screen; the confirmation on fresh tasks is the test.
+
+## Confirmation on fresh tasks (design, written before running)
+
+- **Tasks:** the JavaScript, Java and C++ exercises of the same benchmark, which neither agent has been run on. A task is included if its reference solution passes in the benchmark sandbox; that list is fixed before any agent runs.
+- **Arms:** OpenCode 1.19.5 and Galley with whatever round 9 adopts, frozen. Four rounds, side by side, outside peak hours.
+- **Verdict by the win rule:** Galley beats OpenCode if its pass rate is higher by 5 points or more, the sign test over tasks gives p < 0.05, and its cost per round at list price is lower. Anything else is reported as it falls.
