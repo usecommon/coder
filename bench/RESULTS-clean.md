@@ -10,7 +10,7 @@ Three rounds. In each round every task was run by all three configurations side 
 |---|---|---|---|
 | Passes per round (of 101) | 66, 65, 63 | 71, 73, 69 | 69, 71, 73 |
 | **Pass rate** | **64.0%** | **70.3%** | **70.3%** |
-| Cost per round | **$0.58** | $0.65 | $0.65 |
+| Cost per round, at the off-peak list price | **$0.58** | $0.65 | $0.65 |
 | Cost per solved task | $0.0090 | $0.0091 | $0.0092 |
 | Median time per task | 49 s | 59 s | 59 s |
 | Task-runs stopped at the 10-minute limit (of 303) | 1 | 2 | 2 |
@@ -95,15 +95,17 @@ OpenCode was not re-run on Claude. Its earlier result on the old sandbox was 90.
 
 ## Spend
 
-| | Cost |
-|---|---|
-| DeepSeek, three valid rounds | $5.79 |
-| DeepSeek, discarded round and the round aborted after it | $2.17 |
-| Claude Sonnet 5.5, three rounds | $7.48 |
-| Smoke tests | $0.13 |
-| **Total** | **$15.58** |
+DeepSeek bills double on weekdays between 01:00 and 04:00 and between 06:00 and 10:00 UTC. Most of these rounds ran in the morning window, which I had not accounted for. The cost figures elsewhere on this page use the off-peak list price for every request, so that agents and rounds compare like for like; the comparison between agents is unaffected because they ran side by side. What the rounds actually cost is higher:
 
-Parts are rounded. About $14 was planned. The overrun is the discarded round.
+| | At the off-peak list price | As billed (estimated from request times) |
+|---|---|---|
+| DeepSeek, three valid rounds | $5.79 | $9.93 |
+| DeepSeek, discarded round and the round aborted after it | $2.17 | $3.66 |
+| Claude Sonnet 5.5, three rounds | $7.48 | $7.48 |
+| Smoke tests | $0.13 | $0.13 |
+| **Total** | **$15.58** | **about $21.20** |
+
+Parts are rounded. About $14 was planned. The overrun is the discarded round and the peak-hour rate. Later DeepSeek rounds are scheduled outside peak hours.
 
 ## Caveats
 

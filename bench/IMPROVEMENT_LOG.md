@@ -15,7 +15,7 @@ The goal was to improve Galley until it beats OpenCode on the Polyglot benchmark
 - **Only general agent improvements.** Nothing specific to Exercism or this benchmark.
 - **Measuring noise.** After round 1 showed ±4-task swings between identical setups, each change got 2 dev runs.
 
-Raw per-task results and per-request token usage for every round are in [`data/rounds/`](data/rounds/). Total model spend for the rounds and the scale test was **$11.01** at DeepSeek list prices.
+Raw per-task results and per-request token usage for every round are in [`data/rounds/`](data/rounds/). Total model spend for the rounds and the scale test was **$11.01** at DeepSeek's off-peak list price. These rounds ran outside DeepSeek's peak hours (weekdays 01:00 to 04:00 and 06:00 to 10:00 UTC, billed double), so that is also what they cost. The two full benchmark runs before them, on the morning of 11 November, ran largely inside peak hours and cost up to twice the figure computed at list price.
 
 ## Rounds
 
