@@ -112,3 +112,5 @@ Two rounds cannot detect a drop of 2 or 3 points with any confidence. The rule i
 - **Tasks:** the JavaScript, Java and C++ exercises of the same benchmark, which neither agent has been run on. A task is included if its reference solution passes in the benchmark sandbox; that list is fixed before any agent runs.
 - **Arms:** OpenCode 1.19.5 and Galley with whatever round 9 adopts, frozen. Four rounds, side by side, outside peak hours.
 - **Verdict by the win rule:** Galley beats OpenCode if its pass rate is higher by 5 points or more, the sign test over tasks gives p < 0.05, and its cost per round at list price is lower. Anything else is reported as it falls.
+
+**Fresh-task list, fixed on 12 November before any agent ran on them.** The reference solutions of all 122 JavaScript, Java and C++ exercises were graded in the benchmark sandbox. 121 pass and are included: JavaScript 48, Java 47, C++ 26. One is left out: `javascript/parallel-letter-frequency`, whose reference solution failed a test that depends on timing (it ran out of the test's 5-second limit on a busy machine).

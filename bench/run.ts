@@ -84,6 +84,8 @@ interface Task {
 export const splitOf = (key: string) => (BigInt("0x" + new Bun.CryptoHasher("sha256").update(key).digest("hex")) % 2n === 0n ? "dev" : "holdout");
 const SPLIT = args.split ?? "all";
 const ONLY = args.only ? new Set(args.only.split(",")) : undefined;
+/** Tasks to leave out, as lang/name: for instance ones whose reference solution does not pass here. */
+const SKIP = new Set((args.skip ?? process.env.BENCH_SKIP ?? "").split(",").filter(Boolean));
 
 function tasks(): Task[] {
   const out: Task[] = [];
@@ -95,6 +97,7 @@ function tasks(): Task[] {
       const key = `${lang}/${name}`;
       if (SPLIT !== "all" && splitOf(key) !== SPLIT) continue;
       if (ONLY && !ONLY.has(key)) continue;
+      if (SKIP.has(key)) continue;
       out.push({ lang, name, dir, files });
     }
   }
@@ -594,8 +597,22 @@ await pool(jobs, CONC, async ({ agent, t }) => {
   const started = Date.now();
   if (agent === "oracle") {
     // Sanity check of the harness: the reference solution must pass.
-    // Reference files map onto the solution files in order; any extra ones (helper classes) go alongside.
-    t.files.example.forEach((ex, k) => cpSync(join(t.dir, ex), k < t.files.solution.length ? join(ws, t.files.solution[k]!) : join(ws, dirname(t.files.solution[0]!), basename(ex))));
+    // Each reference file replaces the solution file it stands for: the one with the same name, else an unused
+    // one with the same extension. Any others (helper classes) go alongside.
+    const ext = (f: string) => f.slice(f.lastIndexOf("."));
+    const free = new Set(t.files.solution);
+    const target = new Map<string, string>();
+    for (const ex of t.files.example) {
+      const same = [...free].find((f) => basename(f) === basename(ex));
+      if (same) (target.set(ex, same), free.delete(same));
+    }
+    for (const ex of t.files.example) {
+      if (target.has(ex)) continue;
+      const alike = [...free].find((f) => ext(f) === ext(ex));
+      if (alike) free.delete(alike);
+      target.set(ex, alike ?? join(dirname(t.files.solution[0]!), basename(ex)));
+    }
+    for (const [ex, to] of target) cpSync(join(t.dir, ex), join(ws, to));
   } else a = await runAgent(agent, t, ws, run);
   // If the agent never got an answer from the model (proxy down, key rejected), the run says nothing about
   // the agent: fail loudly instead of recording a failed task.
