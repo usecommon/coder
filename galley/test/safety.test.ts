@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -132,6 +133,52 @@ describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
   test("timeouts kill the command", async () => {
     const r = await run("sleep 5", { timeoutMs: 300 });
     expect(r.timedOut).toBe(true);
+  });
+
+  // Regression: a process left behind by a command kept the output pipes open, and the agent waited on it.
+  test("a command that times out returns at once, even if it started other processes", async () => {
+    const t = Date.now();
+    const r = await run("sleep 34 & timeout 34 sleep 34 & sleep 34", { timeoutMs: 1000 });
+    expect(r.timedOut).toBe(true);
+    expect(Date.now() - t).toBeLessThan(4000);
+    await new Promise((res) => setTimeout(res, 300));
+    expect(spawnSync("pgrep", ["-f", "^(timeout 34 )?sleep 34$"]).status === 0).toBe(false);
+  });
+  // Is a process with this command line still running? (Looked up from outside the sandbox.)
+  const running = (pattern: string) => spawnSync("pgrep", ["-f", pattern]).status === 0;
+  test("a command that leaves a background process behind returns at once, and the process is stopped", async () => {
+    const t = Date.now();
+    const r = await run("sleep 31 & echo started");
+    expect(r.output).toContain("started");
+    expect(Date.now() - t).toBeLessThan(4000);
+    await new Promise((res) => setTimeout(res, 300));
+    expect(running("^sleep 31$")).toBe(false);
+  });
+  test("the same holds when the sandbox shares the surrounding process list", () => {
+    // That mode is chosen at start-up, so check it in a separate process.
+    const script = `
+      const { spawnSync } = await import("node:child_process");
+      const { exec, detectSandbox, sandboxProcMode } = await import(${JSON.stringify(join(import.meta.dir, "../src/safety/sandbox.ts"))});
+      const kind = detectSandbox();
+      const ws = ${JSON.stringify(ws)};
+      const o = { cwd: ws, workspace: ws, readOnly: false, network: false, kind };
+      let t = Date.now();
+      const a = await exec("sleep 32 & timeout 32 sleep 32 & sleep 32", { ...o, timeoutMs: 1000 });
+      const timeoutMs = Date.now() - t;
+      t = Date.now();
+      const b = await exec("sleep 33 & echo started", { ...o, timeoutMs: 20000 });
+      const leftoverMs = Date.now() - t;
+      await new Promise((res) => setTimeout(res, 300));
+      const left = spawnSync("pgrep", ["-f", "^(timeout 32 )?sleep 3[23]$"]).status === 0;
+      console.log(JSON.stringify({ mode: sandboxProcMode(), timedOut: a.timedOut, timeoutMs, leftoverMs, left }));
+    `;
+    const r = spawnSync(process.execPath, ["-e", script], { env: { ...process.env, GALLEY_SANDBOX_PROC: "shared" }, encoding: "utf8", timeout: 60_000 });
+    const out = JSON.parse(r.stdout.trim().split("\n").pop()!);
+    expect(out.mode).toBe("shared");
+    expect(out.timedOut).toBe(true);
+    expect(out.timeoutMs).toBeLessThan(4000);
+    expect(out.leftoverMs).toBeLessThan(4000);
+    expect(out.left).toBe(false);
   });
 
   // Regression: when Galley ran as root, the command kept root's capabilities and could undo the sandbox.

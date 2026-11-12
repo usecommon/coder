@@ -1,7 +1,7 @@
 // Run shell commands inside an OS sandbox: workspace writable (read-only in plan mode), .git read-only,
 // network off unless granted, secrets stripped from the environment.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 
 export type SandboxKind = "bwrap" | "seatbelt" | "none";
@@ -97,7 +97,9 @@ export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" 
   if (existsSync(join(ws, ".git"))) args.push("--ro-bind", join(ws, ".git"), join(ws, ".git"));
   if (!o.network) args.push("--unshare-net");
   args.push(...privilegeArgs());
-  args.push("--die-with-parent", "--new-session", "--chdir", o.cwd, "bash", "-c", command);
+  // With its own process list, everything a command started dies with the sandbox. Without one ("shared"),
+  // Galley has to find those processes itself, so the command stays in the session Galley started it in.
+  args.push("--die-with-parent", ...(procMode === "own" ? ["--new-session"] : []), "--chdir", o.cwd, "bash", "-c", command);
   return args;
 }
 
@@ -109,6 +111,32 @@ export function seatbeltProfile(o: Pick<ExecOptions, "workspace" | "readOnly" | 
   if (!o.readOnly) rules.push(`(allow file-write* (subpath ${q(ws)}))`, `(deny file-write* (subpath ${q(join(ws, ".git"))}))`);
   if (!o.network) rules.push("(deny network*)");
   return rules.join("");
+}
+
+/** Session id of a process, from /proc (Linux). */
+function sessionOf(pid: number | "self"): number | undefined {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[3]); // state ppid pgrp session …
+  } catch {
+    return undefined;
+  }
+}
+
+/** Kill every process in a session. A process can leave its process group (the `timeout` command does), but
+ *  it stays in its session unless it deliberately starts a new one. */
+function killSession(sid: number) {
+  if (sid === sessionOf("self")) return; // never our own
+  let pids: string[] = [];
+  try {
+    pids = readdirSync("/proc").filter((e) => /^\d+$/.test(e));
+  } catch {}
+  for (const pid of pids) {
+    if (sessionOf(Number(pid)) !== sid) continue;
+    try {
+      process.kill(Number(pid), "SIGKILL");
+    } catch {}
+  }
 }
 
 export function exec(command: string, o: ExecOptions): Promise<ExecResult> {
@@ -139,23 +167,40 @@ export function exec(command: string, o: ExecOptions): Promise<ExecResult> {
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
-    const kill = () => {
+    // Stop the command and everything it started. A leftover process (a hung test, a server started with &)
+    // would otherwise keep the output pipes open, and the agent would wait on it.
+    // The command runs in a session of its own (it was started detached). Note that now, while its first
+    // process is alive: the session outlives that process for as long as anything it started is still running.
+    const ownSession = child.pid !== undefined && sessionOf(child.pid) === child.pid;
+    const stopAll = () => {
       try {
         process.kill(-child.pid!, "SIGKILL");
       } catch {}
+      // No private process list to tear down: find what is left in the command's session.
+      if (o.kind === "bwrap" && procMode === "shared" && ownSession) killSession(child.pid!);
+    };
+    let settled = false;
+    const finish = (r: ExecResult) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolveP(r);
     };
     const timer = setTimeout(() => {
       timedOut = true;
-      kill();
+      stopAll();
     }, o.timeoutMs);
-    o.signal?.addEventListener("abort", kill, { once: true });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      resolveP({ output: `failed to start: ${err.message}`, exitCode: null, timedOut });
+    o.signal?.addEventListener("abort", stopAll, { once: true });
+    child.on("error", (err) => finish({ output: `failed to start: ${err.message}`, exitCode: null, timedOut }));
+    child.on("exit", (code) => {
+      // In a sandbox nothing outlives its command. Either way, don't wait long for pipes a leftover process holds.
+      if (sandboxed) stopAll();
+      setTimeout(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish({ output, exitCode: code, timedOut });
+      }, 1000).unref();
     });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolveP({ output, exitCode: code, timedOut });
-    });
+    child.on("close", (code) => finish({ output, exitCode: code, timedOut }));
   });
 }
