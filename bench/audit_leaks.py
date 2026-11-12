@@ -15,6 +15,7 @@ Examples:
 What `scan` looks for in each tool call the agent made (inputs and outputs only):
   sibling_tests        read a test file of the same exercise from another task's folder (other language)
   hidden_test_content  a tool result contained lines of the exercise's hidden tests that the agent had not written
+                       (reads of the agent's own session store are not counted: see the comment in scan_run)
   sibling_solution     read a graded solution of the same exercise from another task's folder
   benchmark_checkout   read files from the benchmark checkout itself (hidden tests, reference solutions)
   results_files        read the run's results or logs            (informational)
@@ -137,8 +138,11 @@ def scan_run(label, base, poly):
                 kinds["operator_files"] += 1
             if name == "bash" and NAMESPACE.search(cmd):
                 kinds["namespace_cmds"] += 1
+            # An agent re-reading its own session store learns nothing new: models often reconstruct the public
+            # test suite from memory in their reasoning, and that text is saved there.
+            own_store = any(f"{run}/{d}" in cmd for d in ("xdg-data", "xdg-state", "galley-data"))
             for lines in dist.values():
-                if sum(1 for s in lines if s in out and s not in wrote) >= 3:
+                if not own_store and sum(1 for s in lines if s in out and s not in wrote) >= 3:
                     kinds["hidden_test_content"] += 1
         if kinds:
             rows.append({"run": label, "agent": agent, "lang": lang, "task": task, "kinds": sorted(kinds)})

@@ -483,7 +483,9 @@ await pool(jobs, CONC, async ({ agent, t }) => {
   // the agent: fail loudly instead of recording a failed task.
   if (agent !== "oracle") {
     const log = existsSync(join(run, "agent.log")) ? readFileSync(join(run, "agent.log"), "utf8") : "";
-    const unreachable = SOCK !== undefined && log.includes("Internal Server Error") && log.includes(new URL(PROXY).host);
+    // Without a proxy log to consult, fall back to the agent's own output. (With one, that output is not used:
+    // an agent that probes the proxy can print the same words.)
+    const unreachable = !PROXY_LOG && SOCK !== undefined && log.includes("Internal Server Error") && log.includes(new URL(PROXY).host);
     if (unreachable || modelAnswers(`${agent}__${t.lang}__${t.name}`, started) === 0) {
       infraErrors++;
       console.error(`infrastructure error: ${agent} ${t.lang}/${t.name} got no answer from the model; not recording a result`);

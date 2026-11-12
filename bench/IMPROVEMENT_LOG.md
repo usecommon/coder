@@ -71,3 +71,20 @@ The verifier had the best dev mean in round 5, so a verifier was tested on all 1
 **Verdict after 7 rounds (of 20 allowed):** by the criteria fixed in advance, **Galley is not better than OpenCode on pass rate. They are tied**, within about ±6 points with 95% confidence. Galley achieves that tie with about 12% lower cost per run, about 3× fewer input tokens, and a sandbox that keeps the agent offline by default.
 
 None of the harness changes moved pass rate beyond run-to-run noise: self-review, contract guidance, the verifier, and the lean verifier. With this model and benchmark, pass rate looks bound by the model. Further rounds of the same kind were stopped because the evidence says they won't change the verdict. A different model (for example Claude, where Galley's Anthropic-specific features apply) or a different benchmark would be needed to separate the two.
+
+## Round 8: clean re-run on the fixed sandbox (12 November 2026)
+
+After the leak was found, the benchmark sandbox was rebuilt and both agents were measured again on DeepSeek, three rounds, side by side. Full write-up: [RESULTS-clean.md](RESULTS-clean.md).
+
+| | Galley | Galley with reasoning hand-off | OpenCode |
+|---|---|---|---|
+| Passes per round (of 101) | 71, 73, 69 → 70.3% | 69, 71, 73 → 70.3% | 66, 65, 63 → 64.0% |
+| Cost per round | $0.65 | $0.65 | $0.58 |
+
+- **Galley leads by 6.3 points** (interval +2.0 to +10.9, sign test p = 0.013). It does not cost less: 11% more per round, the same per solved task.
+- **Reasoning hand-off:** no effect on pass rate or cost. Adopted for DeepSeek because it is the documented protocol.
+- **Claude effort:** `medium` scored 87.1% against 88.1% for `high`, at 15% lower cost. `medium` is now the default.
+
+**Verdict by the rule fixed in advance:** on DeepSeek the lead and the significance conditions are met on these tasks and the cost condition is not. The tasks are also the ones Galley was developed on. Confirmation needs fresh tasks.
+
+None of Galley's earlier improvement rounds explains the lead: the Galley measured here is essentially the default configuration of rounds 3 and 7. What changed is the measurement. OpenCode had been reading hidden tests, and in the first valid comparison it scored about 4 points lower than before.

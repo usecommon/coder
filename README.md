@@ -8,11 +8,12 @@ Research on AI coding agents and the "harnesses" around them, compiled October 2
 
 [`galley/`](galley/) is a working MVP of a coding agent comparable to OpenCode. It is TypeScript on Bun, provider-agnostic, and **safety-first**: commands run in an OS sandbox with the network off, file tools are confined to the workspace, plan mode is read-only at the OS level, and `/undo` reverts a turn. It is **cheap-model friendly** (short cacheable prompt, cost and cache tracking, compaction) and supports **parallel and background work** (sub-agents, `--detach`, `--worktree`). See [`galley/README.md`](galley/README.md) and the plan in [`galley/PLAN.md`](galley/PLAN.md).
 
-**Benchmark** (101 scored Aider Polyglot tasks in Python, Go and Rust, no internet, repeated runs):
-- **DeepSeek-V4.1-Flash:** Galley 68.8% vs OpenCode 67.8% as measured, a statistical tie at similar cost. A later audit found OpenCode had read hidden tests through a hole in the benchmark sandbox in 22 task-runs; with those removed it is 68.8% vs 65.5% (+3.3 points, still a tie). Both need re-running on a fixed harness.
-- **Claude Sonnet 5.5:** Galley 87.1% vs OpenCode 90.1%, also a tie (p = 0.29). Galley cost $2.78 per run against OpenCode's $6.70 as measured, or about $5.5 once a benchmark artifact that inflated OpenCode's prompt is removed: roughly **2× cheaper**.
+**Benchmark** (101 scored Aider Polyglot tasks in Python, Go and Rust; no internet; repeated runs). Latest results, on the benchmark sandbox fixed on 12 November 2026:
+- **DeepSeek-V4.1-Flash, three rounds:** Galley 70.3% vs OpenCode 64.0%. The 6.3-point lead is statistically significant (interval +2.0 to +10.9, p = 0.013). Galley costs 11% more per round and the same per solved task.
+- **Claude Sonnet 5.5:** Galley 87 to 88% (re-measured), OpenCode 90.1% (earlier run): a tie within noise, with Galley at well under half the cost.
+- **Not yet a win by our own rule,** which asks for a 5-point lead, p < 0.05 and lower cost, on tasks Galley was not developed on. On DeepSeek the cost condition fails; on Claude the lead does.
 
-The Sonnet runs were not affected by that hole. Details: [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
+Earlier DeepSeek results (68.8% vs 67.8%) came from a sandbox that let agents read hidden tests, which OpenCode did in 22 task-runs. Details: [`bench/RESULTS-clean.md`](bench/RESULTS-clean.md) (latest), [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
 
 ## Research contents
 

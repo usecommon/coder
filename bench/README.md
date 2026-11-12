@@ -1,6 +1,6 @@
 # Galley vs OpenCode on the Aider Polyglot benchmark
 
-A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. Results are in [RESULTS.md](RESULTS.md).
+A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results, on the sandbox fixed on 12 November 2026, are in [RESULTS-clean.md](RESULTS-clean.md). Earlier runs: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
 
 ## Benchmark
 

@@ -1,0 +1,76 @@
+[
+{
+"run": "ds-1",
+"agent": "opencode",
+"lang": "go",
+"task": "hexadecimal",
+"kinds": [
+"namespace_cmds",
+"operator_files"
+]
+},
+{
+"run": "ds-1",
+"agent": "opencode",
+"lang": "go",
+"task": "tree-building",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-1",
+"agent": "opencode",
+"lang": "go",
+"task": "trinary",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-1",
+"agent": "opencode",
+"lang": "rust",
+"task": "grade-school",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-2",
+"agent": "opencode",
+"lang": "go",
+"task": "hexadecimal",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-2",
+"agent": "opencode",
+"lang": "python",
+"task": "dot-dsl",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-3",
+"agent": "opencode",
+"lang": "go",
+"task": "counter",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "ds-3",
+"agent": "opencode",
+"lang": "go",
+"task": "two-bucket",
+"kinds": [
+"namespace_cmds",
+"operator_files"
+]
+}
+]
