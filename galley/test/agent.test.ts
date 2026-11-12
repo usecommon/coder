@@ -11,6 +11,9 @@ import type { ChatCallbacks, ChatRequest, ChatResponse, Provider } from "../src/
 import { Session } from "../src/session/store.ts";
 import { tempDir, testConfig } from "./helpers.ts";
 
+/** A session's first message without the environment note that precedes it. */
+const request = (m: unknown) => String((m as { content: string }).content).replace(/^<environment>[\s\S]*?<\/environment>\n\n/, "");
+
 function setup(script: ConstructorParameters<typeof MockProvider>[0], over = {}) {
   const ws = tempDir();
   const mock = new MockProvider(script);
@@ -74,7 +77,7 @@ describe("agent loop", () => {
     const slow: Provider = {
       id: "slow",
       async chat(req: ChatRequest, _cb?: ChatCallbacks): Promise<ChatResponse> {
-        const isHelper = req.messages[0]?.role === "user" && (req.messages[0] as any).content.startsWith("look");
+        const isHelper = req.messages[0]?.role === "user" && request(req.messages[0]).startsWith("look");
         if (isHelper) {
           active++;
           peak = Math.max(peak, active);
@@ -82,7 +85,7 @@ describe("agent loop", () => {
           active--;
           // Helpers only get read-only tools plus bash.
           expect(req.tools.map((t) => t.name).sort()).toEqual(["bash", "glob", "grep", "list", "read"]);
-          return { text: `found in ${(req.messages[0] as any).content}`, toolCalls: [], usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 }, stopReason: "end_turn" };
+          return { text: `found in ${request(req.messages[0])}`, toolCalls: [], usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 }, stopReason: "end_turn" };
         }
         const done = req.messages.some((m) => m.role === "tool");
         return done
@@ -150,7 +153,7 @@ describe("agent loop", () => {
     const v: Provider = {
       id: "verif",
       async chat(req) {
-        const first = (req.messages[0] as any).content as string;
+        const first = request(req.messages[0]);
         const u = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
         if (first.startsWith("You are independently verifying")) {
           seen.push("verifier");
@@ -181,7 +184,7 @@ describe("agent loop", () => {
       id: "vpass",
       async chat(req) {
         const u = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
-        if ((req.messages[0] as any).content.startsWith("You are independently verifying")) {
+        if (request(req.messages[0]).startsWith("You are independently verifying")) {
           verifierCalls++;
           return { text: "All good.\nVERDICT: PASS", toolCalls: [], usage: u, stopReason: "end_turn" };
         }
@@ -258,14 +261,12 @@ test("forked sessions copy history and link to the parent", () => {
   expect(Session.load(ws, f.id).meta.parentId).toBe(s.id);
 });
 
-describe("lean prompt (experimental)", () => {
+describe("system prompt and environment note", () => {
   test("the system prompt is the same in every project, and names none", () => {
-    const a = systemPrompt({ workspace: "/home/a/project-one", mode: "build", sandbox: "bwrap", lean: true });
-    const b = systemPrompt({ workspace: "/srv/another", mode: "build", sandbox: "bwrap", lean: true });
+    const a = systemPrompt({ workspace: "/home/a/project-one", mode: "build", sandbox: "bwrap" });
+    const b = systemPrompt({ workspace: "/srv/another", mode: "build", sandbox: "bwrap" });
     expect(a).toBe(b);
     expect(a).not.toContain("project-one");
-    // The default prompt still names the project.
-    expect(systemPrompt({ workspace: "/home/a/project-one", mode: "build", sandbox: "bwrap" })).toContain("/home/a/project-one");
   });
   test("the file listing goes two levels deep, skips build folders and is capped", () => {
     const ws = tempDir();
@@ -283,7 +284,7 @@ describe("lean prompt (experimental)", () => {
     expect(capped).toContain("more not shown");
   });
   test("a session's first message says where the agent is; later messages don't repeat it", async () => {
-    const { ws, mock, agent } = setup([{ text: "ok" }, { text: "ok again" }], { lean: true });
+    const { ws, mock, agent } = setup([{ text: "ok" }, { text: "ok again" }]);
     writeFileSync(join(ws, "main.py"), "");
     await agent.send("first request");
     await agent.send("second request");
@@ -294,11 +295,5 @@ describe("lean prompt (experimental)", () => {
     const users = mock.requests[1]!.messages.filter((m) => m.role === "user") as Extract<Message, { role: "user" }>[];
     expect(users[1]!.content).toBe("second request");
     expect(agent.session.title).toBe("first request");
-  });
-  test("without the option nothing changes", async () => {
-    const { ws, mock, agent } = setup([{ text: "ok" }]);
-    await agent.send("hello");
-    expect((mock.requests[0]!.messages[0] as Extract<Message, { role: "user" }>).content).toBe("hello");
-    expect(mock.requests[0]!.system).toContain(ws);
   });
 });

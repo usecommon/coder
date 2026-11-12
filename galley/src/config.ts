@@ -31,8 +31,6 @@ export interface Config {
   smallModel?: string;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   maxTokens?: number;
-  /** Experimental: a prompt that is the same in every project (better caching) and asks for less output. */
-  lean?: boolean;
   providers: Record<string, ProviderConfig>;
   permission: Record<string, Rule>;
   /** "auto" uses bubblewrap/Seatbelt when available; "off" runs commands unsandboxed (every command then asks). */

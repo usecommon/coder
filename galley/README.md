@@ -24,7 +24,7 @@ Bug: add() used subtraction. Fixed to a + b. Verified: node test.js → tests pa
 | File tools | All allowed by default | **Confined to the workspace**, with symlink escapes caught; writes into `.git` are blocked |
 | Plan mode | Edits denied | Edits denied, **and** the sandbox mounts the workspace read-only |
 | Mistakes | `/undo` | `/undo` restores every file changed in the last turn |
-| Cost | Any model | Short system prompt, stable cacheable prefix, Anthropic prompt caching, **per-turn and per-session cost and cache-hit reporting**, auto-compaction |
+| Cost | Any model | Short system prompt that is identical in every project (so it and the tool list are served from the provider's cache across sessions), Anthropic prompt caching, **per-turn and per-session cost and cache-hit reporting**, auto-compaction |
 | Parallel work | `@general` sub-agent | Parallel read-only **sub-agents**, **background runs** (`--detach`), **git-worktree isolation** (`--worktree`), forkable append-only session logs |
 
 ## Install and run
@@ -58,7 +58,7 @@ The non-Anthropic model names are examples; check your provider's current model 
 
 For Anthropic models, Galley uses adaptive thinking with an explicit effort level (`"effort"`, default `medium`: on Claude Sonnet 5.5 it scored the same as `high` in our benchmark at 15% lower cost), caches the system prompt and conversation, streams tool inputs eagerly and validates them before running, and turns on the API's server-side refusal fallbacks for the models that support them. Thinking blocks are replayed unchanged. You can turn off fallbacks per provider in code (`AnthropicProvider({ fallbacks: false })`).
 
-For DeepSeek, Galley sends the model's earlier reasoning back between tool calls, as DeepSeek's thinking mode expects. In our benchmark this changed neither pass rate nor cost. Turn it off with `"sendReasoning": false` under `providers.deepseek`; other OpenAI-compatible providers get it only if you set it to `true`.
+For DeepSeek, Galley sends the model's earlier reasoning back between tool calls, as DeepSeek's thinking mode expects. In our benchmark this changed neither pass rate nor cost. Turn it off with `"sendReasoning": false` under `providers.deepseek`; other OpenAI-compatible providers get it only if you set it to `true`. To trade some accuracy for cost and speed, set `"reasoningEffort": "low"` there: in our benchmark it cut cost by 44% and scored about 3 points lower.
 
 ## Using it
 
@@ -139,7 +139,7 @@ src/
 ## Development
 
 ```bash
-bun test          # 61 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
+bun test          # 66 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
 bun run typecheck
 ```
 

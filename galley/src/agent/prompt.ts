@@ -1,5 +1,5 @@
-// A deliberately short system prompt. It is byte-stable for a given workspace and mode so providers can cache it;
-// the lean variant is the same in every workspace.
+// A deliberately short system prompt. Apart from a project's own AGENTS.md it is the same in every workspace, so
+// providers can cache it (and the tool list after it) across sessions.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Mode } from "../safety/permission.ts";
@@ -13,34 +13,21 @@ export function loadProjectInstructions(workspace: string): string | undefined {
   return undefined;
 }
 
-export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: SandboxKind; subagent?: boolean; lean?: boolean }): string {
-  const sandboxLine =
+export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: SandboxKind; subagent?: boolean }): string {
+  // Nothing in these lines depends on the project, so the prompt and the tool list are identical in every session
+  // and the provider can serve them from its cache. The working directory goes in a session's first message.
+  const lines = [
+    "You are Galley, a coding agent.",
+    "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
+    "- Change an existing file with edit (exact text, include enough context to be unique). Use write only for new files. Keep changes focused.",
+    "- Verify with bash: run the project's tests, type checker or linter when they exist. If you write a test script, save it under /tmp and re-run that file after each change instead of writing it out again.",
     o.sandbox === "none"
       ? "- bash runs without a sandbox, so each command needs the user's approval. Prefer read-only commands."
-      : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.";
-  const lines = o.lean
-    ? [
-        // Nothing here depends on the project, so the prompt and the tool list are identical in every session
-        // and the provider can serve them from its cache. The working directory goes in the first message.
-        "You are Galley, a coding agent.",
-        "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
-        "- Change an existing file with edit (exact text, include enough context to be unique). Use write only for new files. Keep changes focused.",
-        "- Verify with bash: run the project's tests, type checker or linter when they exist. If you write a test script, save it under /tmp and re-run that file after each change instead of writing it out again.",
-        sandboxLine,
-        "- Use task to run independent read-only investigations in parallel.",
-        "- If a tool returns an error, read it and adjust instead of repeating the same call.",
-        "- Don't comment between tool calls. When finished, say in one or two sentences what changed and how you checked it.",
-      ]
-    : [
-        `You are Galley, a coding agent working in the project at ${o.workspace} (${process.platform}).`,
-        "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
-        "- Change code with edit (exact text, include enough context to be unique) or write (new files). Keep changes focused.",
-        "- Verify with bash: run the project's tests, type checker or linter when they exist.",
-        sandboxLine,
-        "- Use task to run independent read-only investigations in parallel.",
-        "- If a tool returns an error, read it and adjust instead of repeating the same call.",
-        "- Be concise. When finished, say what changed and how you verified it.",
-      ];
+      : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.",
+    "- Use task to run independent read-only investigations in parallel.",
+    "- If a tool returns an error, read it and adjust instead of repeating the same call.",
+    "- Don't comment between tool calls. When finished, say in one or two sentences what changed and how you checked it.",
+  ];
   if (o.mode === "plan")
     lines.push(
       o.subagent

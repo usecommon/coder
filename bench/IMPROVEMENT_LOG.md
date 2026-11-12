@@ -107,6 +107,28 @@ Round 8 left one condition of the win rule unmet on DeepSeek: Galley cost 11% mo
 
 Two rounds cannot detect a drop of 2 or 3 points with any confidence. The rule is a screen; the confirmation on fresh tasks is the test.
 
+### Round 9 results (12 November, two rounds, outside peak hours)
+
+| Arm | Passes per round (of 101) | Pass rate | Cost per round | Requests per round |
+|---|---|---|---|---|
+| `galley` (default) | 66, 64 | 64.4% | $0.71 | 1,103 |
+| `galley-lean` | 69, 70 | **68.8%** | **$0.59** | 948 |
+| `galley-low` | 66, 61 | 62.9% | $0.38 | 790 |
+| `galley-leanlow` | 64, 65 | 63.9% | $0.36 | 767 |
+
+| Setting | Effect on pass rate (arms with it against arms without) | Effect on cost per task | Decision by the rule |
+|---|---|---|---|
+| `lean` | +2.7 points (95% interval −1.2 to +6.7) | −13% | **Adopted** |
+| low reasoning effort | −3.2 points (−7.2 to +0.7) | −44% | **Not adopted** (below the −2.0 limit). Kept as an option. |
+
+- The adopted combination is `lean` alone. Its arm cost 17% less per task than `galley` in these rounds, above the 12% the rule asks for.
+- With the lean prompt the first request of a task already hits the provider's cache (about 1,150 of 1,650 tokens), the model makes 14% fewer requests and writes 13% less.
+- Low reasoning effort nearly halves the time per task (median 38 s against 67 s) as well as the cost. It is a real option for anyone who values speed and cost over the last few points.
+- The default arm scored 64.4% here against 70.3% in round 8, with the same code. That is the run-to-run and day-to-day variation, and the reason every comparison is run side by side.
+- Leak audit: no task-run flagged in either round. One runaway test program in each round used over 13 GB and was killed by the machine; the benchmark now caps memory per task.
+
+The lean prompt is now Galley's only prompt.
+
 ## Confirmation on fresh tasks (design, written before running)
 
 - **Tasks:** the JavaScript, Java and C++ exercises of the same benchmark, which neither agent has been run on. A task is included if its reference solution passes in the benchmark sandbox; that list is fixed before any agent runs.
