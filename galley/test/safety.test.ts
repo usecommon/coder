@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { confine, PathError } from "../src/safety/paths.ts";
 import { evaluate, PermissionGate, splitCommand } from "../src/safety/permission.ts";
-import { detectSandbox, exec, scrubEnv } from "../src/safety/sandbox.ts";
+import { detectSandbox, exec, privilegeArgs, scrubEnv } from "../src/safety/sandbox.ts";
 import { DEFAULT_CONFIG } from "../src/config.ts";
 import { tempDir } from "./helpers.ts";
 
@@ -131,5 +132,42 @@ describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
   test("timeouts kill the command", async () => {
     const r = await run("sleep 5", { timeoutMs: 300 });
     expect(r.timedOut).toBe(true);
+  });
+
+  // Regression: when Galley ran as root, the command kept root's capabilities and could undo the sandbox.
+  test("a command cannot remount the filesystem read-write to write outside the workspace", async () => {
+    // /var/tmp is visible (read-only) inside the sandbox; the other temp dirs live under /tmp, which is hidden.
+    const visible = realpathSync(mkdtempSync("/var/tmp/galley-test-"));
+    const r = await run(`mount -o remount,rw,bind / 2>&1; echo x > ${visible}/escape.txt; echo "write=$?"`);
+    expect(r.output).not.toContain("write=0");
+    expect(existsSync(join(visible, "escape.txt"))).toBe(false);
+    rmSync(visible, { recursive: true, force: true });
+  });
+  test("a command cannot unmount the private /tmp to see the host's /tmp", async () => {
+    const marker = join(tmpdir(), `galley-host-marker-${process.pid}`);
+    writeFileSync(marker, "HOST-TMP-CONTENT");
+    const r = await run(`unshare -m sh -c 'umount -l /tmp; cat ${marker}' 2>&1; umount -l /tmp 2>&1; cat ${marker} 2>&1; true`);
+    expect(r.output).not.toContain("HOST-TMP-CONTENT");
+    rmSync(marker, { force: true });
+  });
+  test("a command cannot create device nodes", async () => {
+    const r = await run("mknod node c 1 3");
+    expect(r.exitCode).not.toBe(0);
+    expect(existsSync(join(ws, "node"))).toBe(false);
+  });
+  test("ordinary file handling still works for root (archives that carry other owners)", async () => {
+    const r = await run("echo hi > a && tar --owner=1234 --group=1234 -cf t.tar a && mkdir out && tar -xf t.tar -C out && cat out/a");
+    expect(r.exitCode).toBe(0);
+    expect(r.output).toContain("hi");
+  });
+});
+
+describe("sandbox privilege drop", () => {
+  test("root keeps only file-handling capabilities; other users need no extra flags", () => {
+    const root = privilegeArgs(0);
+    expect(root.slice(0, 2)).toEqual(["--cap-drop", "ALL"]);
+    expect(root).toContain("CAP_CHOWN");
+    for (const dangerous of ["CAP_SYS_ADMIN", "CAP_MKNOD", "CAP_DAC_READ_SEARCH", "CAP_SYS_PTRACE", "CAP_NET_ADMIN"]) expect(root).not.toContain(dangerous);
+    expect(privilegeArgs(1000)).toEqual([]);
   });
 });

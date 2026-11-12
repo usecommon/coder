@@ -28,12 +28,24 @@ export interface ExecResult {
 
 let detected: SandboxKind | undefined;
 
+// Run as root, bubblewrap leaves root's capabilities with the sandboxed command, which could then undo the
+// sandbox: remount the read-only filesystem read-write, unmount the private /tmp, or create a device node for
+// the host disk. So as root, keep only the capabilities ordinary file handling needs (tar restoring owners,
+// writing files owned by other users) and drop everything else, CAP_SYS_ADMIN and CAP_MKNOD included.
+// Other users need nothing: bubblewrap already runs their commands without capabilities.
+const ROOT_KEEP_CAPS = ["CAP_CHOWN", "CAP_DAC_OVERRIDE", "CAP_FOWNER", "CAP_FSETID", "CAP_KILL", "CAP_SETUID", "CAP_SETGID", "CAP_NET_BIND_SERVICE"];
+
+export function privilegeArgs(uid: number | undefined = process.getuid?.()): string[] {
+  return uid === 0 ? ["--cap-drop", "ALL", ...ROOT_KEEP_CAPS.flatMap((c) => ["--cap-add", c])] : [];
+}
+
 /** Find a working sandbox on this machine (checked once per process). */
 export function detectSandbox(): SandboxKind {
   if (detected) return detected;
   detected = "none";
   if (process.platform === "linux") {
-    const r = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", "true"], { timeout: 5000 });
+    // Probe with the same privilege drop real commands get: if that can't be applied, there is no sandbox.
+    const r = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", ...privilegeArgs(), "true"], { timeout: 5000 });
     if (r.status === 0) detected = "bwrap";
   } else if (process.platform === "darwin") {
     const r = spawnSync("sandbox-exec", ["-p", "(version 1)(allow default)", "true"], { timeout: 5000 });
@@ -69,6 +81,7 @@ export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" 
   args.push(o.readOnly ? "--ro-bind" : "--bind", ws, ws);
   if (existsSync(join(ws, ".git"))) args.push("--ro-bind", join(ws, ".git"), join(ws, ".git"));
   if (!o.network) args.push("--unshare-net");
+  args.push(...privilegeArgs());
   args.push("--unshare-pid", "--die-with-parent", "--new-session", "--chdir", o.cwd, "bash", "-c", command);
   return args;
 }
