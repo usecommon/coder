@@ -5,7 +5,7 @@ import { OpenAICompatProvider } from "./openai-compat.ts";
 import type { Provider } from "./types.ts";
 
 /** Built-in OpenAI-compatible presets. Add your own under `providers` in galley.json. */
-export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string; sendReasoning?: boolean }> = {
+export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string; sendReasoning?: boolean; reasoningEffort?: string }> = {
   openai: { baseURL: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY" },
   // DeepSeek's thinking mode expects earlier reasoning to be sent back while tools are in use. Measured over
   // three benchmark rounds it changed neither pass rate nor cost (bench/RESULTS-clean.md).
@@ -38,6 +38,7 @@ export function compatOptions(id: string, cfg: Config) {
     apiKey: keyEnv ? process.env[keyEnv] : undefined,
     headers: pc.headers,
     sendReasoning: pc.sendReasoning ?? preset?.sendReasoning,
+    reasoningEffort: pc.reasoningEffort ?? preset?.reasoningEffort,
     includeUsage: pc.includeUsage,
   };
 }

@@ -152,3 +152,19 @@ describe("defaults chosen from benchmark results", () => {
     expect(DEFAULT_CONFIG.effort).toBe("medium");
   });
 });
+
+describe("reasoning effort for OpenAI-compatible APIs", () => {
+  const done = [{ choices: [{ index: 0, delta: { content: "ok" } }] }, { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] }, "data: [DONE]\n\n"];
+  const req = { model: "m", system: "sys", messages: [{ role: "user" as const, content: "hi" }], tools: [] };
+  test("is sent only when configured", async () => {
+    const capture = { bodies: [] as any[] };
+    await new OpenAICompatProvider({ id: "deepseek", baseURL: "https://x", apiKey: "k", fetch: sseFetch(done, capture), reasoningEffort: "low" }).chat(req);
+    await new OpenAICompatProvider({ id: "deepseek", baseURL: "https://x", apiKey: "k", fetch: sseFetch(done, capture) }).chat(req);
+    expect(capture.bodies[0].reasoning_effort).toBe("low");
+    expect("reasoning_effort" in capture.bodies[1]).toBe(false);
+  });
+  test("comes from the user's provider settings", () => {
+    expect(compatOptions("deepseek", testConfig({ providers: { deepseek: { reasoningEffort: "low" } } })).reasoningEffort).toBe("low");
+    expect(compatOptions("deepseek", testConfig()).reasoningEffort).toBeUndefined();
+  });
+});

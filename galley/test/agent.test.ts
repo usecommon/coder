@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Agent } from "../src/agent/loop.ts";
 import { compactionCut } from "../src/agent/compact.ts";
+import { environmentNote, fileTree, systemPrompt } from "../src/agent/prompt.ts";
 import type { AgentEvent, Message } from "../src/core/types.ts";
 import { registerProvider } from "../src/provider/index.ts";
 import { MockProvider } from "../src/provider/mock.ts";
@@ -255,4 +256,49 @@ test("forked sessions copy history and link to the parent", () => {
   const f = s.fork(1);
   expect(f.messages).toEqual([{ role: "user", content: "one" }]);
   expect(Session.load(ws, f.id).meta.parentId).toBe(s.id);
+});
+
+describe("lean prompt (experimental)", () => {
+  test("the system prompt is the same in every project, and names none", () => {
+    const a = systemPrompt({ workspace: "/home/a/project-one", mode: "build", sandbox: "bwrap", lean: true });
+    const b = systemPrompt({ workspace: "/srv/another", mode: "build", sandbox: "bwrap", lean: true });
+    expect(a).toBe(b);
+    expect(a).not.toContain("project-one");
+    // The default prompt still names the project.
+    expect(systemPrompt({ workspace: "/home/a/project-one", mode: "build", sandbox: "bwrap" })).toContain("/home/a/project-one");
+  });
+  test("the file listing goes two levels deep, skips build folders and is capped", () => {
+    const ws = tempDir();
+    mkdirSync(join(ws, "src", "deep"), { recursive: true });
+    mkdirSync(join(ws, "node_modules", "x"), { recursive: true });
+    mkdirSync(join(ws, ".docs"));
+    writeFileSync(join(ws, "src", "a.ts"), "");
+    writeFileSync(join(ws, "src", "deep", "hidden.ts"), "");
+    writeFileSync(join(ws, ".docs", "instructions.md"), "");
+    writeFileSync(join(ws, "main.py"), "");
+    expect(fileTree(ws)).toBe(".docs/\n  instructions.md\nmain.py\nsrc/\n  a.ts\n  deep/");
+    for (let i = 0; i < 80; i++) writeFileSync(join(ws, `f${String(i).padStart(2, "0")}.txt`), "");
+    const capped = fileTree(ws, 10);
+    expect(capped.split("\n")).toHaveLength(11);
+    expect(capped).toContain("more not shown");
+  });
+  test("a session's first message says where the agent is; later messages don't repeat it", async () => {
+    const { ws, mock, agent } = setup([{ text: "ok" }, { text: "ok again" }], { lean: true });
+    writeFileSync(join(ws, "main.py"), "");
+    await agent.send("first request");
+    await agent.send("second request");
+    const firstUser = mock.requests[0]!.messages[0] as Extract<Message, { role: "user" }>;
+    expect(firstUser.content).toBe(`${environmentNote(ws)}\n\nfirst request`);
+    expect(firstUser.content).toContain("main.py");
+    expect(mock.requests[0]!.system).not.toContain(ws);
+    const users = mock.requests[1]!.messages.filter((m) => m.role === "user") as Extract<Message, { role: "user" }>[];
+    expect(users[1]!.content).toBe("second request");
+    expect(agent.session.title).toBe("first request");
+  });
+  test("without the option nothing changes", async () => {
+    const { ws, mock, agent } = setup([{ text: "ok" }]);
+    await agent.send("hello");
+    expect((mock.requests[0]!.messages[0] as Extract<Message, { role: "user" }>).content).toBe("hello");
+    expect(mock.requests[0]!.system).toContain(ws);
+  });
 });

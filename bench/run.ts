@@ -53,13 +53,15 @@ const PROXY_LOG = args["proxy-log"] ?? process.env.PROXY_LOG;
 
 /** Variants of an agent, to compare configurations side by side in one run. A variant is named
  *  "<agent>-<label>", e.g. --agents opencode,galley,galley-sr with
- *  BENCH_VARIANTS='{"galley-sr":{"providerOpts":{"sendReasoning":true}},"galley-medium":{"effort":"medium"}}'. */
+ *  BENCH_VARIANTS='{"galley-low":{"providerOpts":{"reasoningEffort":"low"}},"galley-lean":{"config":{"lean":true}}}'. */
 interface Variant {
   effort?: string;
   /** extra command-line flags */
   args?: string[];
   /** Galley only: extra options for the model provider */
   providerOpts?: Record<string, unknown>;
+  /** Galley only: extra top-level settings for its config file, e.g. {"lean": true} */
+  config?: Record<string, unknown>;
 }
 const VARIANTS: Record<string, Variant> = JSON.parse(args.variants ?? process.env.BENCH_VARIANTS ?? "{}");
 const baseOf = (agent: string) => agent.split("-")[0]!;
@@ -267,7 +269,7 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     // Anthropic's SDK appends /v1/messages itself; OpenAI-compatible clients append /chat/completions.
     // GALLEY_PROVIDER_OPTS (JSON) adds provider options for every Galley arm; a variant can add its own.
     const extra = { ...JSON.parse(process.env.GALLEY_PROVIDER_OPTS ?? "{}"), ...(v.providerOpts ?? {}) };
-    writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
+    writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, ...(v.config ?? {}), providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
     cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS, ...(v.args ?? [])];
   } else if (baseOf(agent) === "opencode") {

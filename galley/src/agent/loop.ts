@@ -13,7 +13,7 @@ import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import type { Tool, ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
 import { compactionCut, summarize } from "./compact.ts";
-import { REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
+import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
 
 export interface AgentOptions {
   cfg: Config;
@@ -86,7 +86,9 @@ export class Agent {
     const { provider: pid, model } = splitModel(this.model);
     const provider = getProvider(pid, cfg);
     this.undo.beginTurn();
-    this.session.addMessage({ role: "user", content: text });
+    // The lean prompt names no project, so a session's first message says where the agent is.
+    const first = cfg.lean && this.session.messages.length === 0;
+    this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${text}` : text });
     if (!this.session.title) this.session.setTitle(text.split("\n")[0]!.slice(0, 80));
 
     let turnUsage = emptyUsage();
@@ -103,7 +105,7 @@ export class Agent {
         break;
       }
       await this.maybeCompact(signal);
-      const system = systemPrompt({ workspace: this.workspace, mode: this.mode, sandbox: this.sandbox, subagent: this.o.subagent });
+      const system = systemPrompt({ workspace: this.workspace, mode: this.mode, sandbox: this.sandbox, subagent: this.o.subagent, lean: cfg.lean });
       let res;
       try {
         res = await this.chatWithRetry(provider, model, system, signal);

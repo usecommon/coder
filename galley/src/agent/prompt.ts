@@ -1,5 +1,6 @@
-// A deliberately short system prompt. It is byte-stable for a given workspace and mode so providers can cache it.
-import { existsSync, readFileSync } from "node:fs";
+// A deliberately short system prompt. It is byte-stable for a given workspace and mode so providers can cache it;
+// the lean variant is the same in every workspace.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Mode } from "../safety/permission.ts";
 import type { SandboxKind } from "../safety/sandbox.ts";
@@ -12,19 +13,34 @@ export function loadProjectInstructions(workspace: string): string | undefined {
   return undefined;
 }
 
-export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: SandboxKind; subagent?: boolean }): string {
-  const lines = [
-    `You are Galley, a coding agent working in the project at ${o.workspace} (${process.platform}).`,
-    "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
-    "- Change code with edit (exact text, include enough context to be unique) or write (new files). Keep changes focused.",
-    "- Verify with bash: run the project's tests, type checker or linter when they exist.",
+export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: SandboxKind; subagent?: boolean; lean?: boolean }): string {
+  const sandboxLine =
     o.sandbox === "none"
       ? "- bash runs without a sandbox, so each command needs the user's approval. Prefer read-only commands."
-      : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.",
-    "- Use task to run independent read-only investigations in parallel.",
-    "- If a tool returns an error, read it and adjust instead of repeating the same call.",
-    "- Be concise. When finished, say what changed and how you verified it.",
-  ];
+      : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.";
+  const lines = o.lean
+    ? [
+        // Nothing here depends on the project, so the prompt and the tool list are identical in every session
+        // and the provider can serve them from its cache. The working directory goes in the first message.
+        "You are Galley, a coding agent.",
+        "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
+        "- Change an existing file with edit (exact text, include enough context to be unique). Use write only for new files. Keep changes focused.",
+        "- Verify with bash: run the project's tests, type checker or linter when they exist. If you write a test script, save it under /tmp and re-run that file after each change instead of writing it out again.",
+        sandboxLine,
+        "- Use task to run independent read-only investigations in parallel.",
+        "- If a tool returns an error, read it and adjust instead of repeating the same call.",
+        "- Don't comment between tool calls. When finished, say in one or two sentences what changed and how you checked it.",
+      ]
+    : [
+        `You are Galley, a coding agent working in the project at ${o.workspace} (${process.platform}).`,
+        "- Explore with list, glob, grep and read before changing code. Read a file before editing it.",
+        "- Change code with edit (exact text, include enough context to be unique) or write (new files). Keep changes focused.",
+        "- Verify with bash: run the project's tests, type checker or linter when they exist.",
+        sandboxLine,
+        "- Use task to run independent read-only investigations in parallel.",
+        "- If a tool returns an error, read it and adjust instead of repeating the same call.",
+        "- Be concise. When finished, say what changed and how you verified it.",
+      ];
   if (o.mode === "plan")
     lines.push(
       o.subagent
@@ -35,6 +51,37 @@ export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: Sandbo
   if (project) lines.push("", "Project instructions (from AGENTS.md):", project);
   return lines.join("\n");
 }
+
+const TREE_SKIP = new Set([".git", "node_modules", "target", "__pycache__", ".venv", "dist", "build"]);
+
+/** A short listing of the project: two levels deep, capped, so a small project is visible without a tool call. */
+export function fileTree(workspace: string, maxEntries = 60): string {
+  const out: string[] = [];
+  let hidden = 0;
+  const walk = (dir: string, depth: number) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const e of entries) {
+      if (TREE_SKIP.has(e.name)) continue;
+      if (out.length >= maxEntries) {
+        hidden++;
+        continue;
+      }
+      out.push("  ".repeat(depth) + e.name + (e.isDirectory() ? "/" : ""));
+      if (e.isDirectory() && depth < 1) walk(join(dir, e.name), depth + 1);
+    }
+  };
+  walk(workspace, 0);
+  return out.join("\n") + (hidden ? `\n(${hidden} more not shown)` : "") || "(empty)";
+}
+
+/** What the model needs to know about where it is. Sent once, at the start of a session's first message. */
+export const environmentNote = (workspace: string) => `<environment>\nWorking directory: ${workspace} (${process.platform})\nFiles:\n${fileTree(workspace)}\n</environment>`;
 
 export const INIT_PROMPT =
   "Analyze this repository and write AGENTS.md at the root: a short guide for coding agents covering the project's purpose, " +

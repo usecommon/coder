@@ -12,6 +12,8 @@ export interface OpenAICompatOptions {
   includeUsage?: boolean;
   /** Replay `reasoning_content` from earlier assistant turns (some thinking-mode APIs require it during tool loops). */
   sendReasoning?: boolean;
+  /** Value for the request's `reasoning_effort`, when the API takes one. */
+  reasoningEffort?: string;
   fetch?: typeof fetch;
   maxRetries?: number;
 }
@@ -81,6 +83,7 @@ export class OpenAICompatProvider implements Provider {
     if (req.tools.length)
       body.tools = req.tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }));
     if (req.maxTokens) body.max_tokens = req.maxTokens;
+    if (this.opts.reasoningEffort) body.reasoning_effort = this.opts.reasoningEffort;
 
     const res = await this.post(body, req.signal);
     let text = "";
