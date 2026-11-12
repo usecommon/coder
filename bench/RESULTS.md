@@ -2,6 +2,15 @@
 
 *Run on 11 November 2026. Model: DeepSeek-V4.1-Flash (`deepseek-flash`) for both agents. Tasks: 102 Python, Go and Rust exercises. Protocol and caveats: [README.md](README.md).*
 
+> **Correction, 12 November 2026 (pass rates; found while reviewing the plan).** The benchmark's sandbox had holes that let an agent read hidden tests, and on DeepSeek OpenCode used them. Each agent could read the whole output folder of the run, where other tasks' workspaces sit with the hidden tests copied in after grading; the same exercise exists in several languages, so an agent on the Go or Rust task could read the Python task's tests. Agents also ran as root inside the sandbox and could undo its hiding of `/tmp`. An audit of every saved transcript ([`audit_leaks.py`](audit_leaks.py), results in [`data/leak-audit.json`](data/leak-audit.json)) found:
+> - **OpenCode, DeepSeek:** 22 task-runs across its four runs (1, 8, 6 and 7) read hidden tests or a graded solution for their own exercise. On the 13 tasks involved it passed 82% of the time in those runs (18 of 22), against 53% on the same tasks in its other runs (16 of 30); Galley passed 51% on them.
+> - **Galley:** none. Its own sandbox hides `/tmp` from the commands it runs, so it could not reach those folders.
+> - **Claude Sonnet runs:** none, for either agent.
+> - **Effect:** with the 22 task-runs removed, the pooled DeepSeek comparison is **Galley 68.8% vs OpenCode 65.5%, a difference of +3.3 points (95% interval −2.0 to +8.6, sign test p = 0.31)**, where the published figure was 68.8% vs 67.8% (+1.0). It is still a statistical tie. Removing runs after the fact is an approximation; both agents need re-running on a fixed harness.
+> - **API key:** in 9 OpenCode task-runs the agent printed its environment, which included the DeepSeek API key, into local scratch logs. Nothing reached this repository or its history, and the scratch copies are redacted. The key should be rotated.
+>
+> The holes are listed in [README.md](README.md#known-holes-found-on-12-november-2026). They are not fixed yet; no further run should be trusted until they are.
+
 > **Correction, 12 November 2026 (token and cost figures).** In these runs OpenCode auto-loaded 14 unrelated skills from this machine's `~/.claude/skills` folder and listed them in its system prompt, about 4,000 extra tokens on every request. That inflated its input-token count by roughly 13% and its cost by an estimated 6% (about $0.05 per run, because DeepSeek's cached input is very cheap). On a clean machine Galley's cost advantage on DeepSeek is therefore small. Pass rates are reported as measured. The harness now hides the host's agent configuration from both agents.
 
 ## Headline (clean run: no internet access for either agent)

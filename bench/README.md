@@ -32,6 +32,26 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 - **Galley was changed before the run.** While setting up the benchmark I added writable build caches and offline package-manager settings to Galley's sandbox, because `go test` couldn't write its cache. This is a general product fix, not tuning for these tasks, and Galley was not changed during the run.
 - Both agents ran with auto-approval. OpenCode ran with its default permissions (everything allowed) inside the outer sandbox; Galley ran with its default rules and its own sandbox.
 
+## Known holes found on 12 November 2026
+
+An audit of the saved transcripts showed the sandbox around the agents was weaker than this page claimed. **These are not fixed yet. Fix them before any further run.**
+
+| Hole | What it allowed | Fix |
+|---|---|---|
+| The run's whole output folder was mounted (writable) in every agent's sandbox, because the proxy socket lives in it | Reading other tasks' workspaces, which hold the hidden tests after grading. The same exercise exists in several languages, so later tasks could read earlier tasks' tests. Also reading `results.jsonl`. | Put the socket in a folder of its own and mount only that |
+| Agents ran as root with full capabilities | Undoing the sandbox: `unshare -m` then `umount /tmp` exposed the benchmark checkout, with hidden tests and reference solutions | Run agents without capabilities (`--cap-drop ALL`, or an unprivileged user namespace) |
+| The whole host filesystem was mounted read-only | Reading the operator's session log, this repository's notes and results, and anything else in the home directory | Build the sandbox from a short list of needed folders instead of from `/` |
+| The real API key was in the agent's environment | Agents printed it into their logs | Give agents a placeholder and let the proxy add the real key |
+| A re-run kept the previous attempt's `grade.log` in the run folder | Test names and expected values from the earlier attempt | Clear the run folder before each attempt |
+
+`audit_leaks.py` checks a finished run for all of this; run it after every run and report its count next to the pass rate:
+
+```bash
+python3 -I audit_leaks.py scan --polyglot $WORK/polyglot --out data/leak-audit.json myrun=$WORK/myrun
+```
+
+Galley's own sandbox had the root problem too (a command could remount the filesystem read-write when Galley ran as root). That is fixed in `galley/src/safety/sandbox.ts`, with tests.
+
 ## Reproduce
 
 ```bash

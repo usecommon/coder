@@ -2,7 +2,11 @@
 
 The goal was to improve Galley until it beats OpenCode on the Polyglot benchmark (same model: DeepSeek-V4.1-Flash, no internet), within at most 20 rounds.
 
-> **Correction, 12 November 2026.** OpenCode's token and cost figures in this log include about 4,000 tokens per request of unrelated skills that it auto-loaded from this machine's `~/.claude/skills` folder. On DeepSeek that inflates its cost by an estimated 6% (about $0.05 per run), so the "12% cheaper" figure for Galley is closer to 6%. Pass rates are as measured. See [`../research/beating-opencode.md`](../research/beating-opencode.md) for the follow-up research.
+> **Corrections, 12 November 2026 (found while reviewing the plan).**
+> 1. **OpenCode's DeepSeek pass rates below are inflated.** The benchmark sandbox let agents read hidden tests from other tasks' folders, and OpenCode did so in 22 task-runs across its four runs; Galley did not in any run. With those task-runs removed the comparison is Galley 68.8% vs OpenCode 65.5% (+3.3 points, 95% interval −2.0 to +8.6, p = 0.31): still a tie, but not the +1.0 shown below. Details in [RESULTS.md](RESULTS.md) and [`data/leak-audit.json`](data/leak-audit.json).
+> 2. **Round 7 did not test the verifier from round 5.** The lean changes from round 6 were never taken out of the code (only the default was switched off), so the round 7 scale test ran the **lean** verifier, whose dev mean was 31.5, not the round 5 version that scored 35.5. The round 5 verifier has only ever had two dev runs. The table's "Reverted" for round 6 and the sentence "the verifier's dev gain did not hold up at scale" are both wrong as written.
+>
+> **Correction, 12 November 2026 (costs).** OpenCode's token and cost figures in this log include about 4,000 tokens per request of unrelated skills that it auto-loaded from this machine's `~/.claude/skills` folder. On DeepSeek that inflates its cost by an estimated 6% (about $0.05 per run), so the "12% cheaper" figure for Galley is closer to 6%. Pass rates are as measured. See [`../research/beating-opencode.md`](../research/beating-opencode.md) for the follow-up research.
 
 ## Method
 
@@ -23,7 +27,7 @@ Raw per-task results and per-request token usage for every round are in [`data/r
 | 3 | Confirmation: 2 full runs of each agent (see below) | 33, 36 | 34.5 | $0.66* | – |
 | 4 | **Fix:** sandbox `/tmp` was wiped between commands, so scratch scripts vanished | 32, 33 | 32.5 | $0.28 | **Keep** (real bug, seen in transcripts) |
 | 5 | Independent verifier: a fresh read-only helper tests the change and sends failures back | 35, 36 | **35.5** | $0.85 | Opt-in (`--verify`): best mean, but 3× cost and not significant |
-| 6 | Lean verifier (12-step cap, one test script) | 32, 31 | 31.5 | $0.55 | Reverted |
+| 6 | Lean verifier (12-step cap, one test script) | 32, 31 | 31.5 | $0.55 | Not made the default. The lean code stayed in `--verify` (correction 2 above). |
 | – | *OpenCode 1.19.5, reference* | 31, 36 | 33.5 | $0.39 | – |
 
 \* Full-run cost, all 101 tasks.
@@ -45,14 +49,14 @@ Raw per-task results and per-request token usage for every round are in [`data/r
 
 ## Round 7: the verifier at scale
 
-The verifier had the best dev mean in round 5, so it was tested on all 101 tasks: Galley `--verify` twice, and OpenCode twice more, giving 4 OpenCode runs in total. During this run a stale proxy socket broke 42 of the Galley runs; they were discarded and re-run, and the harness now refuses to record a result when the agent couldn't reach the model.
+The verifier had the best dev mean in round 5, so a verifier was tested on all 101 tasks (in fact the lean one from round 6; see correction 2 above): Galley `--verify` twice, and OpenCode twice more, giving 4 OpenCode runs in total. During this run a stale proxy socket broke 42 of the Galley runs; they were discarded and re-run, and the harness now refuses to record a result when the agent couldn't reach the model.
 
 | Tasks | Galley `--verify` (2 runs) | OpenCode (4 runs) | Difference [95% CI] | Sign test |
 |---|---|---|---|---|
 | All 101 | 69, 64 → 65.8% | 65, 72, 69, 68 → 67.8% | −2.0 pts [−7.9, 3.7] | p = 0.49 |
 | Holdout 54 | 36, 33 → 63.9% | 34, 36, 33, 35 → 63.9% | 0.0 pts | p = 1.00 |
 
-**The verifier's dev gain did not hold up at scale**, and it roughly doubles cost ($1.32 vs $0.67 per full run). It stays an opt-in `--verify` flag and is not the default.
+**The lean verifier showed no gain at scale**, and it roughly doubles cost ($1.32 vs $0.67 per full run). It stays an opt-in `--verify` flag and is not the default.
 
 ## Final standing (Galley defaults vs OpenCode 1.19.5, DeepSeek-V4.1-Flash, no internet)
 

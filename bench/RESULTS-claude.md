@@ -4,6 +4,8 @@
 
 > **Correction, 12 November 2026 (cost figures).** In these runs OpenCode auto-loaded 14 unrelated skills from this machine's `~/.claude/skills` folder (document, spreadsheet and browser skills) and listed them in its system prompt: about 13,000 of its 21,800 system-prompt characters, roughly 4,400 extra tokens on every request. On a clean machine that listing would not be there. It cost OpenCode an estimated **$1.25 per run**, so its clean cost is about **$5.5 per run** and Galley's advantage is about **2.0×**, not the 2.4× measured below. Pass rates are reported as measured; whether the extra text affected them is unknown. The harness now hides the host's agent configuration from both agents, and a clean OpenCode re-run is needed to replace the estimate.
 
+> **Audit, 12 November 2026.** The DeepSeek runs were found to be affected by holes in the benchmark sandbox (see [RESULTS.md](RESULTS.md)). The same audit of every transcript in these Sonnet runs found nothing: neither agent read hidden tests, other tasks' folders or files outside its workspace. The pass rates below stand as measured.
+
 ## Headline
 
 | | Galley | OpenCode 1.19.5 |

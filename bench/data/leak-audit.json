@@ -1,0 +1,664 @@
+[
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "go",
+"task": "hexadecimal",
+"kinds": [
+"namespace_cmds",
+"operator_files"
+]
+},
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "go",
+"task": "octal",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "go",
+"task": "robot-simulator",
+"kinds": [
+"namespace_cmds",
+"operator_files"
+]
+},
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "go",
+"task": "sublist",
+"kinds": [
+"benchmark_checkout",
+"namespace_cmds",
+"operator_files"
+]
+},
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "python",
+"task": "bowling",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "baseline",
+"agent": "opencode",
+"lang": "python",
+"task": "pov",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "cg1",
+"agent": "galley",
+"lang": "go",
+"task": "robot-simulator",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "cg1",
+"agent": "galley",
+"lang": "rust",
+"task": "fizzy",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "cg2",
+"agent": "galley",
+"lang": "rust",
+"task": "ocr-numbers",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "go",
+"task": "forth",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "go",
+"task": "octal",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "go",
+"task": "scale-generator",
+"kinds": [
+"hidden_test_content",
+"operator_files",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "go",
+"task": "tree-building",
+"kinds": [
+"hidden_test_content",
+"namespace_cmds",
+"operator_files",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "python",
+"task": "scale-generator",
+"kinds": [
+"namespace_cmds",
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "python",
+"task": "two-bucket",
+"kinds": [
+"results_files"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "rust",
+"task": "dot-dsl",
+"kinds": [
+"benchmark_checkout",
+"hidden_test_content",
+"namespace_cmds",
+"operator_files",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "rust",
+"task": "forth",
+"kinds": [
+"hidden_test_content",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "rust",
+"task": "grade-school",
+"kinds": [
+"hidden_test_content",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "rust",
+"task": "scale-generator",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co2",
+"agent": "opencode",
+"lang": "rust",
+"task": "wordy",
+"kinds": [
+"hidden_test_content",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "connect",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "counter",
+"kinds": [
+"namespace_cmds",
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "hexadecimal",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "octal",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "tree-building",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "trinary",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "go",
+"task": "two-bucket",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "python",
+"task": "dot-dsl",
+"kinds": [
+"namespace_cmds",
+"operator_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "python",
+"task": "tree-building",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "rust",
+"task": "forth",
+"kinds": [
+"hidden_test_content",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "rust",
+"task": "grade-school",
+"kinds": [
+"hidden_test_content",
+"namespace_cmds",
+"operator_files",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co3",
+"agent": "opencode",
+"lang": "rust",
+"task": "scale-generator",
+"kinds": [
+"hidden_test_content",
+"operator_files",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "go",
+"task": "counter",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "go",
+"task": "forth",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "go",
+"task": "ledger",
+"kinds": [
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "go",
+"task": "scale-generator",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "go",
+"task": "two-bucket",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "python",
+"task": "forth",
+"kinds": [
+"results_files"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "python",
+"task": "grade-school",
+"kinds": [
+"namespace_cmds",
+"operator_files",
+"results_files"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "python",
+"task": "two-bucket",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "rust",
+"task": "forth",
+"kinds": [
+"hidden_test_content",
+"operator_files",
+"results_files",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "rust",
+"task": "react",
+"kinds": [
+"hidden_test_content",
+"namespace_cmds",
+"operator_files",
+"results_files",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "rust",
+"task": "scale-generator",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "co4",
+"agent": "opencode",
+"lang": "rust",
+"task": "two-bucket",
+"kinds": [
+"hidden_test_content",
+"sibling_solution",
+"sibling_tests"
+]
+},
+{
+"run": "fv1",
+"agent": "galley",
+"lang": "python",
+"task": "bowling",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "fv1",
+"agent": "galley",
+"lang": "python",
+"task": "rest-api",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "fv1",
+"agent": "galley",
+"lang": "rust",
+"task": "dot-dsl",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "fv1",
+"agent": "galley",
+"lang": "rust",
+"task": "fizzy",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "fv2",
+"agent": "galley",
+"lang": "python",
+"task": "go-counting",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "fv2",
+"agent": "galley",
+"lang": "python",
+"task": "scale-generator",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r1",
+"agent": "galley",
+"lang": "python",
+"task": "paasio",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r2a",
+"agent": "galley",
+"lang": "go",
+"task": "two-bucket",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r2a",
+"agent": "galley",
+"lang": "python",
+"task": "sgf-parsing",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r2a",
+"agent": "galley",
+"lang": "rust",
+"task": "doubly-linked-list",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r2b",
+"agent": "galley",
+"lang": "go",
+"task": "octal",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r2b",
+"agent": "galley",
+"lang": "python",
+"task": "paasio",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5a",
+"agent": "galley",
+"lang": "go",
+"task": "counter",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5a",
+"agent": "galley",
+"lang": "python",
+"task": "react",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5a",
+"agent": "galley",
+"lang": "rust",
+"task": "doubly-linked-list",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5b",
+"agent": "galley",
+"lang": "go",
+"task": "react",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5b",
+"agent": "galley",
+"lang": "go",
+"task": "scale-generator",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5b",
+"agent": "galley",
+"lang": "python",
+"task": "paasio",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r5b",
+"agent": "galley",
+"lang": "rust",
+"task": "xorcism",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r6a",
+"agent": "galley",
+"lang": "python",
+"task": "bowling",
+"kinds": [
+"operator_files"
+]
+},
+{
+"run": "r6a",
+"agent": "galley",
+"lang": "python",
+"task": "two-bucket",
+"kinds": [
+"operator_files"
+]
+}
+]
