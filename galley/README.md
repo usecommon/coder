@@ -144,6 +144,7 @@ bun run typecheck
 **Status and limitations (v0.1):**
 - The macOS Seatbelt profile is written but **has not been tested** (development ran on Linux).
 - When Galley runs as root (common in containers and CI), sandboxed commands keep only the capabilities ordinary file handling needs. Before this was added, a command run as root could remount the filesystem read-write and leave the sandbox.
+- When Galley itself runs inside a container or another sandbox that forbids mounting a new `/proc`, its sandbox falls back to sharing the surrounding one. Commands are confined in the same way, but they can see Galley's own process; `galley doctor` says when this is the case.
 - There is no Windows sandbox; there, commands fall back to asking for approval every time.
 - The Anthropic adapter is covered by tests against a mocked stream but has not been run against the live API yet.
 - Sandboxed commands can write only to the workspace and a private `/tmp`. Tools that write caches in your home directory (for example `~/.cache`) fail inside the sandbox. Configurable extra writable paths are on the roadmap.

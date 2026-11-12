@@ -9,7 +9,7 @@ import { loadConfig, type Config } from "./config.ts";
 import type { AgentEvent } from "./core/types.ts";
 import { McpClient } from "./mcp/client.ts";
 import type { Approver } from "./safety/permission.ts";
-import { detectSandbox } from "./safety/sandbox.ts";
+import { detectSandbox, sandboxProcMode } from "./safety/sandbox.ts";
 import { projectDir, Session } from "./session/store.ts";
 import { serve } from "./server/http.ts";
 import type { Tool } from "./tools/types.ts";
@@ -233,7 +233,8 @@ function doctor(cfg: Config, workspace: string) {
   const ok = (b: boolean) => (b ? c.green("ok") : c.yellow("missing"));
   console.log(`workspace   ${workspace}`);
   console.log(`model       ${cfg.model}`);
-  console.log(`sandbox     ${sb === "none" ? c.yellow("none — install bubblewrap (Linux) for sandboxed commands") : c.green(sb)}`);
+  const shared = sb === "bwrap" && sandboxProcMode() === "shared";
+  console.log(`sandbox     ${sb === "none" ? c.yellow("none — install bubblewrap (Linux) for sandboxed commands") : c.green(sb)}${shared ? c.yellow(" (inside another sandbox or container: commands can see Galley's own process)") : ""}`);
   const keys: [string, string][] = [
     ["anthropic", "ANTHROPIC_API_KEY"],
     ["openai", "OPENAI_API_KEY"],

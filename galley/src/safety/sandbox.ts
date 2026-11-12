@@ -39,14 +39,29 @@ export function privilegeArgs(uid: number | undefined = process.getuid?.()): str
   return uid === 0 ? ["--cap-drop", "ALL", ...ROOT_KEEP_CAPS.flatMap((c) => ["--cap-add", c])] : [];
 }
 
+/** How the sandbox gets its /proc.
+ *  "own": a fresh /proc with a private process list (the normal case).
+ *  "shared": the surrounding /proc. Used when Galley itself runs inside a container or another sandbox, where
+ *  mounting a new /proc is not allowed. Commands are confined as usual, but they can see Galley's own process. */
+export type ProcMode = "own" | "shared";
+let procMode: ProcMode = "own";
+export const sandboxProcMode = (): ProcMode => procMode;
+const procArgs = (m: ProcMode) => (m === "own" ? ["--proc", "/proc", "--unshare-pid"] : ["--bind", "/proc", "/proc"]);
+
 /** Find a working sandbox on this machine (checked once per process). */
 export function detectSandbox(): SandboxKind {
   if (detected) return detected;
   detected = "none";
   if (process.platform === "linux") {
-    // Probe with the same privilege drop real commands get: if that can't be applied, there is no sandbox.
-    const r = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--unshare-net", ...privilegeArgs(), "true"], { timeout: 5000 });
-    if (r.status === 0) detected = "bwrap";
+    // Probe with the same arguments real commands get: if they can't be applied, there is no sandbox.
+    const forced = process.env.GALLEY_SANDBOX_PROC as ProcMode | undefined;
+    for (const m of forced === "own" || forced === "shared" ? [forced] : (["own", "shared"] as const)) {
+      const r = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", ...procArgs(m), "--unshare-net", ...privilegeArgs(), "true"], { timeout: 5000 });
+      if (r.status !== 0) continue;
+      detected = "bwrap";
+      procMode = m;
+      break;
+    }
   } else if (process.platform === "darwin") {
     const r = spawnSync("sandbox-exec", ["-p", "(version 1)(allow default)", "true"], { timeout: 5000 });
     if (r.status === 0) detected = "seatbelt";
@@ -75,14 +90,14 @@ export function cacheEnv(cacheDir: string): Record<string, string> {
 
 export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" | "network" | "cacheDir" | "tmpDir">, command: string): string[] {
   const ws = realpathSync(o.workspace);
-  const args = ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"];
+  const args = ["--ro-bind", "/", "/", "--dev", "/dev", ...procArgs(procMode)];
   args.push(...(o.tmpDir ? ["--bind", o.tmpDir, "/tmp"] : ["--tmpfs", "/tmp"]));
   if (o.cacheDir) args.push("--bind", o.cacheDir, o.cacheDir);
   args.push(o.readOnly ? "--ro-bind" : "--bind", ws, ws);
   if (existsSync(join(ws, ".git"))) args.push("--ro-bind", join(ws, ".git"), join(ws, ".git"));
   if (!o.network) args.push("--unshare-net");
   args.push(...privilegeArgs());
-  args.push("--unshare-pid", "--die-with-parent", "--new-session", "--chdir", o.cwd, "bash", "-c", command);
+  args.push("--die-with-parent", "--new-session", "--chdir", o.cwd, "bash", "-c", command);
   return args;
 }
 
