@@ -1,10 +1,15 @@
-// Logging reverse proxy for the DeepSeek API. Agents call http://127.0.0.1:<port>/<tag>/chat/completions;
-// the proxy forwards to DeepSeek unchanged and records the usage DeepSeek reports, so both agents are
-// measured by the same, provider-reported numbers.
+// Logging reverse proxy for the model API. Agents call http://127.0.0.1:<port>/<tag>/chat/completions (or
+// /<tag>/v1/messages); the proxy forwards the request and records the usage the provider reports, so all
+// agents are measured by the same, provider-reported numbers.
+//
+// It also keeps the real API key out of the agents' sandboxes: agents send a placeholder, and the proxy
+// replaces it with UPSTREAM_KEY. Leave UPSTREAM_KEY unset when the machine's own network layer adds the key.
 import { appendFileSync } from "node:fs";
 
 const UPSTREAM = process.env.UPSTREAM ?? "https://api.deepseek.com";
-const port = Number(process.env.PORT ?? 8799);
+const UPSTREAM_KEY = process.env.UPSTREAM_KEY || undefined;
+// A TCP port is only needed for agents that share the host's network. Sandboxed agents use the socket.
+const port = process.env.PORT ? Number(process.env.PORT) : undefined;
 const log = process.env.LOG ?? "proxy.jsonl";
 
 function usageFrom(text: string): any {
@@ -49,6 +54,8 @@ async function handle(req: Request): Promise<Response> {
         extra: Object.keys(b).filter((k) => !["model", "messages", "tools", "stream", "stream_options"].includes(k)),
         reasoning_effort: b.reasoning_effort,
         thinking: b.thinking,
+        // how many earlier assistant messages carry their reasoning back to the model
+        reasoning_msgs: b.messages?.filter((m: any) => m.role === "assistant" && typeof m.reasoning_content === "string" && m.reasoning_content.length > 0).length,
       };
     } catch {}
     // Optional: keep full request bodies for protocol inspection (never includes headers or keys).
@@ -57,8 +64,14 @@ async function handle(req: Request): Promise<Response> {
     headers.delete("host");
     headers.delete("content-length");
     headers.set("accept-encoding", "identity");
+    if (UPSTREAM_KEY) {
+      // Put the real key where the client put its placeholder (Anthropic clients use x-api-key or a bearer token).
+      const hadApiKey = headers.has("x-api-key");
+      if (hadApiKey) headers.set("x-api-key", UPSTREAM_KEY);
+      if (headers.has("authorization") || !hadApiKey) headers.set("authorization", `Bearer ${UPSTREAM_KEY}`);
+    }
     const started = Date.now();
-    const record = (r: object) => appendFileSync(log, JSON.stringify({ tag, path: rest.join("/"), ms: Date.now() - started, req: reqInfo, ...r }) + "\n");
+    const record = (r: object) => appendFileSync(log, JSON.stringify({ tag, path: rest.join("/"), t: started, ms: Date.now() - started, req: reqInfo, ...r }) + "\n");
     let upstream: Response;
     try {
       upstream = await fetch(target, { method: req.method, headers, body: bodyText });
@@ -84,7 +97,8 @@ async function handle(req: Request): Promise<Response> {
 process.on("unhandledRejection", (err) => console.error("unhandled:", err));
 process.on("uncaughtException", (err) => console.error("uncaught:", err));
 const onError = (err: Error) => new Response(JSON.stringify({ error: { message: `proxy: ${err.message}` } }), { status: 502 });
-Bun.serve({ port, hostname: "127.0.0.1", idleTimeout: 0, fetch: handle, error: onError });
+if (port !== undefined) Bun.serve({ port, hostname: "127.0.0.1", idleTimeout: 0, fetch: handle, error: onError });
 // Sandboxed agents have no network at all; they reach this proxy through a Unix socket.
 if (process.env.SOCK) Bun.serve({ unix: process.env.SOCK, idleTimeout: 0, fetch: handle, error: onError });
-console.log(`proxy on 127.0.0.1:${port}${process.env.SOCK ? ` and ${process.env.SOCK}` : ""} -> ${UPSTREAM}, logging to ${log}`);
+if (port === undefined && !process.env.SOCK) throw new Error("set PORT or SOCK");
+console.log(`proxy on ${[port !== undefined ? `127.0.0.1:${port}` : "", process.env.SOCK ?? ""].filter(Boolean).join(" and ")} -> ${UPSTREAM}, key ${UPSTREAM_KEY ? "added here" : "left to the network layer"}, logging to ${log}`);

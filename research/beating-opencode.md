@@ -295,8 +295,8 @@ A PASS from self-written tests carried almost no information. The reason shows i
 | Step | What | Cost | Decision rule |
 |---|---|---|---|
 | 0a | **Done:** Galley sandbox fix; corrected results; leak audit tool | Free | – |
-| 0b | **Fix the benchmark sandbox:** mount only a socket folder, drop root capabilities, build the filesystem from a short list of folders, keep real keys in the proxy, clear the run folder before each attempt. Check it with the reference solutions and a fake model, and run the leak audit after every run. | Free | Reference solutions pass on all 101 tasks; audit finds nothing in a smoke run |
-| 0c | **You:** rotate the DeepSeek key, and choose the win rule (below) | – | – |
+| 0b | **Done:** benchmark sandbox fixed. It mounts only a socket folder, runs agents as an unprivileged user without capabilities, builds the filesystem from a short list of folders and keeps real keys outside. A self-test runs before every round and the leak audit after it. Checked with the reference solutions (same result on all 103 tasks as before) and a fake model. | Free | – |
+| 0c | **Done:** DeepSeek key rotated; the win rule is kept as it is (option A below) | – | – |
 | 1 | **Clean DeepSeek comparison, three arms at once:** OpenCode, Galley, Galley with reasoning hand-off. All 101 tasks, 3 runs each. | About $7 | Adopt the hand-off if cost per task does not rise and pass rate is not more than 2 points lower. Report the Galley–OpenCode difference with its interval. |
 | 2 | **Claude effort for cost:** Galley at `medium`, all 101 tasks, 2 runs, plus 1 run at `high` as a same-day control | About $7 | Make `medium` the Claude default if cost falls and the pass rate is within 3 points of `high` |
 | 3 | **Offline test of selection, before building anything:** write only the selector and run it on attempts already saved from earlier runs, where each attempt's hidden result is known | Under $1 | Build attempt-and-select only if the selector picks a passing attempt clearly more often than chance on tasks where attempts disagree. The verifier data predicts it will not. |

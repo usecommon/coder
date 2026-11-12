@@ -44,12 +44,16 @@ function mcnemar(b: number, c: number): number {
   return Math.min(1, (2 * p) / 2 ** n);
 }
 
+// When a task-run was interrupted and run again, count only the attempt that produced the result.
+const attemptStart = new Map<string, number>(results.filter((r) => r.startedAt).map((r) => [`${r.agent}__${r.lang}__${r.name}`, r.startedAt]));
+
 const usage = (agent: string, filter?: (tag: string) => boolean) => {
   const u = { requests: 0, prompt: 0, hit: 0, write: 0, out: 0, reasoning: 0, errors: 0, cost: 0 };
   for (const c of calls) {
     if (!c.tag?.startsWith(`${agent}__`)) continue;
     const [, lang, name] = c.tag.split("__");
     if (exclude.has(`${lang}/${name}`) || !inSplit(`${lang}/${name}`)) continue;
+    if (c.t !== undefined && c.t < (attemptStart.get(c.tag) ?? 0) - 2000) continue;
     if (filter && !filter(c.tag)) continue;
     u.requests++;
     if (c.status !== 200) u.errors++;

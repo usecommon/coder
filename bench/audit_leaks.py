@@ -74,7 +74,7 @@ def distinctive(poly, task, cache={}):
 
 def calls(run, agent):
     """Yield (tool name, input dict, output text) for every tool call in a task-run."""
-    if agent == "galley":
+    if agent.split("-")[0] == "galley":  # "galley" or a variant such as "galley-sr"
         for f in sorted(glob.glob(f"{run}/galley-data/projects/*/sessions/*.jsonl")):
             pending = {}
             for line in open(f, errors="replace"):
