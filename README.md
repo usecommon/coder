@@ -8,12 +8,14 @@ Research on AI coding agents and the "harnesses" around them, compiled October 2
 
 [`galley/`](galley/) is a working MVP of a coding agent comparable to OpenCode. It is TypeScript on Bun, provider-agnostic, and **safety-first**: commands run in an OS sandbox with the network off, file tools are confined to the workspace, plan mode is read-only at the OS level, and `/undo` reverts a turn. It is **cheap-model friendly** (short cacheable prompt, cost and cache tracking, compaction) and supports **parallel and background work** (sub-agents, `--detach`, `--worktree`). See [`galley/README.md`](galley/README.md) and the plan in [`galley/PLAN.md`](galley/PLAN.md).
 
-**Benchmark** (101 scored Aider Polyglot tasks in Python, Go and Rust; no internet; repeated runs). Latest results, on the benchmark sandbox fixed on 12 November 2026:
-- **DeepSeek-V4.1-Flash, three rounds:** Galley 70.3% vs OpenCode 64.0%. The 6.3-point lead is statistically significant (interval +2.0 to +10.9, p = 0.013). Galley costs 11% more per round and the same per solved task.
-- **Claude Sonnet 5.5:** Galley 87 to 88% (re-measured), OpenCode 90.1% (earlier run): a tie within noise, with Galley at well under half the cost.
-- **Not yet a win by our own rule,** which asks for a 5-point lead, p < 0.05 and lower cost, on tasks Galley was not developed on. On DeepSeek the cost condition fails; on Claude the lead does.
+**Benchmark** (Aider Polyglot exercises; no internet; both agents run side by side, several rounds; sandbox fixed on 12 November 2026):
+- **DeepSeek-V4.1-Flash, fresh tasks** (121 JavaScript, Java and C++ exercises Galley was not developed on; four rounds): Galley 49.8% vs OpenCode 42.1%. The 7.6-point lead is statistically significant (interval +3.7 to +11.8, p = 0.001). Galley cost 10% more per round (interval 4% less to 26% more) and 7% less per solved task.
+- **DeepSeek-V4.1-Flash, development tasks** (101 Python, Go and Rust exercises; three rounds): Galley 70.3% vs OpenCode 64.0%, a lead of 6.3 points (p = 0.013), at 11% more per round.
+- **Claude Sonnet 5.5** (development tasks): Galley 87 to 88% (re-measured), OpenCode 90.1% (earlier run): a tie within noise, with Galley at well under half the cost.
+- **Not a win by our own rule,** which asks for a 5-point lead, p < 0.05 and lower cost, on tasks Galley was not developed on. On DeepSeek the lead and its significance are now confirmed on fresh tasks; the cost condition is missed. On Claude the lead is missing.
+- **Two defects in Galley account for most of the cost gap:** helper agents launched to "recall" hidden tests (6% of its spend, in 2 of 484 task-runs) and test scripts refused under `/tmp` (2%). Both are fixed; the fixes are not measured yet.
 
-Earlier DeepSeek results (68.8% vs 67.8%) came from a sandbox that let agents read hidden tests, which OpenCode did in 22 task-runs. Details: [`bench/RESULTS-clean.md`](bench/RESULTS-clean.md) (latest), [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
+Earlier DeepSeek results (68.8% vs 67.8%) came from a sandbox that let agents read hidden tests, which OpenCode did in 22 task-runs. Details: [`bench/RESULTS-fresh.md`](bench/RESULTS-fresh.md) (latest), [`bench/RESULTS-clean.md`](bench/RESULTS-clean.md), [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
 
 ## Research contents
 

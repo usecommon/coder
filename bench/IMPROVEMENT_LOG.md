@@ -136,3 +136,33 @@ The lean prompt is now Galley's only prompt.
 - **Verdict by the win rule:** Galley beats OpenCode if its pass rate is higher by 5 points or more, the sign test over tasks gives p < 0.05, and its cost per round at list price is lower. Anything else is reported as it falls.
 
 **Fresh-task list, fixed on 12 November before any agent ran on them.** The reference solutions of all 122 JavaScript, Java and C++ exercises were graded in the benchmark sandbox. 121 pass and are included: JavaScript 48, Java 47, C++ 26. One is left out: `javascript/parallel-letter-frequency`, whose reference solution failed a test that depends on timing (it ran out of the test's 5-second limit on a busy machine).
+
+### Confirmation results (12 and 13 November, four rounds)
+
+Full write-up: [RESULTS-fresh.md](RESULTS-fresh.md).
+
+| | OpenCode 1.19.5 | Galley (frozen at `61300b4`) |
+|---|---|---|
+| Passes per round (of 121) | 51, 54, 46, 53 | 61, 61, 67, 52 |
+| Pass rate | 42.1% | **49.8%** |
+| Cost per round | $0.71, $0.72, $0.82, $0.75 (mean **$0.75**) | $0.81, $0.84, $0.71, $0.95 (mean $0.83) |
+| Cost per solved task | $0.0148 | $0.0138 |
+
+| Win rule | Measured | Met |
+|---|---|---|
+| Lead of 5 points or more | +7.6 (95% interval +3.7 to +11.8) | Yes |
+| Sign test p < 0.05 | 33 tasks better, 11 worse; p = 0.001 | Yes |
+| Lower cost per round | 10% higher (interval 4% lower to 26% higher) | **No** |
+
+**Verdict by the rule fixed in advance: not a win.** The lead is confirmed on tasks Galley was not developed on. The cost condition is missed, though the cost difference is within the noise of four rounds: Galley was the cheaper agent in round 3 and the dearer one in the other three.
+
+- Leak audit: no task-run reached hidden tests in any round.
+- Round 3 was interrupted by a pause after 154 of 242 task-runs and finished 4 hours 20 minutes later; finished task-runs were kept.
+- Spend: $6.38, all outside peak hours.
+
+What the logs say about the cost gap (observed, not tested):
+- All of it is output. Galley's requests cost less than half of OpenCode's ($0.14 against $0.30 per round), but the model writes 52% more for it.
+- The extra output comes after the first version of a solution: Galley writes about three times as much test code and changes its solution again in 41% of task-runs (OpenCode 29%). Its checks failed and led to a fix in 63 task-runs against 16, which is the likely source of the lead.
+- Two defects account for most of the gap. In 2 of 484 task-runs the model launched helper agents (3 and 13 of them) to "recall" the hidden tests; they cost 6.4% of everything Galley spent. In 18% of task-runs the model saved a test script under `/tmp` as the prompt told it to, the file tool refused, and it wrote the script again; that cost about 1.9%. Without both, the gap would have been about 1% instead of 10%.
+
+Both defects are fixed (commits `27a7407` and `1810aba`). Those changes are not measured, and the JavaScript, Java and C++ tasks are no longer fresh for the changed Galley.

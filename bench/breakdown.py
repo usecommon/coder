@@ -6,7 +6,7 @@ usage: breakdown.py <prices: deepseek|sonnet> <rounds-dir> <round>[,<round>...] 
          bench/data/fresh-2026-11-12 fresh-1,fresh-2,fresh-3,fresh-4 opencode galley
 Each round is a folder with results.jsonl and the proxy's log (proxy.jsonl, or proxy-usage.jsonl as stored in data/).
 Costs are at the list price outside peak hours. The paired comparison is between the first two arms."""
-import collections, json, math, os, statistics, sys
+import collections, json, math, os, random, statistics, sys
 
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
 PRICES = {"deepseek": dict(miss=0.15, hit=0.003, write=0.15, out=0.60), "sonnet": dict(miss=2.0, hit=0.10, write=2.5, out=10.0)}
@@ -90,6 +90,23 @@ if len(arms) >= 2:
         p = min(1.0, 2 * sum(math.comb(nn, i) for i in range(k, nn + 1)) / 2**nn) if nn else 1.0
         print(f"  {lang:12} tasks {len(d):>4}   difference {100 * sum(d) / len(d):+5.1f} points   better on {pos}, worse on {neg}   sign test p = {p:.3f}")
     print()
+
+if len(arms) >= 2:
+    # How sure is the cost comparison? Resample tasks (each with all its rounds) and recompute the ratio of total costs.
+    a, b = arms[0], arms[1]
+    tasks = sorted({k[2] for k in res if (k[0], a, k[2]) in res and (k[0], b, k[2]) in res})
+    per_task = {x: [sum(run_cost[(r, x, t)] for r in rounds) for t in tasks] for x in (a, b)}
+    ratio = sum(per_task[b]) / sum(per_task[a])
+    rnd = random.Random(1)
+    boots = []
+    for _ in range(20000):
+        idx = [rnd.randrange(len(tasks)) for _ in tasks]
+        boots.append(sum(per_task[b][i] for i in idx) / sum(per_task[a][i] for i in idx))
+    boots.sort()
+    print(f"cost of {b} relative to {a}, all rounds: {100 * (ratio - 1):+.1f}%   95% interval {100 * (boots[500] - 1):+.1f}% to {100 * (boots[19500] - 1):+.1f}% (bootstrap over tasks)")
+    print("  per round: " + ", ".join(f"{r} {100 * (sum(run_cost[(r, b, t)] for t in tasks) / sum(run_cost[(r, a, t)] for t in tasks) - 1):+.0f}%" for r in rounds))
+    solved = {x: sum(res[(r, x, t)]["pass"] for r in rounds for t in tasks if (r, x, t) in res) for x in (a, b)}
+    print(f"  cost per solved task: {a} ${sum(per_task[a]) / max(1, solved[a]):.4f}, {b} ${sum(per_task[b]) / max(1, solved[b]):.4f}\n")
 
 print("how the cost is spread over task-runs, and the size of single model responses")
 for a in arms:

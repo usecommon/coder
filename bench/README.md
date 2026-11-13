@@ -1,12 +1,12 @@
 # Galley vs OpenCode on the Aider Polyglot benchmark
 
-A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results, on the sandbox fixed on 12 November 2026, are in [RESULTS-clean.md](RESULTS-clean.md). Earlier runs: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
+A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results are in [RESULTS-fresh.md](RESULTS-fresh.md): the confirmation on tasks Galley was not developed on (JavaScript, Java, C++). Before that: [RESULTS-clean.md](RESULTS-clean.md) (the development tasks, on the sandbox fixed on 12 November 2026). Earlier runs on the old sandbox: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
 
 ## Benchmark
 
 [Aider Polyglot](https://github.com/Aider-AI/polyglot-benchmark): 225 of Exercism's hardest exercises in six languages. This run uses the **Python (34), Go (39) and Rust (30)** sets: 103 tasks, 102 scored.
 - `rust/macros` is excluded because its compile-failure tests can't run offline.
-- JavaScript (49), Java (47) and C++ (26) were left out of the first comparisons because they need test dependencies inside the sandbox. `setup.sh` now fetches those once (jest and babel; JUnit and AssertJ as a read-only Gradle cache), and `--langs javascript,java,cpp` runs them. They serve as the fresh tasks for confirming results: neither agent was run on them while Galley was being developed.
+- JavaScript (49), Java (47) and C++ (26) were left out of the first comparisons because they need test dependencies inside the sandbox. `setup.sh` now fetches those once (jest and babel; JUnit and AssertJ as a read-only Gradle cache), and `--langs javascript,java,cpp` runs them. They served as the fresh tasks for the confirmation of 12 and 13 November ([RESULTS-fresh.md](RESULTS-fresh.md)): 121 tasks, after leaving out `javascript/parallel-letter-frequency`, whose reference solution failed a timing test. They are no longer fresh: Galley has since been changed in the light of those runs.
 
 ## Protocol
 
@@ -76,7 +76,13 @@ BENCH_VARIANTS='{"galley-sr":{"providerOpts":{"sendReasoning":true}}}' bench/rou
 
 To look around inside the sandbox an agent gets: `bun run.ts --agents opencode --out /tmp/bench-work/rounds/x --box-exec 'ls -la / ~'`.
 
-Raw per-task results and per-request usage are in [`data/`](data/).
+Raw per-task results and per-request usage are in [`data/`](data/). Three scripts read them:
+
+| Script | What it prints |
+|---|---|
+| `analyze_rounds.py` | Passes and cost per round and arm, then each pairwise comparison pooled over rounds: difference, bootstrap interval, sign test |
+| `breakdown.py` | The same by language and by part of the bill (input, output, reasoning), an interval for the cost difference, and how cost is spread over task-runs |
+| `trace_stats.py` | Where the output tokens go: tool calls per task-run, tokens before and after the first version of a solution, what happens after the first clean check, and waste. `extract` makes compact per-step data from saved transcripts; `report` needs only that data |
 
 ## Running the Claude Sonnet 5.5 comparison (new session)
 

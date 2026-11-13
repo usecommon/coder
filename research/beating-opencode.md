@@ -12,6 +12,7 @@
 4. **On the current Claude benchmark a clear win is not possible.** OpenCode already scores 90% and the best achievable is about 94%. Proving a win needs harder tasks, a weaker model, or many more runs.
 5. **Recommended order (revised after review):** fix the benchmark's sandbox first, then re-measure both agents on DeepSeek side by side with the reasoning hand-off as a third arm, then check `medium` effort on Claude. All three are done; the results and the next steps are at the end of section 4.
 6. **The DeepSeek baseline was contaminated, in OpenCode's favour.** OpenCode read hidden tests through holes in the benchmark sandbox in 22 task-runs; Galley in none. With those removed the comparison is 68.8% vs 65.5% (+3.3 points, 95% interval −2.0 to +8.6). **Re-measured on the fixed benchmark it is 70.3% vs 64.0%: a significant 6.3-point lead for Galley, at 11% higher cost.**
+7. **Confirmed on fresh tasks, 13 November: Galley 49.8% vs OpenCode 42.1%** on 121 JavaScript, Java and C++ exercises it was not developed on (+7.6 points, p = 0.001), at 10% higher cost per round. By the win rule that is not a win: the lead holds, the cost condition is missed. Two defects found in the logs account for most of the cost gap and are fixed but not yet measured. Details and next steps are at the end of section 4.
 
 ## 1. What we know now
 
@@ -297,10 +298,11 @@ A PASS from self-written tests carried almost no information. The reason shows i
 | 0a | **Done:** Galley sandbox fix; corrected results; leak audit tool | Free | – |
 | 0b | **Done:** benchmark sandbox fixed. It mounts only a socket folder, runs agents as an unprivileged user without capabilities, builds the filesystem from a short list of folders and keeps real keys outside. A self-test runs before every round and the leak audit after it. Checked with the reference solutions (same result on all 103 tasks as before) and a fake model. | Free | – |
 | 0c | **Done:** DeepSeek key rotated; the win rule is kept as it is (option A below) | – | – |
-| 1 | **Done:** clean DeepSeek comparison, three arms side by side, 101 tasks, 3 rounds | $8.00, including a discarded round | Galley 70.3%, with hand-off 70.3%, OpenCode 64.0%. Hand-off adopted (no effect either way). |
+| 1 | **Done:** clean DeepSeek comparison, three arms side by side, 101 tasks, 3 rounds | $8.00 at the off-peak list price, including a discarded round (about $13.60 as billed, because most of it ran in peak hours) | Galley 70.3%, with hand-off 70.3%, OpenCode 64.0%. Hand-off adopted (no effect either way). |
 | 2 | **Done:** Claude effort, `medium` (2 rounds) against `high` (1 round), 101 tasks | $7.58 | 87.1% against 88.1%, 15% cheaper. `medium` is now the default. |
 | 3 | **Offline test of selection, before building anything:** write only the selector and run it on attempts already saved from earlier runs, where each attempt's hidden result is known | Under $1 | Build attempt-and-select only if the selector picks a passing attempt clearly more often than chance on tasks where attempts disagree. The verifier data predicts it will not. |
-| 4 | **Confirmation on fresh tasks** (JavaScript, Java, C++), with Galley's configuration frozen first, both agents, 4 runs each | About $7 on DeepSeek | Whichever rule was chosen in step 0c |
+| 3a | **Done:** cost round on DeepSeek (four Galley settings side by side, 2 rounds) | $4.16 | A shorter prompt that is the same in every project: 13% cheaper, adopted. Low reasoning effort: 44% cheaper but about 3 points lower, not adopted. |
+| 4 | **Done:** confirmation on fresh tasks (JavaScript, Java, C++), Galley frozen first, both agents, 4 rounds | $6.38 | **Not a win by the rule.** Lead +7.6 points (p = 0.001): met. Cost 10% higher: missed. |
 | 5 | Optional: a benchmark of long tasks, if Docker can be made to run here | Unknown | Decide after steps 1 to 4 |
 
 The saved attempts that step 3 needs are in this session's temporary storage. If that is lost, regenerating them costs about $1.50.
@@ -330,18 +332,47 @@ Full write-up: [`bench/RESULTS-clean.md`](../bench/RESULTS-clean.md).
 | Lead of 5 points or more | Yes: +6.3 | No: 2 to 3 points behind |
 | p < 0.05 | Yes: 0.013 | No |
 | Cheaper | **No: 11% more per round** | Yes: under half |
-| On fresh tasks | Not run yet | Not run yet |
+| On fresh tasks | Run on 12 and 13 November: see the next section | Not run |
+
+### Results of the cost round and the confirmation (12 and 13 November)
+
+Full write-ups: [`bench/IMPROVEMENT_LOG.md`](../bench/IMPROVEMENT_LOG.md) (round 9) and [`bench/RESULTS-fresh.md`](../bench/RESULTS-fresh.md).
+
+| DeepSeek-V4.1-Flash, 121 fresh tasks, 4 rounds | OpenCode | Galley |
+|---|---|---|
+| Pass rate | 42.1% | 49.8% |
+| Cost per round | $0.75 | $0.83 |
+| Cost per solved task | $0.0148 | $0.0138 |
+| Task-runs that reached hidden tests | 0 | 0 |
+
+- **The lead carried over to fresh tasks:** +7.6 points (interval +3.7 to +11.8; 33 tasks better, 11 worse; p = 0.001). On the development tasks it was +6.3.
+- **The cost condition is missed, within noise.** Galley cost 10% more per round, with an interval from 4% less to 26% more. It was the cheaper agent in one round of four.
+- **Most of the gap traces to two defects,** found in the logs. The model launched helper agents to "recall" the hidden tests (6.4% of Galley's spend, in 2 of 484 task-runs), and the file tool refused test scripts under `/tmp`, where the prompt told the model to put them (about 1.9%, in 18% of task-runs). Without both, the gap would have been about 1%. Both are fixed; neither fix is measured.
+- **The rest of the extra spending is partly the reason for the lead.** Galley writes about three times as much test code, and its own checks caught a failure and led to a fix four times as often as OpenCode's (63 task-runs against 16).
+
+| Win rule | DeepSeek, fresh tasks | DeepSeek, development tasks | Claude Sonnet 5.5 |
+|---|---|---|---|
+| Lead of 5 points or more | Yes: +7.6 | Yes: +6.3 | No: 2 to 3 points behind |
+| p < 0.05 | Yes: 0.001 | Yes: 0.013 | No |
+| Cheaper | **No: 10% more per round** | No: 11% more | Yes: under half |
 
 ### What to do next
 
-1. **Bring Galley's DeepSeek cost below OpenCode's without losing the lead.** It needs a cut of a little over 10%. Where the extra output goes, per task: test scripts (about 3,100 characters against OpenCode's 1,400), file writes (4,100 against 2,700) and narration between steps (1,300 against 200). Narration is the safe place to start; the test scripts are probably part of why Galley passes more. Each change needs two or three side-by-side rounds to check, about $2 to $4.
-2. **Then confirm on fresh tasks** (step 4, about $7): JavaScript, Java and C++, both agents, four rounds, with Galley frozen first. From the simulation in finding 5, a true lead near 6 points meets the lead and significance conditions somewhat more often than not; a true lead of 8 meets them nine times in ten.
-3. **Step 3 (the offline selector test) can wait.** Its purpose was to find a lead; there is one now.
-4. **Claude remains the weak side.** Galley is cheaper there but 2 to 3 points behind, and those tasks leave little room. A benchmark of longer tasks is still the place to look.
+The open condition is cost on DeepSeek. Three ways forward, in the order I would take them:
+
+1. **Measure the two fixes** (about $3.50). Run the frozen Galley and today's Galley side by side on the 121 JavaScript, Java and C++ tasks, two rounds. These tasks are development tasks now, which is fine for a screen. Adopt if cost falls by 8% or more and the pass rate is not more than 2 points lower. For about $1.70 more, a third arm can test one further trim: telling the model to finish once its own checks pass. About 15% of Galley's output comes after a clean check that no failing check follows.
+2. **Then confirm on new fresh tasks** (about $7 to $9). The same exercises exist in languages this project has not touched; Ruby, PHP and TypeScript are installed on the benchmark machine. Take the exercises that share names with the Polyglot set, fix the list by grading the reference solutions before any agent runs, freeze Galley, and run four rounds against OpenCode.
+3. **Or stop here.** The supportable statement today is: on DeepSeek-V4.1-Flash Galley solves more tasks than OpenCode (7 to 8 points, confirmed on fresh tasks) at about the same cost per round and a slightly lower cost per solved task.
+
+**Odds of a win by the rule after steps 1 and 2: about even.** The lead has now held on two task sets, and with a true lead near 7 points a new set of this size meets the lead and significance conditions about four times in five. Cost is the coin toss: with the defects fixed the estimate is parity, the interval on any four-round cost comparison is about ±15%, and "cheaper" needs the estimate to land below zero. A larger task set narrows that interval; nothing else does.
+
+Low reasoning effort is the one known lever big enough to make Galley clearly cheaper (44%), and it costs about 3 points, which would put the lead at risk. I would not use it for this rule.
+
+**Claude remains the weak side.** Galley is cheaper there but 2 to 3 points behind, and the development tasks leave little room. A benchmark of longer tasks is still the place to look.
 
 ### What "beating OpenCode" realistically looks like now
 
-- **DeepSeek:** a real lead of about 6 points on the development tasks. A win under the rule needs a cost cut of a little over 10% and the same lead on fresh tasks. Both look reachable; neither is done.
+- **DeepSeek:** a lead of 6 to 8 points, measured twice, once on fresh tasks. Cost is equal within noise. A win under the rule needs the cost estimate to come out lower on another fresh set.
 - **Claude:** parity is not shown. The cost advantage is solid and `medium` effort widened it.
 - **Long, multi-step benchmarks:** still untested.
 
