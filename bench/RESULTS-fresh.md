@@ -65,7 +65,7 @@ Galley's requests cost less than half of OpenCode's. The model then writes 52% m
 
 Galley reaches a first version in fewer steps (3.8 against 5.9) and then keeps working on it. It changes the solution again in 41% of task-runs; OpenCode does in 29%.
 
-**3. Part of that extra work is where the lead comes from.** Galley writes about three times as much test code as OpenCode (4,000 characters per task-run inside shell commands, against 1,300). Its own checks failed and led to a fix in 63 task-runs; OpenCode's did in 16. Those task-runs pass more often than average (54% and 56%). This part of the spending should be kept.
+**3. Part of that extra work is probably where the lead comes from.** Galley writes about three times as much test code as OpenCode (4,000 characters per task-run inside shell commands, against 1,300). Its own checks failed and led to a fix in 63 task-runs; OpenCode's did in 16. Those task-runs pass more often than average (54% and 56%). This part of the spending should be kept.
 
 **4. Two defects in Galley account for most of the gap.**
 
@@ -89,12 +89,13 @@ Both are now fixed in Galley (commits `27a7407` and `1810aba`). The fixes came a
 3. **One memory cap, one grading out of time.** A Galley test program hit the 4 GB cap in round 1 (the task still passed). One OpenCode solution did not finish grading within 5 minutes in round 1 and counts as a failure.
 4. **The agents still look for the tests.** OpenCode tried the network in 40% of its task-runs, and in 9 it sent requests to the model proxy to fetch the exercise's test file from GitHub. Galley tried the network in 11% and never the proxy. Every such request was refused. Three task-runs in round 4 listed other processes or mounts (one Galley, two OpenCode); the audit flags these for information, and none of them reached anything.
 5. **Twelve model responses were cut by connection resets** (10 of Galley's 5,600 requests, 2 of OpenCode's 5,400). Galley repeated the request each time, OpenCode's two came after its final message, and every affected task-run finished normally. The cut responses are not in the cost figures.
+6. **A smoke test came first.** Before round 1, three of the tasks (one per language) were run once with both agents to check the harness. Nothing in Galley was changed in the light of it.
 
 ## Spend
 
 | | DeepSeek, all outside peak hours |
 |---|---|
-| Smoke test (10 tasks) | $0.04 |
+| Smoke test (3 tasks, both agents) | $0.04 |
 | Four rounds | $6.34 |
 | **Total** | **$6.38** |
 
