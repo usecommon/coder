@@ -6,6 +6,6 @@ Galley (frozen at commit de69760) against OpenCode 1.19.5 on DeepSeek-V4.1-Flash
 
 | Folder | State |
 |---|---|
-| `t2-1-partial` | 202 clean task-runs of 362: the 61 PHP tasks and 40 of the 58 TypeScript tasks, both agents. Twenty-one task-runs that the outage touched (a refused request, or still running when it began, or their task's other arm) were removed and will run again. No Ruby task has run yet. Leak audit of what ran: nothing flagged. |
+| `t2-1-partial` | 202 clean task-runs of 362: the 61 PHP tasks and 40 of the 58 TypeScript tasks, both agents. Twenty-one task-runs that the outage touched (a refused request, or still running when it began, or their task's other arm) were removed and will run again. No Ruby task has run yet. Leak audit of what ran: no task-run reached hidden tests; one OpenCode task-run is flagged for information (it listed other processes or mounts). |
 
 Each folder holds `results.jsonl`, `proxy-usage.jsonl` and `leak-audit.json`, as described in [`../fresh-2026-11-12/README.md`](../fresh-2026-11-12/README.md).
