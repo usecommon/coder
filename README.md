@@ -1,4 +1,4 @@
-# WIP
+# WIP Research
 # Coding Harness Research
 
 Research on AI coding agents and the "harnesses" around them, compiled October 2026.
