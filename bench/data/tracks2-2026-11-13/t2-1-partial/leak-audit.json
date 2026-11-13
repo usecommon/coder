@@ -1,0 +1,11 @@
+[
+{
+"run": "t2-1",
+"agent": "opencode",
+"lang": "php",
+"task": "allergies",
+"kinds": [
+"namespace_cmds"
+]
+}
+]
