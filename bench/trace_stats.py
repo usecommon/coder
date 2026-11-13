@@ -16,8 +16,8 @@ The classification is by pattern and is approximate."""
 import collections, glob, json, os, re, sys
 
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "javascript/parallel-letter-frequency").split(",") if x}
-RUNS_CODE = re.compile(r"(?<![\w/.-])(node|jest|npm|npx|gradle|\./gradlew|java|javac|jshell|g\+\+|gcc|c\+\+|clang\+\+|cmake|make|python3?|pytest|go|cargo|\./[\w.-]+)\b")
-INLINE = re.compile(r"<<|(node|python3?) -e\b|jshell")
+RUNS_CODE = re.compile(r"(?<![\w/.-])(node|jest|npm|npx|gradle|\./gradlew|java|javac|jshell|g\+\+|gcc|c\+\+|clang\+\+|cmake|make|python3?|pytest|go|cargo|ruby|rake|php|phpunit|tsc|tsx|yarn|bun|\./[\w.-]+)\b")
+INLINE = re.compile(r"<<|(node|python3?|ruby) -e\b|php -r\b|jshell")
 FAILED = re.compile(r"\[exit code (?!0\])|FAIL|Error:|error:|Exception|AssertionError|not ok|mismatch|differs", re.I)
 WRITERS = {"write", "edit", "multiedit", "patch", "apply_patch"}
 
@@ -218,8 +218,9 @@ def report(base, rounds, arms):
         wasted = sum(n for o in runs[a] for s in o["steps"] if s["refused"] for k, n in s["calls"] if k.startswith(("write", "edit")))
         subs = [x for o in runs[a] for x in o["subagents"]]
         total = sum(s["tok"] for o in runs[a] for s in o["steps"]) + sum(x["tok"] for x in subs)
-        print(f"   {a:12} refused in {len(refused)} task-runs ({100 * len(refused) / max(1, len(runs[a])):.0f}%), about {wasted} characters written for nothing; "
-              f"{len(subs)} sub-agents in {sum(1 for o in runs[a] if o['subagents'])} task-runs used {sum(x['tok'] for x in subs)} output tokens ({100 * sum(x['tok'] for x in subs) / max(1, total):.1f}% of the arm's output)")
+        most = max((sum(x["tok"] for x in o["subagents"]) for o in runs[a]), default=0)
+        print(f"   {a:12} refused in {len(refused)} task-runs ({100 * len(refused) / max(1, len(runs[a])):.1f}%), about {wasted} characters written for nothing; "
+              f"{len(subs)} sub-agents in {sum(1 for o in runs[a] if o['subagents'])} task-runs used {sum(x['tok'] for x in subs)} output tokens ({100 * sum(x['tok'] for x in subs) / max(1, total):.1f}% of the arm's output), at most {most} in one task-run")
 
 
 if __name__ == "__main__":

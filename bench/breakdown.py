@@ -115,8 +115,10 @@ for a in arms:
     if not costs or not xs:
         continue
     big = [x for x in xs if x > 8000]
+    typical = costs[len(costs) // 20:]          # without the arm's dearest 5% of task-runs
     print(f"  {a:15} task-runs {len(costs)}: median ${costs[len(costs) // 2]:.4f}, mean ${sum(costs) / len(costs):.4f}, dearest ${costs[0]:.4f}; "
-          f"dearest 10% of task-runs hold {100 * sum(costs[:len(costs) // 10]) / sum(costs):.0f}% of the cost")
+          f"dearest 10% of task-runs hold {100 * sum(costs[:len(costs) // 10]) / sum(costs):.0f}% of the cost; "
+          f"typical cost (mean without the dearest 5%) ${sum(typical) / len(typical):.5f}")
     print(f"  {'':15} responses {len(xs)}: median {xs[len(xs) // 2]} output tokens, 99th percentile {xs[int(len(xs) * .99)]}, largest {xs[-1]}; "
           f"{len(big)} over 8,000 tokens hold {100 * sum(big) / sum(xs):.0f}% of all output")
 print()

@@ -55,6 +55,10 @@ const JS_MODULES = join(DEPS, "js", "node_modules");
 const GRADLE_RO_CACHE = join(DEPS, "gradle-ro");
 /** A Gradle home that has already compiled the exercises' build script; copied for each task so Gradle starts warm. */
 const GRADLE_HOME = join(DEPS, "gradle-home");
+/** For the exercises taken from other Exercism tracks (setup_tracks.sh): the TypeScript exercises' node_modules
+ *  (jest, babel preset), and a folder holding PHPUnit with a `phpunit` command in bin/. */
+const TS_MODULES = join(DEPS, "ts", "node_modules");
+const PHP_TOOLS = join(DEPS, "php");
 /** The proxy's log. When set, a result is recorded only if the agent got at least one answer from the model. */
 const PROXY_LOG = args["proxy-log"] ?? process.env.PROXY_LOG;
 
@@ -69,9 +73,12 @@ interface Variant {
   providerOpts?: Record<string, unknown>;
   /** Galley only: extra top-level settings for its config file, e.g. {"lean": true} */
   config?: Record<string, unknown>;
+  /** Galley only: the cli.ts of another checkout, to run two versions of Galley side by side. */
+  galley?: string;
 }
 const VARIANTS: Record<string, Variant> = JSON.parse(args.variants ?? process.env.BENCH_VARIANTS ?? "{}");
 const baseOf = (agent: string) => agent.split("-")[0]!;
+const galleyOf = (agent: string) => VARIANTS[agent]?.galley ?? GALLEY;
 
 interface Task {
   lang: string;
@@ -129,6 +136,9 @@ function prepare(t: Task, ws: string, run: string) {
   for (const d of [".meta", ".approaches", ".articles"]) rmSync(join(ws, d), { recursive: true, force: true });
   for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
   if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
+  // The other tracks keep a few test-like files their config does not list (a test template, a benchmark test).
+  if (OTHER_TRACKS.has(t.lang)) for (const f of walkFiles(ws)) if (/(_test\.rb|Test\.php(\.twig)?|\.test\.ts|\.tst\.ts)$/.test(f)) rmSync(join(ws, f), { force: true });
+  if (t.lang === "typescript") symlinkSync(TS_MODULES, join(ws, "node_modules"));
   // JavaScript: the exercises expect node_modules (jest, babel) next to the code.
   if (t.lang === "javascript") symlinkSync(JS_MODULES, join(ws, "node_modules"));
   if (t.lang === "java") {
@@ -137,6 +147,14 @@ function prepare(t: Task, ws: string, run: string) {
     chmodSync(join(ws, "gradlew"), 0o755);
     gradleHome(join(run, "cache", "gradle"));
   }
+}
+
+/** Languages whose exercises come from Exercism's own track repositories instead of the Polyglot checkout. */
+const OTHER_TRACKS = new Set(["ruby", "php", "typescript"]);
+
+/** Every file under `dir`, as paths relative to it. */
+function walkFiles(dir: string, rel = ""): string[] {
+  return readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walkFiles(dir, join(rel, e.name)) : [join(rel, e.name)]));
 }
 
 /** A Gradle home of its own for each task-run: warm when setup has made the template, with a modest heap. */
@@ -154,6 +172,8 @@ function unskip(t: Task, ws: string) {
     const src = readFileSync(p, "utf8");
     if (t.lang === "javascript") writeFileSync(p, src.replace(/\bxtest\(/g, "test(").replace(/\bxit\(/g, "it(").replace(/\btest\.skip\(/g, "test("));
     if (t.lang === "java") writeFileSync(p, src.replace(/^[ \t]*@Disabled\([^)]*\)[ \t]*\r?\n/gm, ""));
+    if (t.lang === "typescript") writeFileSync(p, src.replace(/\bxit\(/g, "it(").replace(/\bxdescribe\(/g, "describe(").replace(/\b(it|test|describe)\.skip\(/g, "$1("));
+    if (t.lang === "ruby") writeFileSync(p, src.replace(/^[ \t]*skip[ \t]*\r?\n/gm, ""));
   }
 }
 
@@ -181,6 +201,14 @@ const VISIBLE: string[] = (() => {
   }
   // Toolchains and tools kept under the home directory: cargo and rustup, bun, uv-installed tools such as pytest.
   for (const d of [".cargo", ".rustup", ".bun", ".local/bin", ".local/lib", ".local/share/uv", "go/pkg/mod"]) dirs.add(join(HOME, d));
+  // A language's command may be a link into a toolchain under /opt that is not itself on the PATH
+  // (/usr/local/bin/ruby -> /opt/ruby-3.3.6/bin/ruby). Show the folder its real file lives in, for the
+  // languages of this run only: other software installed under /opt stays out of sight.
+  for (const cmd of [...(LANGS.includes("ruby") ? ["ruby"] : []), ...(LANGS.includes("php") ? ["php"] : [])]) {
+    const found = (process.env.PATH ?? "").split(":").map((p) => join(p, cmd)).find((f) => existsSync(f));
+    const real = found ? realpathSync(found) : "";
+    if (real.startsWith("/opt/")) dirs.add(real.split("/").slice(0, 3).join("/"));
+  }
   return [...dirs].filter((d) => existsSync(d)).sort();
 })();
 /** Parts of /etc that could hold credentials. */
@@ -214,7 +242,7 @@ function boxArgs(o: Box): string[] {
   for (const d of ETC_HIDE_DIRS) a.push("--tmpfs", d);
   a.push("--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/var/tmp", "--dir", "/run", "--dir", HOME);
   if (boxUser.home) a.push("--dir", boxUser.home);
-  for (const r of [...(o.readable ?? []), ...[JS_MODULES, GRADLE_RO_CACHE].filter((d) => existsSync(d))]) a.push("--ro-bind", r, r);
+  for (const r of [...(o.readable ?? []), ...[JS_MODULES, GRADLE_RO_CACHE, TS_MODULES, PHP_TOOLS].filter((d) => existsSync(d))]) a.push("--ro-bind", r, r);
   for (const w of o.writable) a.push("--bind", w, w);
   if (!o.network) a.push("--unshare-net");
   // Everything not mounted above lives on an empty in-memory root; make that read-only too.
@@ -299,7 +327,8 @@ netEnv.NO_PROXY = netEnv.no_proxy = ["127.0.0.1", "localhost", netEnv.NO_PROXY ?
 const caFiles = [...new Set(Object.entries(netEnv).filter(([k, v]) => !/proxy/i.test(k) && v.startsWith("/") && existsSync(v)).map(([, v]) => v))];
 
 const baseEnv = (run: string): Record<string, string> => ({
-  PATH: process.env.PATH!,
+  // PHPUnit is not installed on the machine; setup_tracks.sh puts a `phpunit` command in a folder of its own.
+  PATH: (LANGS.includes("php") && existsSync(join(PHP_TOOLS, "bin")) ? join(PHP_TOOLS, "bin") + ":" : "") + process.env.PATH!,
   HOME,
   USER: boxUser.name,
   LOGNAME: boxUser.name,
@@ -322,7 +351,7 @@ const baseEnv = (run: string): Record<string, string> => ({
 
 /** What an agent's process needs beyond the toolchains: its own program, and the relay to the model proxy. */
 const agentFiles = (agent: string) => [
-  ...(baseOf(agent) === "galley" ? [dirname(dirname(GALLEY))] : baseOf(agent) === "opencode" ? [dirname(dirname(OPENCODE))] : []),
+  ...(baseOf(agent) === "galley" ? [dirname(dirname(galleyOf(agent)))] : baseOf(agent) === "opencode" ? [dirname(dirname(OPENCODE))] : []),
   process.execPath,
   join(import.meta.dir, "forward.ts"),
 ];
@@ -356,7 +385,7 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     const extra = { ...JSON.parse(process.env.GALLEY_PROVIDER_OPTS ?? "{}"), ...(v.providerOpts ?? {}) };
     writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, ...(v.config ?? {}), providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
-    cmd = [process.execPath, GALLEY, "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS, ...(v.args ?? [])];
+    cmd = [process.execPath, galleyOf(agent), "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS, ...(v.args ?? [])];
   } else if (baseOf(agent) === "opencode") {
     stateDirs = state(["cache", "config", "xdg-data", "xdg-state", "xdg-cache"]);
     mkdirSync(join(run, "config", "opencode"), { recursive: true });
@@ -386,6 +415,10 @@ async function grade(t: Task, ws: string, run: string) {
     javascript: ["bash", "-c", "node node_modules/jest/bin/jest.js ./*"],
     java: ["gradle", "--offline", "--no-daemon", "test"],
     cpp: ["bash", "-c", 'mkdir -p build && cd build && cmake -DEXERCISM_RUN_ALL_TESTS=1 -G "Unix Makefiles" .. && make'],
+    // The other tracks: each track's own test command, without the parts that need the network.
+    ruby: ["bash", "-c", 'for f in "$@"; do ruby "$f" || exit 1; done', "bash", ...t.files.test],
+    php: ["bash", "-c", 'for f in "$@"; do phpunit --no-configuration --do-not-cache-result "$f" || exit 1; done', "bash", ...t.files.test],
+    typescript: ["bash", "-c", "node node_modules/jest/bin/jest.js --no-cache"],
   };
   const cmd = cmds[t.lang] ?? [];
   mkdirSync(join(run, "cache"), { recursive: true });
@@ -438,6 +471,9 @@ const TOOL_CHECKS = [
   ...(LANGS.includes("javascript") ? ["node --version", `test -f ${JS_MODULES}/jest/bin/jest.js`] : []),
   ...(LANGS.includes("java") ? ["javac -version", "gradle --offline --version", `test -d ${GRADLE_RO_CACHE}/modules-2`] : []),
   ...(LANGS.includes("cpp") ? ["g++ --version", "cmake --version", "make --version"] : []),
+  ...(LANGS.includes("typescript") ? ["node --version", `test -f ${TS_MODULES}/jest/bin/jest.js`] : []),
+  ...(LANGS.includes("php") ? ["php --version", "phpunit --version"] : []),
+  ...(LANGS.includes("ruby") ? ["ruby --version", "ruby -e 'require %q(minitest)'"] : []),
 ];
 
 async function selftest(): Promise<boolean> {
@@ -508,7 +544,7 @@ echo "probe finished"
     if (baseOf(agent) === "galley") {
       // Galley's own sandbox must still work inside this one.
       const dlog = join(root, "doctor.log");
-      await runInAgentBox([process.execPath, GALLEY, "doctor", "--cwd", ws], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv(), XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") }, timeoutMs: 60_000, stdout: dlog });
+      await runInAgentBox([process.execPath, galleyOf(agent), "doctor", "--cwd", ws], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv(), XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") }, timeoutMs: 60_000, stdout: dlog });
       const d = readFileSync(dlog, "utf8");
       const nested = /sandbox\s+bwrap/.test(d);
       console.log(`selftest ${agent}: Galley's own sandbox inside the benchmark sandbox: ${nested ? "ok" : "NOT AVAILABLE"}`);
@@ -608,7 +644,16 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     }
     for (const ex of t.files.example) {
       if (target.has(ex)) continue;
-      const alike = [...free].find((f) => ext(f) === ext(ex));
+      // Among several candidates, prefer the one the tests are named after (WordSearchTest.php -> WordSearch.php),
+      // then one whose name the reference declares.
+      const norm = (x: string) => x.toLowerCase().replace(/[_.-]/g, "");
+      const text = norm(readFileSync(join(t.dir, ex), "utf8"));
+      const score = (f: string) => {
+        const name = norm(basename(f, ext(f)));
+        const tested = t.files.test.some((tf) => norm(basename(tf, ext(tf))).replace(/(test|spec)$/, "") === name);
+        return 2 * Number(tested) + Number(new RegExp(`(class|interface|trait|module|struct|function|def|fn|func)\\s+${name}\\b`).test(text));
+      };
+      const alike = [...free].filter((f) => ext(f) === ext(ex)).sort((x, y) => score(y) - score(x))[0];
       if (alike) free.delete(alike);
       target.set(ex, alike ?? join(dirname(t.files.solution[0]!), basename(ex)));
     }

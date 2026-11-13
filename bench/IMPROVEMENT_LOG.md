@@ -166,3 +166,36 @@ What the logs say about the cost gap (observed, not tested):
 - Two defects account for most of the gap. In 2 of 484 task-runs the model launched helper agents (3 and 13 of them) to "recall" the hidden tests; they cost 6.4% of everything Galley spent. In 18% of task-runs the model saved a test script under `/tmp` as the prompt told it to, the file tool refused, and it wrote the script again; that cost about 1.9%. Without both, the gap would have been about 1% instead of 10%.
 
 Both defects are fixed (commits `27a7407` and `1810aba`). Those changes are not measured, and the JavaScript, Java and C++ tasks are no longer fresh for the changed Galley.
+
+## Round 10: do the two fixes do harm? (design, written before running)
+
+Since the version frozen for the confirmation (`61300b4`) Galley has changed in two ways, both prompted by that campaign's logs:
+- The file tools reach the sandbox's `/tmp`, where the prompt tells the model to keep test scripts (`27a7407`).
+- The description of the helper-agent tool says what helpers are for, and helpers run at low reasoning effort (`1810aba`).
+
+**Design.** Two arms side by side on the 121 JavaScript, Java and C++ tasks, which are development tasks now: `galley-old` (the frozen copy the confirmation used) and `galley-new` (today's Galley). Two rounds, six task-runs at a time, outside peak hours, about $3.50.
+
+**What two rounds can show.** Not the saving. The helper-agent defect appeared in 2 of 484 task-runs, so two rounds will often contain none, and the cost of a whole round swings by 15% between identical rounds. This round is a check for harm and a check that the two mechanisms behave as intended.
+
+**Rule, fixed in advance.** `galley-new` goes forward to the confirmation below if all four hold:
+1. Its writes are refused for being outside the workspace in at most 2% of its task-runs (the old version: 18%).
+2. In none of its task-runs do helper agents use more than 20,000 output tokens (the old version: 134,000 and 187,000).
+3. Its pass rate, pooled over both rounds, is not more than 4.0 points below `galley-old`'s. Two rounds cannot tell a smaller gap from noise: the standard error of this difference is about 3 points.
+4. Its typical cost is not more than 5% above `galley-old`'s. Typical cost is the mean cost per task-run after leaving out each arm's dearest 5% of task-runs, so that one runaway task-run does not decide it.
+
+If any of them fails, nothing goes forward and I report.
+
+## Second confirmation, on a new set of fresh tasks (design, written before running)
+
+The JavaScript, Java and C++ tasks are used up: Galley has been changed in the light of their logs. This confirmation needs tasks neither agent has been run on.
+
+- **Tasks.** Exercises from three Exercism tracks this project has not touched: PHP, TypeScript and Ruby, at the commits pinned in `setup_tracks.sh`. An exercise is included if it shares its name with an exercise of the Polyglot benchmark (in any of its six languages), is active in its track, and its reference solution passes in the benchmark sandbox. Of 183 candidates 181 pass: PHP 61, TypeScript 58, Ruby 62. Left out: `typescript/crypto-square` (its reference solution fails one of the track's own tests) and `typescript/pythagorean-triplet` (its reference solution does not finish within the 5-minute grading limit once every test is enabled). The list is in [`data/tracks2-tasks.txt`](data/tracks2-tasks.txt) and was fixed on 13 November, before any agent ran on these tasks.
+- **Protocol.** As before: Aider's prompt, hidden tests, one attempt, the same sandbox with no network. Grading uses each track's own test command without the parts that need the network: `ruby` on the test file (minitest), PHPUnit 11.5 on the test file, and `jest` for TypeScript (the track's implementation tests; its separate type check is not run). Tests the tracks mark as skipped are enabled, as before. Any file that looks like a test (a test template, a benchmark test) is hidden along with the listed tests.
+- **Ruby is the hard case for both agents.** Its starting files name no classes or methods, so the agent has to infer what the hidden tests will call. The C++ exercises of the Polyglot set are the same.
+- **Arms.** OpenCode 1.19.5 and the Galley that comes out of round 10, frozen first. Side by side, six task-runs at a time, outside peak hours.
+- **Rounds.** Four. If the first round costs more than $2.30 for both agents together, three, to keep the campaign near $9. That choice depends on cost alone.
+- **Before round 1,** a smoke test: one task per language, both agents, to check the harness.
+- **Verdict by the win rule, unchanged:** Galley beats OpenCode if its pass rate is higher by 5 points or more, the sign test over tasks gives p < 0.05, and its cost per round at list price is lower. Anything else is reported as it falls.
+
+What I expect: the lead conditions are more likely than not to be met again. The cost condition is close to a coin toss, because with the two defects fixed the estimate from the logs is parity.
+
