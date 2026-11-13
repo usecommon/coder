@@ -139,7 +139,7 @@ src/
 ## Development
 
 ```bash
-bun test          # 66 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
+bun test          # 70 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
 bun run typecheck
 ```
 
@@ -148,7 +148,7 @@ bun run typecheck
 - When Galley runs as root (common in containers and CI), sandboxed commands keep only the capabilities ordinary file handling needs. Before this was added, a command run as root could remount the filesystem read-write and leave the sandbox.
 - When Galley itself runs inside a container or another sandbox that forbids mounting a new `/proc`, its sandbox falls back to sharing the surrounding one. Commands are confined in the same way, but they can see Galley's own process; `galley doctor` says when this is the case.
 - There is no Windows sandbox; there, commands fall back to asking for approval every time.
-- The Anthropic adapter is covered by tests against a mocked stream but has not been run against the live API yet.
-- Sandboxed commands can write only to the workspace and a private `/tmp`. Tools that write caches in your home directory (for example `~/.cache`) fail inside the sandbox. Configurable extra writable paths are on the roadmap.
+- The Anthropic adapter is covered by tests against a mocked stream and has run against the live API only in the benchmark (Claude Sonnet 5.5, see `bench/RESULTS-clean.md`).
+- Sandboxed commands can write only to the workspace and a private `/tmp`. The file tools (`read`, `write`, `edit`, `list`, `glob`, `grep`) reach that same `/tmp`, so a script the model saves there is the file its commands run; without a sandbox they stay inside the workspace. Tools that write caches in your home directory (for example `~/.cache`) fail inside the sandbox. Configurable extra writable paths are on the roadmap.
 - DeepSeek prices are approximate; set your own under `pricing`.
 - The terminal UI is a line-based prompt; a full-screen TUI, LSP, skills, web tools and the IDE and desktop apps are on the [roadmap](PLAN.md#4-roadmap).

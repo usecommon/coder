@@ -1,8 +1,9 @@
-// File tools: read, list, glob, grep, write, edit. All paths are confined to the workspace.
+// File tools: read, list, glob, grep, write, edit. Paths are confined to the workspace, plus the sandbox's /tmp.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { confine, displayPath, PathError } from "../safety/paths.ts";
+import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { dirname, isAbsolute, join, normalize, relative } from "node:path";
+import { confine, displayPath, OutsideError, PathError } from "../safety/paths.ts";
+import { scratchDir } from "./bash.ts";
 import { ToolError, type Tool, type ToolContext } from "./types.ts";
 
 const IGNORED_DIRS = new Set([".git", "node_modules", "dist", "build", ".next", "target", "__pycache__", ".venv", ".galley"]);
@@ -12,14 +13,55 @@ async function permit(ctx: ToolContext, tool: string, subject: string): Promise<
   if (!r.ok) throw new ToolError(`${tool} ${subject}: ${r.why}`);
 }
 
-function resolvePath(ctx: ToolContext, p: unknown, write = false): string {
+/** Where a path under /tmp really lives, or undefined when the file tools may not go there.
+ *  Sandboxed commands see a scratch folder at /tmp. The file tools reach the same folder under the same name, so a
+ *  script saved with write is the file bash runs, and edit can change it. Without a sandbox, /tmp is the machine's
+ *  own folder and stays off limits like everything else outside the workspace. */
+function scratchRoot(ctx: ToolContext): string | undefined {
+  if (ctx.sandbox === "none" || ctx.cfg.sandbox === "off") return undefined;
+  if (ctx.sandbox === "seatbelt") return realpathSync("/tmp"); // Seatbelt leaves /tmp where it is and lets commands write there
+  const dir = scratchDir(ctx.workspace); // bubblewrap mounts this folder at /tmp
+  mkdirSync(dir, { recursive: true });
+  return realpathSync(dir);
+}
+
+/** The part of an absolute path after /tmp ("" for /tmp itself), or undefined if it is not under /tmp. */
+function underTmp(p: string): string | undefined {
+  const n = isAbsolute(p) ? normalize(p) : "";
+  return n === "/tmp" ? "" : n.startsWith("/tmp/") ? n.slice(5) : undefined;
+}
+
+interface Target {
+  /** The real file. */
+  abs: string;
+  /** The path as the model knows it: relative to the workspace, or /tmp/... for a scratch file. */
+  shown: string;
+  scratch: boolean;
+}
+
+function resolveTarget(ctx: ToolContext, p: unknown, write = false): Target {
+  const given = String(p ?? ".");
   try {
-    return confine(ctx.workspace, String(p ?? "."), { write });
+    const abs = confine(ctx.workspace, given, { write });
+    return { abs, shown: displayPath(ctx.workspace, abs), scratch: false };
   } catch (err) {
-    if (err instanceof PathError) throw new ToolError(err.message);
-    throw err;
+    if (!(err instanceof PathError)) throw err;
+    // Not in the workspace. (The workspace is tried first: it may itself live under /tmp.)
+    const rest = err instanceof OutsideError ? underTmp(given) : undefined;
+    const root = rest === undefined ? undefined : scratchRoot(ctx);
+    if (!root) throw new ToolError(err.message);
+    try {
+      const abs = confine(root, rest || ".");
+      return { abs, shown: join("/tmp", relative(root, abs)), scratch: true };
+    } catch {
+      throw new ToolError(`${given} leads outside /tmp`); // a link planted in the scratch folder
+    }
   }
 }
+
+/** How to show a file found under `base` (a workspace or scratch folder) to the model. */
+const shownUnder = (ctx: ToolContext, base: Target, abs: string) =>
+  base.scratch ? join(base.shown, relative(base.abs, abs)) : relative(ctx.workspace, abs);
 
 function isBinary(buf: Buffer): boolean {
   const n = Math.min(buf.length, 8000);
@@ -35,7 +77,7 @@ export const readTool: Tool = {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string", description: "File path, relative to the workspace" },
+        path: { type: "string", description: "File path, relative to the workspace (or under /tmp)" },
         offset: { type: "integer", description: "First line to read (1-based)" },
         limit: { type: "integer", description: "Max lines (default 2000)" },
       },
@@ -44,8 +86,8 @@ export const readTool: Tool = {
     },
   },
   async run(input, ctx) {
-    const abs = resolvePath(ctx, input.path);
-    await permit(ctx, "read", displayPath(ctx.workspace, abs));
+    const { abs, shown } = resolveTarget(ctx, input.path);
+    await permit(ctx, "read", shown);
     if (!existsSync(abs)) throw new ToolError(`${input.path} does not exist`);
     if (statSync(abs).isDirectory()) throw new ToolError(`${input.path} is a directory; use list`);
     const buf = readFileSync(abs);
@@ -68,8 +110,8 @@ export const listTool: Tool = {
     parameters: { type: "object", properties: { path: { type: "string", description: "Directory (default: workspace root)" } }, additionalProperties: false },
   },
   async run(input, ctx) {
-    const abs = resolvePath(ctx, input.path ?? ".");
-    await permit(ctx, "list", displayPath(ctx.workspace, abs));
+    const { abs, shown } = resolveTarget(ctx, input.path ?? ".");
+    await permit(ctx, "list", shown);
     if (!existsSync(abs) || !statSync(abs).isDirectory()) throw new ToolError(`${input.path ?? "."} is not a directory`);
     const entries = readdirSync(abs, { withFileTypes: true })
       .map((e) => (e.isDirectory() ? `${e.name}/` : e.name))
@@ -91,14 +133,15 @@ export const globTool: Tool = {
     },
   },
   async run(input, ctx) {
-    const base = resolvePath(ctx, input.path ?? ".");
+    const target = resolveTarget(ctx, input.path ?? ".");
+    const base = target.abs;
     await permit(ctx, "glob", String(input.pattern));
     const glob = new Bun.Glob(String(input.pattern));
     const hits: { p: string; m: number }[] = [];
     for await (const f of glob.scan({ cwd: base, onlyFiles: true, dot: false })) {
       if (f.split("/").some((s) => IGNORED_DIRS.has(s))) continue;
       const abs = join(base, f);
-      hits.push({ p: relative(ctx.workspace, abs), m: statSync(abs).mtimeMs });
+      hits.push({ p: shownUnder(ctx, target, abs), m: statSync(abs).mtimeMs });
       if (hits.length >= 5000) break;
     }
     hits.sort((a, b) => b.m - a.m);
@@ -124,7 +167,8 @@ export const grepTool: Tool = {
     },
   },
   async run(input, ctx) {
-    const base = resolvePath(ctx, input.path ?? ".");
+    const target = resolveTarget(ctx, input.path ?? ".");
+    const base = target.abs;
     await permit(ctx, "grep", String(input.pattern));
     const args = ["--line-number", "--no-heading", "--color", "never", "--max-columns", "300", "-e", String(input.pattern)];
     if (input.include) args.push("-g", String(input.include));
@@ -135,7 +179,8 @@ export const grepTool: Tool = {
     else if (r.status === 1) return "No matches.";
     else if (r.status !== 0) throw new ToolError(r.stderr.trim() || "grep failed");
     else out = r.stdout;
-    const lines = out.split("\n").filter(Boolean).map((l) => (l.startsWith(ctx.workspace) ? relative(ctx.workspace, l.slice(0, l.indexOf(":"))) + l.slice(l.indexOf(":")) : l));
+    const own = target.scratch ? base : ctx.workspace; // matches come back with absolute paths
+    const lines = out.split("\n").filter(Boolean).map((l) => (l.startsWith(own) ? shownUnder(ctx, target, l.slice(0, l.indexOf(":"))) + l.slice(l.indexOf(":")) : l));
     if (!lines.length) return "No matches.";
     return lines.slice(0, 200).join("\n") + (lines.length > 200 ? `\n(${lines.length - 200} more matches; narrow the search)` : "");
   },
@@ -169,19 +214,19 @@ export const writeTool: Tool = {
     description: "Create or overwrite a file with the given content. Prefer edit for changing existing files.",
     parameters: {
       type: "object",
-      properties: { path: { type: "string" }, content: { type: "string" } },
+      properties: { path: { type: "string", description: "File path, relative to the workspace (or under /tmp)" }, content: { type: "string" } },
       required: ["path", "content"],
       additionalProperties: false,
     },
   },
   async run(input, ctx) {
-    const abs = resolvePath(ctx, input.path, true);
-    await permit(ctx, "write", displayPath(ctx.workspace, abs));
-    ctx.undo.record(abs);
+    const { abs, shown, scratch } = resolveTarget(ctx, input.path, true);
+    await permit(ctx, "write", shown);
+    if (!scratch) ctx.undo.record(abs); // undo is for the project's files
     mkdirSync(dirname(abs), { recursive: true });
     const content = String(input.content);
     writeFileSync(abs, content);
-    return `Wrote ${content.split("\n").length} lines to ${displayPath(ctx.workspace, abs)}`;
+    return `Wrote ${content.split("\n").length} lines to ${shown}`;
   },
 };
 
@@ -220,7 +265,7 @@ export const editTool: Tool = {
     parameters: {
       type: "object",
       properties: {
-        path: { type: "string" },
+        path: { type: "string", description: "File path, relative to the workspace (or under /tmp)" },
         old_string: { type: "string" },
         new_string: { type: "string" },
         replace_all: { type: "boolean" },
@@ -230,8 +275,8 @@ export const editTool: Tool = {
     },
   },
   async run(input, ctx) {
-    const abs = resolvePath(ctx, input.path, true);
-    await permit(ctx, "edit", displayPath(ctx.workspace, abs));
+    const { abs, shown, scratch } = resolveTarget(ctx, input.path, true);
+    await permit(ctx, "edit", shown);
     if (!existsSync(abs)) throw new ToolError(`${input.path} does not exist; use write to create it`);
     const text = readFileSync(abs, "utf8");
     const oldS = String(input.old_string);
@@ -248,8 +293,8 @@ export const editTool: Tool = {
       if (hit.count > 1) throw new ToolError(`old_string matches ${hit.count} places; include more surrounding lines or set replace_all`);
       next = text.slice(0, hit.index) + newS + text.slice(hit.index + hit.length);
     }
-    ctx.undo.record(abs);
+    if (!scratch) ctx.undo.record(abs);
     writeFileSync(abs, next);
-    return `Edited ${displayPath(ctx.workspace, abs)}`;
+    return `Edited ${shown}`;
   },
 };

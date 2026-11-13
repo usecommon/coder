@@ -4,12 +4,16 @@ import { exec } from "../safety/sandbox.ts";
 import { projectDir } from "../session/store.ts";
 import { ToolError, truncate, type Tool } from "./types.ts";
 
+/** The folder a project's sandboxed commands see as /tmp. It is private to the project and kept between commands. */
+export const scratchDir = (workspace: string) => join(projectDir(workspace), "tmp");
+
 export const bashTool: Tool = {
   readOnly: false,
   spec: {
     name: "bash",
     description:
       "Run a shell command in the workspace. Runs in a sandbox: the workspace is writable, .git is read-only and the network is off. " +
+      "/tmp is a scratch folder that read, write and edit reach too. " +
       "Set network=true only when the command truly needs the internet (it will ask for approval).",
     parameters: {
       type: "object",
@@ -35,7 +39,7 @@ export const bashTool: Tool = {
     if (!r.ok) throw new ToolError(r.why);
     const timeoutMs = Math.min(Number(input.timeout ?? 120), 600) * 1000;
     const cacheDir = join(projectDir(ctx.workspace), "cache");
-    const tmpDir = join(projectDir(ctx.workspace), "tmp");
+    const tmpDir = scratchDir(ctx.workspace);
     mkdirSync(cacheDir, { recursive: true });
     mkdirSync(tmpDir, { recursive: true });
     const res = await exec(command, {

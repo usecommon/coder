@@ -83,6 +83,61 @@ describe.skipIf(detectSandbox() === "none")("bash tool", () => {
   });
 });
 
+describe.skipIf(detectSandbox() === "none")("scratch files under /tmp", () => {
+  const ws = tempDir();
+  const name = `galley-scratch-${process.pid}`;
+
+  test("write, edit and read reach the same /tmp that bash sees", async () => {
+    const c = ctx(ws);
+    c.undo.beginTurn();
+    const w = await runTool(BUILTIN_TOOLS, call("write", { path: `/tmp/${name}/check.sh`, content: "echo first\n" }), c);
+    expect(w.isError).toBeUndefined();
+    expect(w.content).toBe(`Wrote 2 lines to /tmp/${name}/check.sh`);
+    expect((await runTool(BUILTIN_TOOLS, call("bash", { command: `bash /tmp/${name}/check.sh` }), c)).content).toContain("first");
+    const e = await runTool(BUILTIN_TOOLS, call("edit", { path: `/tmp/${name}/check.sh`, old_string: "first", new_string: "second" }), c);
+    expect(e.content).toBe(`Edited /tmp/${name}/check.sh`);
+    expect((await runTool(BUILTIN_TOOLS, call("bash", { command: `bash /tmp/${name}/check.sh` }), c)).content).toContain("second");
+    // and the other way round: a file a command saved can be read back
+    await runTool(BUILTIN_TOOLS, call("bash", { command: `echo from-bash > /tmp/${name}/out.txt` }), c);
+    expect((await runTool(BUILTIN_TOOLS, call("read", { path: `/tmp/${name}/out.txt` }), c)).content).toContain("from-bash");
+    expect((await runTool(BUILTIN_TOOLS, call("list", { path: `/tmp/${name}` }), c)).content).toBe("check.sh\nout.txt");
+    expect((await runTool(BUILTIN_TOOLS, call("glob", { pattern: "*.sh", path: `/tmp/${name}` }), c)).content).toBe(`/tmp/${name}/check.sh`);
+    expect((await runTool(BUILTIN_TOOLS, call("grep", { pattern: "from-b", path: `/tmp/${name}` }), c)).content).toBe(`/tmp/${name}/out.txt:1:from-bash`);
+    // Scratch files are not part of the project: nothing to undo, nothing in the workspace.
+    expect(c.undo.undo()).toEqual([]);
+    expect(existsSync(join(ws, "tmp"))).toBe(false);
+    // With bubblewrap the folder is private: the machine's own /tmp is untouched.
+    if (detectSandbox() === "bwrap") expect(existsSync(`/tmp/${name}`)).toBe(false);
+  });
+
+  test("a workspace that itself lives under /tmp is still the workspace", async () => {
+    const c = ctx(ws);
+    const w = await runTool(BUILTIN_TOOLS, call("write", { path: join(ws, "in-ws.txt"), content: "x" }), c);
+    expect(w.content).toBe("Wrote 1 lines to in-ws.txt");
+    expect(readFileSync(join(ws, "in-ws.txt"), "utf8")).toBe("x");
+  });
+
+  test("a link planted in the scratch folder does not lead out of it", async () => {
+    const c = ctx(ws);
+    await runTool(BUILTIN_TOOLS, call("bash", { command: `mkdir -p /tmp/${name} && ln -s /etc /tmp/${name}/etc-link` }), c);
+    const r = await runTool(BUILTIN_TOOLS, call("read", { path: `/tmp/${name}/etc-link/hostname` }), c);
+    expect(r.isError).toBe(true);
+    expect(r.content).toContain("leads outside /tmp");
+    const w = await runTool(BUILTIN_TOOLS, call("write", { path: `/tmp/${name}/etc-link/galley-test`, content: "x" }), c);
+    expect(w.isError).toBe(true);
+    expect((await runTool(BUILTIN_TOOLS, call("read", { path: "/tmp/../etc/hostname" }), c)).content).toContain("outside the workspace");
+  });
+
+  test("without a sandbox /tmp stays off limits", async () => {
+    for (const c of [{ ...ctx(ws), sandbox: "none" as const }, { ...ctx(ws), cfg: testConfig({ sandbox: "off" }) }]) {
+      const w = await runTool(BUILTIN_TOOLS, call("write", { path: `/tmp/${name}-nosandbox.txt`, content: "x" }), c);
+      expect(w.isError).toBe(true);
+      expect(w.content).toContain("outside the workspace");
+      expect(existsSync(`/tmp/${name}-nosandbox.txt`)).toBe(false);
+    }
+  });
+});
+
 test("helpers", () => {
   expect(locate("a\nb  \nc", "b\nc")).toEqual({ index: 2, length: 5, count: 1 });
   expect(validateInput({ type: "object", properties: { n: { type: "integer" } } }, { n: 1.5 })).toBe("input.n must be an integer");

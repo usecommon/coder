@@ -3,6 +3,8 @@ import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 export class PathError extends Error {}
+/** The path resolves to somewhere outside the root it was confined to. */
+export class OutsideError extends PathError {}
 
 /** Resolve symlinks for the longest existing prefix of `p`. */
 function realish(p: string): string {
@@ -28,7 +30,7 @@ export function confine(root: string, p: string, opts: { write?: boolean } = {})
   const realRoot = realpathSync(root);
   const abs = resolve(realRoot, p);
   const real = realish(abs);
-  if (!inside(realRoot, real)) throw new PathError(`${p} is outside the workspace (${realRoot})`);
+  if (!inside(realRoot, real)) throw new OutsideError(`${p} is outside the workspace (${realRoot})`);
   if (opts.write) {
     const rel = relative(realRoot, real).split(sep);
     if (rel[0] === ".git") throw new PathError("writing inside .git is not allowed");
