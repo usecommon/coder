@@ -1,0 +1,11 @@
+[
+{
+"run": "fix-1",
+"agent": "galley-old",
+"lang": "java",
+"task": "variable-length-quantity",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

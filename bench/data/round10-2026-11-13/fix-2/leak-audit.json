@@ -1,0 +1,11 @@
+[
+{
+"run": "fix-2",
+"agent": "galley-old",
+"lang": "javascript",
+"task": "queen-attack",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

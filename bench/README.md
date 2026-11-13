@@ -7,6 +7,7 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 [Aider Polyglot](https://github.com/Aider-AI/polyglot-benchmark): 225 of Exercism's hardest exercises in six languages. This run uses the **Python (34), Go (39) and Rust (30)** sets: 103 tasks, 102 scored.
 - `rust/macros` is excluded because its compile-failure tests can't run offline.
 - JavaScript (49), Java (47) and C++ (26) were left out of the first comparisons because they need test dependencies inside the sandbox. `setup.sh` now fetches those once (jest and babel; JUnit and AssertJ as a read-only Gradle cache), and `--langs javascript,java,cpp` runs them. They served as the fresh tasks for the confirmation of 12 and 13 November ([RESULTS-fresh.md](RESULTS-fresh.md)): 121 tasks, after leaving out `javascript/parallel-letter-frequency`, whose reference solution failed a timing test. They are no longer fresh: Galley has since been changed in the light of those runs.
+- **A second set of fresh tasks** comes from Exercism tracks the Polyglot benchmark does not include: PHP (61), TypeScript (58) and Ruby (62). `setup_tracks.sh` fetches the three track repositories at pinned commits and keeps every exercise that shares its name with a Polyglot exercise and is active in its track; 181 of the 183 have a reference solution that passes in the sandbox ([`data/tracks2-tasks.txt`](data/tracks2-tasks.txt)). Run them with `BENCH_TASKS=$WORK/tracks2 LANGS=php,typescript,ruby`. Grading uses each track's own test command without the parts that need the network: `ruby` on the test file, PHPUnit 11.5 on the test file, and `jest` for TypeScript (its separate type check is not run). Ruby's starting files name no classes or methods, so the agent has to infer what the hidden tests call; the Polyglot C++ exercises are the same.
 
 ## Protocol
 
@@ -66,12 +67,23 @@ apt-get install -y bubblewrap        # if bwrap is missing
 bench/setup.sh                       # benchmark checkout, OpenCode 1.19.5, Rust crates -> /tmp/bench-work
 export DEEPSEEK_API_KEY=...          # read by the proxy only; agents get a placeholder
 bench/round.sh myrun                 # self-test, both agents on all tasks, report, leak audit
+
+# the second task set (PHP, TypeScript, Ruby)
+bench/setup_tracks.sh                # track repositories at pinned commits, TypeScript test dependencies, PHPUnit
+BENCH_TASKS=/tmp/bench-work/tracks2 LANGS=php,typescript,ruby \
+  BENCH_SKIP=typescript/crypto-square,typescript/pythagorean-triplet bench/round.sh myrun2
 ```
 
 `round.sh` takes a name, a split (`all`, `dev`, `holdout`) and a list of agents. To compare configurations of one agent side by side, name a variant `<agent>-<label>` and describe it in `BENCH_VARIANTS`:
 
 ```bash
 BENCH_VARIANTS='{"galley-sr":{"providerOpts":{"sendReasoning":true}}}' bench/round.sh clean-1 all opencode,galley,galley-sr
+```
+
+A variant can also point at another checkout of Galley, to run two versions side by side:
+
+```bash
+BENCH_VARIANTS='{"galley-old":{"galley":"/tmp/bench-work/galley-61300b4/galley/src/cli.ts"}}' bench/round.sh fix-1 all galley-old,galley-new
 ```
 
 To look around inside the sandbox an agent gets: `bun run.ts --agents opencode --out /tmp/bench-work/rounds/x --box-exec 'ls -la / ~'`.

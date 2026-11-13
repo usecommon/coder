@@ -185,6 +185,34 @@ Since the version frozen for the confirmation (`61300b4`) Galley has changed in 
 
 If any of them fails, nothing goes forward and I report.
 
+### Round 10 results (13 November, two rounds, outside peak hours)
+
+| | `galley-old` (`61300b4`) | `galley-new` (`de69760`) |
+|---|---|---|
+| Passes per round (of 121) | 54, 55 | 55, 60 |
+| Pass rate | 45.0% | 47.5% |
+| Cost per round | $0.86, $0.84 (mean $0.85) | $0.67, $0.73 (mean **$0.70**) |
+| Typical cost per task-run (without each arm's dearest 5%) | $0.0056 | $0.0049 |
+| Task-runs with a write refused for being outside the workspace | 51 of 242 (21%) | 0 |
+| Task-runs that used helper agents | 1 (16 helpers, 83,000 output tokens, $0.10, hit the time limit) | 0 |
+
+| Condition | Measured | Met |
+|---|---|---|
+| 1. Refused writes in at most 2% of task-runs | 0% | Yes |
+| 2. No task-run with more than 20,000 helper output tokens | none used helpers | Yes |
+| 3. Pass rate not more than 4.0 points lower | 2.5 points higher (95% interval −3.3 to +8.3) | Yes |
+| 4. Typical cost not more than 5% higher | 11% lower | Yes |
+
+**Decision by the rule: `galley-new` goes forward to the confirmation.**
+
+- **The saving is larger than the logs suggested.** The whole round cost 17.5% less (95% interval 29% to 5% less), where the arithmetic on the earlier logs had put the two defects at about 8%. Once the model could save a test script under `/tmp` with the file tool, it wrote a third less code inside shell commands (2,700 characters per task-run against 4,300) and made 10% fewer requests.
+- **The helper-agent defect appeared again in the old version,** on the same task as in the confirmation (Java `variable-length-quantity`): 16 helpers asked to recall the hidden test file. The new version used no helpers in 242 task-runs.
+- **The pass rate did not suffer.** The difference of +2.5 points is well inside the noise of two rounds.
+- One task-run of each version hit the 10-minute limit. The new version's was a stress test of its own that the model started with a 10-minute command timeout.
+- Leak audit: no task-run reached hidden tests. Spend: $3.15, including a smoke test of the new tasks ($0.02) and the task-runs lost when the machine restarted during round 1.
+
+Data: [`data/round10-2026-11-13/`](data/round10-2026-11-13/).
+
 ## Second confirmation, on a new set of fresh tasks (design, written before running)
 
 The JavaScript, Java and C++ tasks are used up: Galley has been changed in the light of their logs. This confirmation needs tasks neither agent has been run on.
