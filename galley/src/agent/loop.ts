@@ -30,6 +30,8 @@ export interface AgentOptions {
   model?: string;
   /** Step limit for this agent (defaults to cfg.maxSteps). */
   maxSteps?: number;
+  /** Reasoning effort for this agent (defaults to cfg.effort). */
+  effort?: Config["effort"];
 }
 
 export interface TurnResult {
@@ -153,7 +155,7 @@ export class Agent {
 
       // Independent verification: a fresh read-only helper checks the change against the request.
       if (pass === 0 && cfg.verify && !this.o.subagent && stopReason === "end_turn" && this.undo.changedThisTurn() > 0 && !signal?.aborted) {
-        const report = await this.runSubagent("verify the change", verifyPrompt(text), signal, 12);
+        const report = await this.runSubagent("verify the change", verifyPrompt(text), signal, { maxSteps: 12 });
         if (/VERDICT:\s*FAIL/i.test(report)) {
           this.emit({ type: "notice", level: "info", text: "An independent check found problems; fixing them." });
           this.session.addMessage({
@@ -176,7 +178,7 @@ export class Agent {
     for (let attempt = 0; ; attempt++) {
       try {
         return await provider.chat(
-          { model, system, messages: this.session.messages, tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: cfg.effort, signal },
+          { model, system, messages: this.session.messages, tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: this.o.effort ?? cfg.effort, signal },
           {
             onText: (t) => this.emit({ type: "text", text: t }),
             onReasoning: (t) => this.emit({ type: "reasoning", text: t }),
@@ -201,7 +203,9 @@ export class Agent {
       sandbox: this.sandbox,
       undo: this.undo,
       signal,
-      runSubagent: this.o.subagent ? undefined : (d, p) => this.runSubagent(d, p, signal),
+      // Helpers search and report, which takes little reasoning. Left at the main agent's effort, a cheap model has
+      // spent tens of thousands of reasoning tokens in one helper (bench/RESULTS-fresh.md).
+      runSubagent: this.o.subagent ? undefined : (d, p) => this.runSubagent(d, p, signal, { effort: "low" }),
     };
     const one = async (c: ToolCall) => {
       this.emit({ type: "tool_start", call: c });
@@ -217,7 +221,7 @@ export class Agent {
     return out;
   }
 
-  private async runSubagent(description: string, prompt: string, signal?: AbortSignal, maxSteps?: number): Promise<string> {
+  private async runSubagent(description: string, prompt: string, signal?: AbortSignal, o: { maxSteps?: number; effort?: Config["effort"] } = {}): Promise<string> {
     const model = this.o.cfg.smallModel ?? this.model;
     const child = new Agent({
       ...this.o,
@@ -226,7 +230,8 @@ export class Agent {
       subagent: true,
       name: `task:${description}`,
       model,
-      maxSteps,
+      maxSteps: o.maxSteps,
+      effort: o.effort,
     });
     child.session.setTitle(`task: ${description}`);
     const r = await child.send(prompt, signal);

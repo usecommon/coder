@@ -58,7 +58,9 @@ The non-Anthropic model names are examples; check your provider's current model 
 
 For Anthropic models, Galley uses adaptive thinking with an explicit effort level (`"effort"`, default `medium`: on Claude Sonnet 5.5 it scored the same as `high` in our benchmark at 15% lower cost), caches the system prompt and conversation, streams tool inputs eagerly and validates them before running, and turns on the API's server-side refusal fallbacks for the models that support them. Thinking blocks are replayed unchanged. You can turn off fallbacks per provider in code (`AnthropicProvider({ fallbacks: false })`).
 
-For DeepSeek, Galley sends the model's earlier reasoning back between tool calls, as DeepSeek's thinking mode expects. In our benchmark this changed neither pass rate nor cost. Turn it off with `"sendReasoning": false` under `providers.deepseek`; other OpenAI-compatible providers get it only if you set it to `true`. To trade some accuracy for cost and speed, set `"reasoningEffort": "low"` there: in our benchmark it cut cost by 44% and scored about 3 points lower.
+For DeepSeek, Galley sends the model's earlier reasoning back between tool calls, as DeepSeek's thinking mode expects. In our benchmark this changed neither pass rate nor cost. Turn it off with `"sendReasoning": false` under `providers.deepseek`; other OpenAI-compatible providers get it only if you set it to `true`. To trade some accuracy for cost and speed, set `"reasoningEffort": "low"` there (or `"effort": "low"` at the top level): in our benchmark it cut cost by 44% and scored about 3 points lower.
+
+Sub-agents (`task`) are for searching a large codebase. They run at low effort whatever the main agent uses: in the benchmark a cheap model launched helpers to "recall" hidden tests from memory, and they spent 6% of all of Galley's cost thinking about it.
 
 ## Using it
 
@@ -139,7 +141,7 @@ src/
 ## Development
 
 ```bash
-bun test          # 70 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
+bun test          # 71 tests: providers (incl. the Anthropic SDK over a mocked stream), safety, real sandbox, tools, agent loop, server, MCP
 bun run typecheck
 ```
 

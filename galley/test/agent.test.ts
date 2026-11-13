@@ -83,10 +83,12 @@ describe("agent loop", () => {
           peak = Math.max(peak, active);
           await new Promise((r) => setTimeout(r, 50));
           active--;
-          // Helpers only get read-only tools plus bash.
+          // Helpers only get read-only tools plus bash, and run at low effort.
           expect(req.tools.map((t) => t.name).sort()).toEqual(["bash", "glob", "grep", "list", "read"]);
+          expect(req.effort).toBe("low");
           return { text: `found in ${request(req.messages[0])}`, toolCalls: [], usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 }, stopReason: "end_turn" };
         }
+        expect(req.effort).toBe("medium"); // the main agent keeps the configured effort
         const done = req.messages.some((m) => m.role === "tool");
         return done
           ? { text: "Both helpers reported.", toolCalls: [], usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 }, stopReason: "end_turn" }

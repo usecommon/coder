@@ -5,11 +5,13 @@ import { OpenAICompatProvider } from "./openai-compat.ts";
 import type { Provider } from "./types.ts";
 
 /** Built-in OpenAI-compatible presets. Add your own under `providers` in galley.json. */
-export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string; sendReasoning?: boolean; reasoningEffort?: string }> = {
+export const PRESETS: Record<string, { baseURL: string; apiKeyEnv?: string; sendReasoning?: boolean; reasoningEffort?: string; effortMap?: Record<string, string> }> = {
   openai: { baseURL: "https://api.openai.com/v1", apiKeyEnv: "OPENAI_API_KEY" },
   // DeepSeek's thinking mode expects earlier reasoning to be sent back while tools are in use. Measured over
   // three benchmark rounds it changed neither pass rate nor cost (bench/RESULTS-clean.md).
-  deepseek: { baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY", sendReasoning: true },
+  // Its `reasoning_effort` takes low, high (the default) and max. Only "low" is passed on: at Galley's other levels
+  // the API's default stays in force, which is what the benchmark rounds measured.
+  deepseek: { baseURL: "https://api.deepseek.com", apiKeyEnv: "DEEPSEEK_API_KEY", sendReasoning: true, effortMap: { low: "low" } },
   openrouter: { baseURL: "https://openrouter.ai/api/v1", apiKeyEnv: "OPENROUTER_API_KEY" },
   qwen: { baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", apiKeyEnv: "DASHSCOPE_API_KEY" },
   moonshot: { baseURL: "https://api.moonshot.ai/v1", apiKeyEnv: "MOONSHOT_API_KEY" },
@@ -39,6 +41,7 @@ export function compatOptions(id: string, cfg: Config) {
     headers: pc.headers,
     sendReasoning: pc.sendReasoning ?? preset?.sendReasoning,
     reasoningEffort: pc.reasoningEffort ?? preset?.reasoningEffort,
+    effortMap: preset?.effortMap,
     includeUsage: pc.includeUsage,
   };
 }

@@ -167,4 +167,20 @@ describe("reasoning effort for OpenAI-compatible APIs", () => {
     expect(compatOptions("deepseek", testConfig({ providers: { deepseek: { reasoningEffort: "low" } } })).reasoningEffort).toBe("low");
     expect(compatOptions("deepseek", testConfig()).reasoningEffort).toBeUndefined();
   });
+  test("a request's effort level is passed on where the API has a matching one", async () => {
+    const capture = { bodies: [] as any[] };
+    const deepseek = () => new OpenAICompatProvider({ ...compatOptions("deepseek", testConfig()), baseURL: "https://x", apiKey: "k", fetch: sseFetch(done, capture) });
+    await deepseek().chat({ ...req, effort: "low" }); // what helper agents send
+    await deepseek().chat({ ...req, effort: "medium" }); // Galley's default: DeepSeek's own default stays in force
+    await deepseek().chat({ ...req, effort: "high" });
+    expect(capture.bodies[0].reasoning_effort).toBe("low");
+    expect("reasoning_effort" in capture.bodies[1]).toBe(false);
+    expect("reasoning_effort" in capture.bodies[2]).toBe(false);
+    // The user's explicit setting wins over the request's level.
+    await new OpenAICompatProvider({ ...compatOptions("deepseek", testConfig({ providers: { deepseek: { reasoningEffort: "max" } } })), baseURL: "https://x", apiKey: "k", fetch: sseFetch(done, capture) }).chat({ ...req, effort: "low" });
+    expect(capture.bodies[3].reasoning_effort).toBe("max");
+    // Providers without a known mapping get nothing.
+    await new OpenAICompatProvider({ ...compatOptions("openai", testConfig()), baseURL: "https://x", apiKey: "k", fetch: sseFetch(done, capture) }).chat({ ...req, effort: "low" });
+    expect("reasoning_effort" in capture.bodies[4]).toBe(false);
+  });
 });

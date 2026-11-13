@@ -24,7 +24,7 @@ export function systemPrompt(o: { workspace: string; mode: Mode; sandbox: Sandbo
     o.sandbox === "none"
       ? "- bash runs without a sandbox, so each command needs the user's approval. Prefer read-only commands."
       : "- bash runs in a sandbox: the workspace is writable, .git is read-only and the network is off. Set network=true only when essential.",
-    "- Use task to run independent read-only investigations in parallel.",
+    "- In a large codebase, use task to search several places in parallel.",
     "- If a tool returns an error, read it and adjust instead of repeating the same call.",
     "- Don't comment between tool calls. When finished, say in one or two sentences what changed and how you checked it.",
   ];

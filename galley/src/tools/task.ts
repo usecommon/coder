@@ -5,8 +5,9 @@ export const taskTool: Tool = {
   spec: {
     name: "task",
     description:
-      "Delegate a self-contained research task to a read-only helper agent (it can read, list, glob, grep and run read-only commands). " +
-      "Call several in one turn to run them in parallel. Returns the helper's final answer.",
+      "Delegate a search of the codebase to a read-only helper agent (it can read, list, glob, grep and run read-only commands). " +
+      "Worth it when a question takes many reads in a large project; call several in one turn to run them in parallel. " +
+      "A helper knows only what it finds in the files: do not use one to recall facts or to think a problem through. Returns the helper's final answer.",
     parameters: {
       type: "object",
       properties: {
