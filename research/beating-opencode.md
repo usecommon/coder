@@ -303,6 +303,8 @@ A PASS from self-written tests carried almost no information. The reason shows i
 | 3 | **Offline test of selection, before building anything:** write only the selector and run it on attempts already saved from earlier runs, where each attempt's hidden result is known | Under $1 | Build attempt-and-select only if the selector picks a passing attempt clearly more often than chance on tasks where attempts disagree. The verifier data predicts it will not. |
 | 3a | **Done:** cost round on DeepSeek (four Galley settings side by side, 2 rounds) | $4.16 | A shorter prompt that is the same in every project: 13% cheaper, adopted. Low reasoning effort: 44% cheaper but about 3 points lower, not adopted. |
 | 4 | **Done:** confirmation on fresh tasks (JavaScript, Java, C++), Galley frozen first, both agents, 4 rounds | $6.38 | **Not a win by the rule.** Lead +7.6 points (p = 0.001): met. Cost 10% higher: missed. |
+| 4a | **Done:** round 10, the frozen Galley against the one with two fixes, side by side, 121 tasks, 2 rounds | $3.15 | Cost 17.5% lower, pass rate 2.5 points higher (within noise). The fixed version goes forward. |
+| 4b | **In progress:** second confirmation on 181 fresh PHP, TypeScript and Ruby tasks, the fixed Galley against OpenCode | About $9 | The win rule, unchanged |
 | 5 | Optional: a benchmark of long tasks, if Docker can be made to run here | Unknown | Decide after steps 1 to 4 |
 
 The saved attempts that step 3 needs are in this session's temporary storage. If that is lost, regenerating them costs about $1.50.
@@ -358,7 +360,7 @@ Full write-ups: [`bench/IMPROVEMENT_LOG.md`](../bench/IMPROVEMENT_LOG.md) (round
 
 ### What to do next
 
-The open condition is cost on DeepSeek. Three ways forward, in the order I would take them:
+The open condition is cost on DeepSeek. Three ways forward, in the order I would take them. *Update, 13 November: you chose steps 1 and 2. Step 1 is done: the fixed Galley cost 17.5% less than the frozen one on the same tasks (interval 29% to 5% less) and passed 47.5% against 45.0%, so it went forward. Step 2 has started on 181 fresh PHP, TypeScript and Ruby exercises; see [`bench/IMPROVEMENT_LOG.md`](../bench/IMPROVEMENT_LOG.md).*
 
 1. **Measure the two fixes** (about $3.50). Run the frozen Galley and today's Galley side by side on the 121 JavaScript, Java and C++ tasks, two rounds. These tasks are development tasks now, which is fine for a screen. Adopt if cost falls by 8% or more and the pass rate is not more than 2 points lower. For about $1.70 more, a third arm can test one further trim: telling the model to finish once its own checks pass. About 15% of Galley's output comes after a clean check that no failing check follows.
 2. **Then confirm on new fresh tasks** (about $7 to $9). The same exercises exist in languages this project has not touched; Ruby, PHP and TypeScript are installed on the benchmark machine. Take the exercises that share names with the Polyglot set, fix the list by grading the reference solutions before any agent runs, freeze Galley, and run four rounds against OpenCode.
