@@ -9,7 +9,8 @@ Costs are at the list price outside peak hours, so arms and rounds compare like 
 weekdays 01:00-04:00 and 06:00-10:00 UTC; the "billed" column applies that to each request's start time.
 Prints per-round pass counts and costs per arm, then every pairwise pooled comparison (per-task means over the
 rounds each arm ran, difference, bootstrap 95% interval over tasks, two-sided sign test over tasks).
-BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt)."""
+BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt).
+BENCH_COST=first counts only the requests of the first attempt (default: all of a task-run's requests)."""
 import json, sys, math, random, collections, os, datetime
 # Tasks left out of scoring. BENCH_EXCLUDE="lang/name,lang/name" replaces the default list.
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
@@ -47,6 +48,7 @@ for r in rounds:
         rec = res.get((r, arm), {}).get(t)
         if rec is None: continue                                  # no recorded result: not part of the run
         if o.get("t") is not None and o["t"] < rec.get("startedAt", 0) - 2000: continue   # an interrupted earlier attempt
+        if os.environ.get("BENCH_COST") == "first" and rec.get("startedAt2") and o.get("t") is not None and o["t"] >= rec["startedAt2"] - 2000: continue
         c = use[(r, arm)]; c["requests"] += 1; c["errors"] += o.get("status") != 200
         u = o.get("usage") or {}; before = (c["miss"], c["hit"], c["write"], c["out"])
         if "prompt_tokens" in u:

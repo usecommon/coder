@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Checks on a campaign's raw run folders that the scores alone do not show (C, C#, Elixir task sets):
+"""Checks on a campaign's raw run folders that the scores alone do not show (C, C#, Elixir, Bash, Lua, Tcl task sets):
   1. Did each agent's own shell commands get to run the language's build tool? (Was the benchmark even-handed?)
   2. Why did failed gradings fail: wrong answers, code that does not compile against the tests, or files the agent
      left behind (a second main, a failing test of its own)?
   3. Did the agent change a build file (makefile, .csproj, mix.exs, the test helper)?
 usage: track_checks.py <rounds-dir> <round>[,<round>...] <tasks-dir> <armA> <armB> [--json <out.json>]
 Needs the rounds' raw folders (runs/<agent>/<lang>/<name>/ with the transcript, grade.log and final workspace),
-which are not stored in the repo; --json saves the counts. The classification is by pattern and is approximate."""
+which are not stored in the repo; --json saves the counts. The classification is by pattern and is approximate.
+In a round run with two attempts, the commands counted are those of the first attempt, and the grading is the first."""
 import collections, glob, json, os, re, sys
 
 args = [a for a in sys.argv[1:] if not a.startswith("--json")]
@@ -21,17 +22,26 @@ TOOL = {
     "c": re.compile(r"(?<![\w/.-])(gcc|cc|clang|make)\b"),
     "csharp": re.compile(r"\bdotnet\s+(build|test|run|restore|msbuild)\b"),
     "elixir": re.compile(r"(?<![\w/.-])(mix|elixir|iex)\b"),
+    "bash": re.compile(r"(?<![\w/.-])bats\b|(?<![\w/.-])bash\s+\S+\.sh\b|\./\S+\.sh\b"),
+    "lua": re.compile(r"(?<![\w/.-])(lua|lua5\.4|busted)\b"),
+    "tcl": re.compile(r"(?<![\w/.-])tclsh\b"),
 }
 RAN = {
     "c": re.compile(r"\berror:|\bwarning:|\d+ Tests \d+ Failures|undefined reference|In function"),
     "csharp": re.compile(r"Build succeeded|Build FAILED|(error|warning) (CS|MSB|NETSDK|NU)\d+|Passed!|Failed!|Test run for|Determining projects to restore|Time Elapsed"),
     "elixir": re.compile(r"Compiling \d+ files?|Generated \w+ app|\d+ tests?, \d+ failures?|\*\* \(|\bwarning:|Finished in"),
+    "bash": re.compile(r"^(not )?ok \d+|\d+ tests?, \d+ failures?|line \d+:", re.M),
+    "lua": re.compile(r"\d+ successes? / \d+ failures?|lua(5\.4)?: |stack traceback"),
+    "tcl": re.compile(r"Total\s+\d+\s+Passed|while executing|invalid command name"),
 }
 # The track's own test command, run to the point of a test summary.
 TESTS_RAN = {
     "c": re.compile(r"\d+ Tests \d+ Failures \d+ Ignored"),
     "csharp": re.compile(r"(Passed|Failed)!\s+- Failed:\s+\d+, Passed:\s+\d+"),
     "elixir": re.compile(r"\d+ tests?, \d+ failures?"),
+    "bash": re.compile(r"^(not )?ok \d+ ", re.M),
+    "lua": re.compile(r"\d+ successes? / \d+ failures? / \d+ errors?"),
+    "tcl": re.compile(r"Total\s+\d+\s+Passed\s+\d+"),
 }
 # Words in a command's output that point at the environment rather than at the code.
 TROUBLE = {
@@ -43,14 +53,16 @@ TROUBLE = {
     "network refused": re.compile(r"Could not resolve host|Network is unreachable|Temporary failure in name resolution|nxdomain"),
     "killed or out of memory": re.compile(r"\bKilled\b|[Cc]annot allocate memory|OutOfMemory"),
 }
-BUILD_FILES = {"c": ["makefile", "test-framework/*"], "csharp": ["*.csproj", "packages.lock.json"], "elixir": ["mix.exs", "test/test_helper.exs"]}
+BUILD_FILES = {"c": ["makefile", "test-framework/*"], "csharp": ["*.csproj", "packages.lock.json"], "elixir": ["mix.exs", "test/test_helper.exs"],
+               "bash": ["bats-extra.bash"], "lua": [".busted"], "tcl": ["testHelpers.tcl"]}
 BUILD_OUTPUT = re.compile(r"(^|/)(bin|obj|_build|deps|\.elixir_ls|\.vs|\.docs|\.git)(/|$)|\.(o|out|dSYM)$|(^|/)(erl_crash\.dump|\.DS_Store)$")
-SOURCE_EXT = {"c": (".c", ".h"), "csharp": (".cs", ".csx"), "elixir": (".ex", ".exs")}
+SOURCE_EXT = {"c": (".c", ".h"), "csharp": (".cs", ".csx"), "elixir": (".ex", ".exs"), "bash": (".sh", ".bash", ".bats"), "lua": (".lua",), "tcl": (".tcl", ".test")}
 
 
 def galley_commands(run):
     for p in sorted(glob.glob(f"{run}/galley-data/projects/*/sessions/*.jsonl")):
         calls = []
+        users = 0
         for line in open(p, errors="replace"):
             try:
                 o = json.loads(line)
@@ -59,6 +71,10 @@ def galley_commands(run):
             if o.get("type") != "message":
                 continue
             m = o["message"]
+            if m.get("role") == "user":
+                users += 1
+                if users > 1:
+                    break                      # the second attempt starts here
             if m.get("role") == "assistant":
                 calls = m.get("toolCalls") or []
             elif m.get("role") == "tool":
@@ -128,6 +144,24 @@ def grade_cause(lang, log, timed_out, tests, extra_sources):
             return "tests fail"
         if re.search(r"Stack overflow|aborted|Test host process crashed|The active test run was aborted", log, re.I):
             return "crashes"
+        return "other"
+    if lang == "bash":
+        if re.search(r"^not ok \d+", log, re.M):
+            return "tests fail"
+        return "other"
+    if lang == "lua":
+        m = re.search(r"(\d+) successes? / (\d+) failures? / (\d+) errors?", log)
+        if m and int(m.group(1)) == 0 and int(m.group(3)) > 0 and re.search(r"module '[^']+' not found|attempt to (call|index) a nil value", log):
+            return "does not load or lacks what the tests call"
+        if m and (int(m.group(2)) > 0 or int(m.group(3)) > 0):
+            return "tests fail"
+        return "other"
+    if lang == "tcl":
+        m = re.search(r"Total\s+(\d+)\s+Passed\s+(\d+)\s+Skipped\s+(\d+)\s+Failed\s+(\d+)", log)
+        if m and int(m.group(4)) > 0:
+            return "tests fail"
+        if re.search(r"invalid command name|can't find package|while executing", log):
+            return "does not load or lacks what the tests call"
         return "other"
     if lang == "elixir":
         m = re.search(r"(\d+) tests?, (\d+) failures?", log)

@@ -6,7 +6,8 @@ usage: breakdown.py <prices: deepseek|sonnet> <rounds-dir> <round>[,<round>...] 
          bench/data/fresh-2026-11-12 fresh-1,fresh-2,fresh-3,fresh-4 opencode galley
 Each round is a folder with results.jsonl and the proxy's log (proxy.jsonl, or proxy-usage.jsonl as stored in data/).
 Costs are at the list price outside peak hours. The paired comparison is between the first two arms.
-BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt)."""
+BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt).
+BENCH_COST=first counts only the requests of the first attempt (default: all of a task-run's requests)."""
 import collections, json, math, os, random, statistics, sys
 
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
@@ -41,6 +42,8 @@ for r in rounds:
         rec = res.get((r, arm, t))
         if rec is None or (o.get("t") is not None and o["t"] < rec.get("startedAt", 0) - 2000):
             continue                              # not part of the run, or an interrupted earlier attempt
+        if os.environ.get("BENCH_COST") == "first" and rec.get("startedAt2") and o.get("t") is not None and o["t"] >= rec["startedAt2"] - 2000:
+            continue                              # a request of the second attempt
         u = o.get("usage") or {}
         if "prompt_tokens" in u:                  # OpenAI-style usage
             hit = u.get("prompt_cache_hit_tokens", (u.get("prompt_tokens_details") or {}).get("cached_tokens", 0)) or 0
