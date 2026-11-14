@@ -16,7 +16,7 @@ The classification is by pattern and is approximate."""
 import collections, glob, json, os, re, sys
 
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "javascript/parallel-letter-frequency").split(",") if x}
-RUNS_CODE = re.compile(r"(?<![\w/.-])(node|jest|npm|npx|gradle|\./gradlew|java|javac|jshell|g\+\+|gcc|c\+\+|clang\+\+|cmake|make|python3?|pytest|go|cargo|ruby|rake|php|phpunit|tsc|tsx|yarn|bun|dotnet|mix|elixir|iex|cc|\./[\w.-]+)\b")
+RUNS_CODE = re.compile(r"(?<![\w/.-])(node|jest|npm|npx|gradle|\./gradlew|java|javac|jshell|g\+\+|gcc|c\+\+|clang\+\+|cmake|make|python3?|pytest|go|cargo|ruby|rake|php|phpunit|tsc|tsx|yarn|bun|dotnet|mix|elixir|iex|cc|bats|busted|lua|tclsh|\./[\w.-]+)\b")
 INLINE = re.compile(r"<<|(node|python3?|ruby) -e\b|php -r\b|jshell")
 FAILED = re.compile(r"\[exit code (?!0\])|FAIL|Error:|error:|Exception|AssertionError|not ok|mismatch|differs", re.I)
 WRITERS = {"write", "edit", "multiedit", "patch", "apply_patch"}

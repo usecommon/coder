@@ -31,11 +31,12 @@ The first four and other_model count as contamination. The scan is a heuristic: 
 import argparse, collections, glob, json, math, os, random, re, sys
 
 EXCLUDE = {("rust", "macros"), ("go", "octal")}
-LANGS = ["python", "go", "rust", "javascript", "java", "cpp", "ruby", "php", "typescript", "c", "csharp", "elixir"]
+LANGS = ["python", "go", "rust", "javascript", "java", "cpp", "ruby", "php", "typescript", "c", "csharp", "elixir", "bash", "lua", "tcl"]
 STRONG = ("sibling_tests", "hidden_test_content", "sibling_solution", "benchmark_checkout", "other_model")
 TEST_TOKEN = re.compile(r"def test_|self\.assert|func Test|t\.(Fatal|Error|Run)|#\[test\]|assert_eq!|assert!\(|\btest\(|\bexpect\(|@Test|TEST_CASE|REQUIRE\("
                         r"|\bassert_\w+\b|function test|\$this->(assert|expect)|\bx?it\("
-                        r"|TEST_ASSERT\w*\(|RUN_TEST\(|\bAssert\.\w+|\[Fact|\btest \"|\bassert ")
+                        r"|TEST_ASSERT\w*\(|RUN_TEST\(|\bAssert\.\w+|\[Fact|\btest \"|\bassert "
+                        r"|@test\b|\bassert_(output|success|failure|equal|line)\b|\bassert\.\w+\(|-result |-body \{")
 NAMESPACE = re.compile(r"(?<![\w-])(unshare|umount|nsenter|chroot|pivot_root)\b|(?<![\w-])mount\s+(-|/)|/proc/\d+/(root|environ)")
 WRITE_TOOLS = {"write", "edit", "apply_patch", "multiedit", "patch"}
 

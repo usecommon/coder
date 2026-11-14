@@ -1,6 +1,6 @@
 #!/bin/bash
 # More sets of tasks: exercises from Exercism tracks the Polyglot benchmark does not include.
-#   tracks2: PHP, TypeScript, Ruby        tracks3: C, C#, Elixir
+#   tracks2: PHP, TypeScript, Ruby        tracks3: C, C#, Elixir        tracks4: Bash, Lua, Tcl
 # Run after setup.sh. Idempotent.
 # Creates $WORK/tracks2 and $WORK/tracks3, each <language>/exercises/practice/<name>, laid out like the Polyglot
 # checkout, with every exercise that shares its name with a Polyglot exercise and is active in its track; and the
@@ -9,6 +9,7 @@
 # No exercise code is run on this machine: exercises and their tests only ever run inside the benchmark sandbox.
 # To use a set: BENCH_TASKS=$WORK/tracks2 LANGS=php,typescript,ruby bench/round.sh ...
 #               BENCH_TASKS=$WORK/tracks3 LANGS=c,csharp,elixir bench/round.sh ...
+#               BENCH_TASKS=$WORK/tracks4 LANGS=bash,lua,tcl bench/round.sh ...
 set -euo pipefail
 WORK=${WORK:-/tmp/bench-work}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -26,9 +27,12 @@ declare -A PIN=(
   [c]=f33ae8729f165d4e3ede1211e9694eb0b2f13569
   [csharp]=45460528ac123937c07ab76455b7bbca47785c67
   [elixir]=5d044da9a5eb1389e2162ad98b5a0ed1a24d61f0
+  [bash]=5fb465ba8d61858567f62648a81de528b12bdaac
+  [lua]=712ba43f4108b2636e554c2823250e9796beca61
+  [tcl]=4757ac8a039f7915c562365a419ca3ef5a681e63
 )
 mkdir -p tracks
-for t in php typescript ruby c csharp elixir; do
+for t in php typescript ruby c csharp elixir bash lua tcl; do
   if [ ! -d "tracks/$t/.git" ]; then
     git init -q "tracks/$t"
     git -C "tracks/$t" remote add origin "https://github.com/exercism/$t"
@@ -47,7 +51,7 @@ for lang in os.listdir(f"{work}/polyglot"):
     d = f"{work}/polyglot/{lang}/exercises/practice"
     if os.path.isdir(d):
         polyglot |= set(os.listdir(d))
-for group, tracks in (("tracks2", ("php", "typescript", "ruby")), ("tracks3", ("c", "csharp", "elixir"))):
+for group, tracks in (("tracks2", ("php", "typescript", "ruby")), ("tracks3", ("c", "csharp", "elixir")), ("tracks4", ("bash", "lua", "tcl"))):
     for track in tracks:
         root = f"{work}/tracks/{track}"
         status = {e["slug"]: e.get("status", "active") for e in json.load(open(f"{root}/config.json"))["exercises"]["practice"]}
@@ -91,6 +95,9 @@ if command -v dotnet >/dev/null && [ ! -d deps/nuget/packages/xunit.v3 ]; then
     (cd "nuget-seed/$s" && DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 dotnet restore Seed.csproj --packages "$DEPS/nuget/packages" >/dev/null) || echo "could not download the C# test packages ($s)"
   done
 fi
+# Bash, Lua and Tcl: the tracks' test tools (bats, busted, tcltest with the thread package some exercises load) from
+# the system's package source.
+command -v bats >/dev/null && command -v busted >/dev/null && echo 'package require Thread' | tclsh 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bats lua5.4 lua-busted tcl tcl-thread >/dev/null 2>&1 || echo "could not install bats, Lua with busted, and Tcl"
 # One-test projects the self-test builds and runs, inside the benchmark's sandbox and inside Galley's own.
 rm -rf deps/checks && cp -r "$HERE/deps-seed/checks" deps/checks
-echo "tracks ready in $WORK/tracks2 and $WORK/tracks3"
+echo "tracks ready in $WORK/tracks2, $WORK/tracks3 and $WORK/tracks4"

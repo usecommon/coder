@@ -176,9 +176,9 @@ function prepare(t: Task, ws: string, run: string) {
 }
 
 /** Languages whose exercises come from Exercism's own track repositories instead of the Polyglot checkout. */
-const OTHER_TRACKS = new Set(["ruby", "php", "typescript", "c", "csharp", "elixir"]);
+const OTHER_TRACKS = new Set(["ruby", "php", "typescript", "c", "csharp", "elixir", "bash", "lua", "tcl"]);
 /** Names that mark a test file in those tracks, whether or not the exercise's config lists it. */
-const TEST_LIKE = /(_test\.rb|Test\.php(\.twig)?|\.test\.ts|\.tst\.ts|Tests?\.cs|_test\.exs|(^|\/)test_[^/]*\.c)$/;
+const TEST_LIKE = /(_test\.rb|Test\.php(\.twig)?|\.test\.ts|\.tst\.ts|Tests?\.cs|_test\.exs|(^|\/)test_[^/]*\.c|\.bats|_spec\.lua|\.test)$/;
 
 /** Every file under `dir`, as paths relative to it. */
 function walkFiles(dir: string, rel = ""): string[] {
@@ -204,7 +204,8 @@ function unskip(t: Task, ws: string) {
     if (t.lang === "ruby") writeFileSync(p, src.replace(/^[ \t]*skip[ \t]*\r?\n/gm, ""));
     if (t.lang === "c") writeFileSync(p, src.replace(/^[ \t]*TEST_IGNORE\(\);[^\n]*\r?\n/gm, ""));
     if (t.lang === "csharp") writeFileSync(p, src.replace(/\[(Fact|Theory)\(Skip\s*=\s*"[^"]*"\)\]/g, "[$1]"));
-    // Elixir: nothing to edit; grading runs the tests tagged as pending too.
+    // Elixir: nothing to edit; grading runs the tests tagged as pending too. Bash and Tcl: the tests skip unless a
+    // variable is set, which grading sets. Lua: the track skips nothing.
   }
 }
 
@@ -454,6 +455,9 @@ async function grade(t: Task, ws: string, run: string) {
     c: ["make"],
     csharp: ["dotnet", "test"],
     elixir: ["mix", "test", "--include", "pending"],
+    bash: ["bash", "-c", 'for f in "$@"; do BATS_RUN_SKIPPED=true bats "$f" || exit 1; done', "bash", ...t.files.test],
+    lua: ["busted"],
+    tcl: ["bash", "-c", 'for f in "$@"; do RUN_ALL=1 tclsh "$f" || exit 1; done', "bash", ...t.files.test],
   };
   const cmd = cmds[t.lang] ?? [];
   mkdirSync(join(run, "cache"), { recursive: true });
@@ -515,6 +519,7 @@ const TOOL_CHECKS: (string | { cmd: string; lang: string })[] = [
   // C# and Elixir: build and test a one-test project, as a task's own commands would.
   ...(LANGS.includes("csharp") ? ["dotnet --version", { cmd: `sh ${CHECKS}/run.sh csharp`, lang: "csharp" }] : []),
   ...(LANGS.includes("elixir") ? ["elixir --version", { cmd: `sh ${CHECKS}/run.sh elixir`, lang: "elixir" }] : []),
+  ...["bash", "lua", "tcl"].filter((l) => LANGS.includes(l)).map((l) => ({ cmd: `sh ${CHECKS}/run.sh ${l}`, lang: l })),
 ];
 const checkCmd = (c: (typeof TOOL_CHECKS)[number]) => (typeof c === "string" ? c : c.cmd);
 const checkLang = (c: (typeof TOOL_CHECKS)[number]) => (typeof c === "string" ? undefined : c.lang);
@@ -573,7 +578,8 @@ code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST ${PROXY}/sel
 # Toolchains still work.
 ${TOOL_CHECKS.map((c) => {
   const lang = checkLang(c);
-  const env = lang ? `env ${Object.entries(LANG_ENV[lang]!).map(([k, v]) => `${k}=${v}`).join(" ")} ` : "";
+  const vars = Object.entries((lang && LANG_ENV[lang]) || {});
+  const env = vars.length ? `env ${vars.map(([k, v]) => `${k}=${v}`).join(" ")} ` : "";
   return `${env}${checkCmd(c)} >/dev/null 2>&1 || fail ${JSON.stringify("tool broken: " + checkCmd(c))}`;
 }).join("\n")}
 env | grep -iE 'key|token|secret|password' | grep -v ${JSON.stringify(PLACEHOLDER_KEY)} | sed 's/=.*//' | while read n; do fail "secret-looking variable in environment: $n"; done

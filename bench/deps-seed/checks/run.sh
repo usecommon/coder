@@ -1,6 +1,6 @@
 #!/bin/sh
 # Self-test helper: copy a one-test project to a fresh folder and run its tests, as a task's own commands would.
-# usage: run.sh csharp|elixir
+# usage: run.sh csharp|elixir|bash|lua|tcl
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 d=$(mktemp -d)
@@ -9,5 +9,8 @@ cd "$d"
 case "$1" in
   csharp) dotnet test ;;
   elixir) mix test ;;
+  bash) bats check.bats ;;
+  lua) busted ;;
+  tcl) tclsh check.test ;;
   *) echo "unknown check: $1"; exit 2 ;;
 esac

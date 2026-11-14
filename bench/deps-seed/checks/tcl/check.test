@@ -1,0 +1,12 @@
+#!/usr/bin/env tclsh
+package require tcltest
+namespace import ::tcltest::*
+source check.tcl
+
+test check-1 "adds" -body {
+    add 2 2
+} -returnCodes ok -result 4
+
+set failed [expr {$::tcltest::numTests(Failed) > 0}]
+cleanupTests
+if {$failed} then {exit 1}
