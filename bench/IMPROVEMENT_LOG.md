@@ -430,3 +430,14 @@ Full write-up: [RESULTS-fresh4.md](RESULTS-fresh4.md). The run stopped after rou
 3. **A message passed on a command line must not begin with a dash.** Both agents' command lines took such a message for an option.
 4. **Galley's second attempts are dearer than OpenCode's** ($0.0083 against $0.0057 each). Its saving comes from the first attempt.
 5. **The first attempt separates the agents more in these languages** (+4.5 points here, +1.0 on C, C# and Elixir), and the second attempt removes the difference in both.
+
+### Changes to Galley after the fourth confirmation (14 November, not yet measured)
+
+Both come from faults seen in that round. They are after the frozen version `de69760` and are not part of any result above.
+
+| Change | What it fixes | Seen in |
+|---|---|---|
+| **A session cut off while its tools were running can be resumed.** On the next message Galley gives every unanswered tool call a result that says the call did not finish and that its effect is unknown. | Resuming such a session sent the model a history it refuses, so the turn never started. It happens when the process is killed or a time limit hits during a command. | 2 of 200 task-runs; both lost their second attempt |
+| **A task that begins with dashes is a task.** The command line treats a word as an option only if it holds no whitespace, and a bare `--` ends the options. | A task starting with `--`, such as pasted test output, was read as an option and the run had no task. | 2 Galley task-runs before the harness was changed to avoid it |
+
+Tests: 76 pass, including one for each change.

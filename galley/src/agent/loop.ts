@@ -41,6 +41,9 @@ export interface TurnResult {
   costUsd: number;
 }
 
+/** The result recorded for a tool call that a cut-off session left without one. */
+const INTERRUPTED = "This call did not finish: the session was interrupted while it ran. Whether it took effect is not known, so check before relying on it.";
+
 export class Agent {
   readonly gate: PermissionGate;
   readonly undo = new UndoLog();
@@ -88,6 +91,11 @@ export class Agent {
     const { provider: pid, model } = splitModel(this.model);
     const provider = getProvider(pid, cfg);
     this.undo.beginTurn();
+    // A session cut off while its tools were running (the process was killed, a time limit hit) ends in tool calls
+    // without results, and no provider accepts that history. Close them first, and say what is not known.
+    const last = this.session.messages.at(-1);
+    if (last?.role === "assistant" && last.toolCalls.length > 0)
+      this.session.addMessage({ role: "tool", results: last.toolCalls.map((c) => ({ callId: c.id, name: c.name, isError: true, content: INTERRUPTED })) });
     // The system prompt names no project, so a session's first message says where the agent is.
     const first = this.session.messages.length === 0;
     this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${text}` : text });

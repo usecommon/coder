@@ -128,6 +128,28 @@ describe("agent loop", () => {
     expect(existsSync(join(ws, "half.txt"))).toBe(false);
   });
 
+  test("a session cut off while its tools were running can be resumed", async () => {
+    const mock = new MockProvider([{ text: "Carrying on." }]);
+    registerProvider(mock);
+    const ws = tempDir();
+    const cfg = testConfig();
+    // What a killed process leaves behind: the model's tool calls, and no results for them.
+    const cutOff = Session.create(ws, cfg.model);
+    cutOff.addMessage({ role: "user", content: "run the slow script" });
+    cutOff.addMessage({ role: "assistant", content: "", toolCalls: [{ id: "c1", name: "bash", input: { command: "sleep 600" }, rawInput: "" }, { id: "c2", name: "read", input: { path: "a.txt" }, rawInput: "" }] });
+    const agent = new Agent({ cfg, workspace: ws, session: Session.load(ws, cutOff.id), approver: async () => "once" });
+    await agent.send("the tests failed; fix it");
+    // Every call gets a result before the new message, or no provider accepts the history.
+    const sent = mock.requests[0]!.messages;
+    expect(sent.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user"]);
+    const results = (sent[2] as Extract<Message, { role: "tool" }>).results;
+    expect(results.map((r) => r.callId)).toEqual(["c1", "c2"]);
+    expect(results.every((r) => r.isError && r.content.includes("did not finish"))).toBe(true);
+    expect((sent[3] as Extract<Message, { role: "user" }>).content).toBe("the tests failed; fix it");
+    // The repair is stored, so the next resume starts from a history that is whole.
+    expect(Session.load(ws, cutOff.id).messages.map((m) => m.role)).toEqual(["user", "assistant", "tool", "user", "assistant"]);
+  });
+
   test("compacts long conversations into a summary", async () => {
     let n = 0;
     const big: Provider = {

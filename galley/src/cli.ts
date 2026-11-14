@@ -10,6 +10,7 @@ import type { AgentEvent } from "./core/types.ts";
 import { McpClient } from "./mcp/client.ts";
 import type { Approver } from "./safety/permission.ts";
 import { detectSandbox, sandboxProcMode } from "./safety/sandbox.ts";
+import { parseArgs, type Args } from "./args.ts";
 import { projectDir, Session } from "./session/store.ts";
 import { serve } from "./server/http.ts";
 import type { Tool } from "./tools/types.ts";
@@ -40,31 +41,6 @@ Options:
   --cwd <dir>                      workspace (default: current directory)
   --no-sandbox                     run commands without the OS sandbox (every command then asks)`;
 
-interface Args {
-  cmd: string;
-  positional: string[];
-  flags: Record<string, string | boolean>;
-}
-
-function parseArgs(argv: string[]): Args {
-  const flags: Record<string, string | boolean> = {};
-  const positional: string[] = [];
-  const short: Record<string, string> = { m: "model", s: "session", y: "yes", h: "help" };
-  const valued = new Set(["model", "session", "session-id", "cwd", "port", "hostname"]);
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
-    if (a.startsWith("--") || (a.startsWith("-") && a.length === 2)) {
-      let key = a.startsWith("--") ? a.slice(2) : (short[a.slice(1)] ?? a.slice(1));
-      let val: string | boolean = true;
-      if (key.includes("=")) [key, val] = [key.slice(0, key.indexOf("=")), key.slice(key.indexOf("=") + 1)];
-      else if (valued.has(key)) val = argv[++i] ?? "";
-      flags[key] = val;
-    } else positional.push(a);
-  }
-  const commands = new Set(["run", "serve", "sessions", "show", "init", "doctor", "help"]);
-  const cmd = positional[0] && commands.has(positional[0]) ? positional.shift()! : "chat";
-  return { cmd, positional, flags };
-}
 
 async function loadMcp(cfg: Config, workspace: string): Promise<{ tools: Tool[]; clients: McpClient[] }> {
   const tools: Tool[] = [];
