@@ -269,6 +269,8 @@ Provider-agnostic, 75+ providers via `/connect` (BYOK, local models). **OpenCode
 | Aider Polyglot | GPT-5 (high) 88%, o3-pro 84.9%, Gemini 2.5 Pro 83.1% (leaderboard not refreshed for newest models) |
 | DeepSeek-Coder (2023, model-only) | 33B beats CodeLlama-34B by 5.9–10.8 pts across HumanEval/MBPP/DS-1000 |
 
+**Update, 14 November 2026.** The Terminal-Bench board has moved on to version 4.1, where the best entries solve about 66% (Claude Opus 5.5 and Fable 5.2 in Claude Code; Gemini 4 Carbon in Antigravity CLI 64.5%; GPT-6.1 Sol in Codex 60.9%) and DeepSeek V4.1 Flash solves 38.5% at $0.56 a run. The table and what it shows about models, effort and cost per task are in [model-switching.md](model-switching.md), which also compares how the harnesses use more than one model.
+
 Caveats: numbers come from different dates, settings and often vendors; a self-reported harness run (LemonHarness) showed a ~9-point spread across five identical Terminal-Bench runs, so single-digit gaps are within noise.
 
 ---

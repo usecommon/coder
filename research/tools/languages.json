@@ -1,0 +1,7 @@
+{"preactjs__preact": "JavaScript/TypeScript", "axios__axios": "JavaScript/TypeScript", "facebook__docusaurus": "JavaScript/TypeScript", "vuejs__core": "JavaScript/TypeScript", "babel__babel": "JavaScript/TypeScript", "mrdoob__three.js": "JavaScript/TypeScript", "immutable-js__immutable-js": "JavaScript/TypeScript",
+ "projectlombok__lombok": "Java", "google__gson": "Java", "apache__lucene": "Java", "apache__druid": "Java", "javaparser__javaparser": "Java", "reactivex__rxjava": "Java",
+ "rubocop__rubocop": "Ruby", "fluent__fluentd": "Ruby", "fastlane__fastlane": "Ruby", "jekyll__jekyll": "Ruby", "jordansissel__fpm": "Ruby", "faker-ruby__faker": "Ruby",
+ "caddyserver__caddy": "Go", "gin-gonic__gin": "Go", "prometheus__prometheus": "Go", "gohugoio__hugo": "Go", "hashicorp__terraform": "Go",
+ "laravel__framework": "PHP", "briannesbitt__carbon": "PHP", "php-cs-fixer__php-cs-fixer": "PHP", "phpoffice__phpspreadsheet": "PHP",
+ "redis__redis": "C/C++", "jqlang__jq": "C/C++", "micropython__micropython": "C/C++", "valkey-io__valkey": "C/C++", "fmtlib__fmt": "C/C++", "nlohmann__json": "C/C++",
+ "tokio-rs__tokio": "Rust", "sharkdp__bat": "Rust", "astral-sh__ruff": "Rust", "tokio-rs__axum": "Rust", "uutils__coreutils": "Rust", "nushell__nushell": "Rust", "burntsushi__ripgrep": "Rust"}
