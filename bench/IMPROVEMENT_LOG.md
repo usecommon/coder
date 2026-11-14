@@ -491,3 +491,14 @@ Spend: about $0.06 for both runs and the cache measurement in point 5.
 - **With DeepSeek alone there is nothing to measure:** the only other model is weaker and dearer, and a second look by the same model has been measured three times without a gain (self-review, the verifier, the lean verifier, above).
 - **With a second provider the cost condition of the win rule cannot be met:** one consult of Claude Sonnet 5.5 costs about $0.03, three times the whole task on `deepseek-flash`, and as much as doing the whole task on Sonnet with Galley ($0.028, measured in [RESULTS-claude.md](RESULTS-claude.md)).
 - **What could be shown** is the pass rate of a strong model at well under its cost, or a gain on longer tasks. Both need the changes above, the Anthropic key and a budget of roughly $15 to $25 a round. That is the user's decision.
+
+### What an independent board says about harnesses on this model (read 14 November)
+
+The [Harness Leaderboard](https://huggingface.co/spaces/joelniklaus/harness-leaderboard) ran ten harnesses on DeepSeek V4.1 Flash: 198 hard tasks (Terminal-Bench 2.1 and DeepSWE), three attempts each, at two effort levels.
+
+- **OpenCode 2.2.6 solves 70.0% and is tied for first** with DeepSeek's own harness (70.1%). The best six are within 2.3 points; one of them is a 100-line agent with one tool.
+- **So the rule this log has used asks for more than any harness there has over OpenCode.** Our pooled lead of 3.8 points on Exercism first attempts is already larger than any gap among the best six on that board.
+- **Reasoning effort did nothing for this model there:** 65.6% of runs solved at low effort, 66.1% at high, for about a quarter more money. On our Exercism tasks low effort cost 44% less and scored about 3 points lower.
+- **Galley has not been run on such tasks.** It needs a container runtime and an adapter for the Harbor framework.
+
+The analysis, the feature comparison and the options with their costs are in [`research/galley-against-the-field.md`](../research/galley-against-the-field.md).

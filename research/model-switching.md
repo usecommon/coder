@@ -139,7 +139,7 @@ Terminal-Bench 4.1, read from the official board on 14 November 2026. Each row i
 
 What the board shows:
 
-- **The model decides far more than the harness.** Inside one harness the range is 6.7% to 65.8%. Where one model ran in two harnesses (the vendor test above), the difference was 1 to 4 points; our own Galley-against-OpenCode differences are 1 to 8 points.
+- **The model decides far more than the harness.** Inside one harness the range is 6.7% to 65.8%. On an independent board that ran ten harnesses on DeepSeek V4.1 Flash, the best six are within 2.3 points of each other ([galley-against-the-field.md](galley-against-the-field.md)); our own Galley-against-OpenCode differences are 1 to 8 points.
 - **Price per token does not predict cost per task.** Sonnet 5.5 costs half of Opus 5.5 per token and cost 55% *more* per run here, because it wrote twice as much. GPT-6.1 Sol reached 60.9% at $1.92 a run.
 - **`deepseek-flash` is the cheapest capable model on the board:** level with Claude Haiku 5.5 at a fifth of the cost per run, and 26 times cheaper per run than Opus 5.5, which solves 27 points more.
 - **`deepseek-v4-pro` is the weaker model, not the stronger one.** It is an older generation (August 2026). DeepSeek's own release notes agree: on every agentic benchmark both models report, V4.1 Flash is ahead (for example 90.6 against 87.9 on Terminal-Bench 2.1).
