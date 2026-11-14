@@ -6,7 +6,7 @@ usage: pool_sets.py <armA> <armB> <dir>:<round>[,<round>...][:<excluded lang/nam
   e.g. python3 -I bench/pool_sets.py opencode galley \\
          bench/data/fresh-2026-11-12:fresh-1,fresh-2,fresh-3,fresh-4:javascript/parallel-letter-frequency \\
          bench/data/tracks2-2026-11-13:t2-1,t2-2,t2-3,t2-4:typescript/crypto-square,typescript/pythagorean-triplet"""
-import collections, json, math, random, sys
+import collections, json, math, os, random, sys
 
 a, b = sys.argv[1], sys.argv[2]
 diffs, rows = [], []
@@ -23,7 +23,7 @@ for spec in sys.argv[3:]:
                 continue
             t = (o["lang"], o["name"])
             if t not in excl and o["agent"] in (a, b):
-                res[t][o["agent"]].append(bool(o["pass"]))
+                res[t][o["agent"]].append(bool(o.get(os.environ.get("BENCH_PASS", "pass"), o["pass"])))
     d = [sum(v[b]) / len(v[b]) - sum(v[a]) / len(v[a]) for v in res.values() if v[a] and v[b]]
     rate = lambda x: 100 * sum(sum(v[x]) / len(v[x]) for v in res.values() if v[a] and v[b]) / len(d)
     rows.append((base.rstrip("/").split("/")[-1], len(rounds), len(d), rate(a), rate(b), 100 * sum(d) / len(d), sum(x > 0 for x in d), sum(x < 0 for x in d)))

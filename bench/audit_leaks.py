@@ -82,10 +82,13 @@ def distinctive(poly, task, cache={}):
 
 
 def calls(run, agent):
-    """Yield (tool name, input dict, output text) for every tool call in a task-run."""
+    """Yield (tool name, input dict, output text) for every tool call in a task-run.
+    In a run with a second attempt, the test output the harness showed the agent is yielded as a call named
+    "__shown__" at the point where the second attempt begins: from there on the agent knows those lines."""
     if agent.split("-")[0] == "galley":  # "galley" or a variant such as "galley-sr"
         for f in sorted(glob.glob(f"{run}/galley-data/projects/*/sessions/*.jsonl")):
             pending = {}
+            users = 0
             for line in open(f, errors="replace"):
                 try:
                     o = json.loads(line)
@@ -94,6 +97,10 @@ def calls(run, agent):
                 m = o.get("message") if o.get("type") == "message" else None
                 if not m:
                     continue
+                if m.get("role") == "user":
+                    users += 1
+                    if users > 1 and os.path.exists(f"{run}/attempt-2-prompt.txt"):
+                        yield "__shown__", {}, str(m.get("content"))
                 if m.get("role") == "assistant":
                     for c in m.get("toolCalls") or []:
                         pending[c["id"]] = (c.get("name"), c.get("input") or {})
@@ -101,21 +108,23 @@ def calls(run, agent):
                     for r in m.get("results") or []:
                         name, inp = pending.pop(r.get("callId"), (r.get("name"), {}))
                         yield name, inp, str(r.get("content"))
-    else:  # opencode: JSON event stream in agent.log
-        f = f"{run}/agent.log"
-        if not os.path.exists(f):
-            return
-        for line in open(f, errors="replace"):
-            line = line.strip()
-            if not line.startswith("{"):
+    else:  # opencode: JSON event stream in agent.log, and in agent-2.log for a second attempt
+        for f in (f"{run}/agent.log", f"{run}/agent-2.log"):
+            if not os.path.exists(f):
                 continue
-            try:
-                p = json.loads(line).get("part") or {}
-            except Exception:
-                continue
-            if p.get("type") == "tool":
-                st = p.get("state") or {}
-                yield p.get("tool"), st.get("input") or {}, str(st.get("output"))
+            if f.endswith("agent-2.log") and os.path.exists(f"{run}/attempt-2-prompt.txt"):
+                yield "__shown__", {}, open(f"{run}/attempt-2-prompt.txt", errors="replace").read()
+            for line in open(f, errors="replace"):
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                try:
+                    p = json.loads(line).get("part") or {}
+                except Exception:
+                    continue
+                if p.get("type") == "tool":
+                    st = p.get("state") or {}
+                    yield p.get("tool"), st.get("input") or {}, str(st.get("output"))
 
 
 def proxy_kinds(base):
@@ -165,6 +174,9 @@ def scan_run(label, base, poly):
         kinds = collections.Counter()
         wrote = ""
         for name, inp, out in calls(run, agent):
+            if name == "__shown__":
+                wrote += out + "\n"
+                continue
             cmd = str(inp.get("command") or inp.get("filePath") or inp.get("path") or inp.get("pattern") or json.dumps(inp))
             if name in WRITE_TOOLS:
                 wrote += "\n".join(str(v) for v in inp.values()) + "\n"

@@ -5,6 +5,7 @@
 #      GALLEY_ARGS (extra Galley flags), BENCH_VARIANTS (named agent variants, see run.ts), CONCURRENCY, LIMIT, LANGS, ONLY,
 #      BENCH_SKIP (tasks to leave out, lang/name,...), EXCLUDE (tasks the report leaves out of scoring),
 #      BENCH_TASKS (the task checkout, default $WORK/polyglot; $WORK/tracks2 for the exercises from setup_tracks.sh).
+#      BENCH_ATTEMPTS (default 1; 2 gives a failed first attempt the test output and one more attempt).
 #      ALLOW_MODELS (models the proxy forwards, comma-separated; default: the round's model, plus the small model
 #      OpenCode uses beside an Anthropic one). The proxy refuses every other model and every other endpoint.
 #      API key: agents never get it. The proxy adds UPSTREAM_KEY to their requests; it defaults to

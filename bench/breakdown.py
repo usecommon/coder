@@ -5,7 +5,8 @@ usage: breakdown.py <prices: deepseek|sonnet> <rounds-dir> <round>[,<round>...] 
   e.g. BENCH_EXCLUDE=javascript/parallel-letter-frequency python3 -I bench/breakdown.py deepseek \
          bench/data/fresh-2026-11-12 fresh-1,fresh-2,fresh-3,fresh-4 opencode galley
 Each round is a folder with results.jsonl and the proxy's log (proxy.jsonl, or proxy-usage.jsonl as stored in data/).
-Costs are at the list price outside peak hours. The paired comparison is between the first two arms."""
+Costs are at the list price outside peak hours. The paired comparison is between the first two arms.
+BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt)."""
 import collections, json, math, os, random, statistics, sys
 
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
@@ -25,6 +26,7 @@ for r in rounds:
             continue
         t = (o["lang"], o["name"])
         if t not in EXCL:
+            o["pass"] = o.get(os.environ.get("BENCH_PASS", "pass"), o["pass"])
             res[(r, o["agent"], t)] = o
     p = next(q for q in (f"{base}/{r}/proxy.jsonl", f"{base}/{r}/proxy-usage.jsonl") if os.path.exists(q))
     for line in open(p):

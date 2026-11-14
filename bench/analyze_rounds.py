@@ -8,7 +8,8 @@ An arm may be a group, written name=armA+armB: its runs are pooled (the main eff
 Costs are at the list price outside peak hours, so arms and rounds compare like for like. DeepSeek bills double on
 weekdays 01:00-04:00 and 06:00-10:00 UTC; the "billed" column applies that to each request's start time.
 Prints per-round pass counts and costs per arm, then every pairwise pooled comparison (per-task means over the
-rounds each arm ran, difference, bootstrap 95% interval over tasks, two-sided sign test over tasks)."""
+rounds each arm ran, difference, bootstrap 95% interval over tasks, two-sided sign test over tasks).
+BENCH_PASS=pass2 scores a round run with two attempts by the result after both (default: the first attempt)."""
 import json, sys, math, random, collections, os, datetime
 # Tasks left out of scoring. BENCH_EXCLUDE="lang/name,lang/name" replaces the default list.
 EXCL = {tuple(x.split("/")) for x in os.environ.get("BENCH_EXCLUDE", "rust/macros,go/octal").split(",") if x}
@@ -31,6 +32,7 @@ for r in rounds:
         except Exception: continue
         t = (o["lang"], o["name"])
         if t in EXCL: continue
+        o["pass"] = o.get(os.environ.get("BENCH_PASS", "pass"), o["pass"])
         res.setdefault((r, o["agent"]), {})[t] = o
 use = collections.defaultdict(lambda: collections.Counter())   # (round, arm) -> counters
 for r in rounds:

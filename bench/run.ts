@@ -30,6 +30,9 @@ const LANGS = (args.langs ?? "python,go,rust").split(",");
 const LIMIT = Number(args.limit ?? 1e9);
 const CONC = Number(args.concurrency ?? 6);
 const AGENT_TIMEOUT = Number(args.timeout ?? 600) * 1000;
+// Attempts per task. 1: the agent works once and hidden tests decide. 2: as in Aider's own benchmark, an agent whose
+// first attempt fails is shown the failing test output and works once more, in the same session.
+const ATTEMPTS = Number(args.attempts ?? process.env.BENCH_ATTEMPTS ?? 1);
 const MODEL = args.model ?? "deepseek/deepseek-flash";
 const PROXY = args.proxy ?? "http://127.0.0.1:8799";
 const PROVIDER = MODEL.split("/")[0]!;
@@ -400,7 +403,46 @@ function runInAgentBox(cmd: string[], o: { agent: string; ws: string; state: str
   return box(wrapped, { cwd: o.ws, writable: [o.ws, ...o.state], readable: [...readable, dirname(SOCK)], network: false, env, timeoutMs: o.timeoutMs, stdout: o.stdout });
 }
 
-async function runAgent(agent: string, t: Task, ws: string, run: string) {
+/** The session of an agent's first attempt (Galley): the one that is not a helper agent's. */
+function galleySession(run: string): string | undefined {
+  const root = join(run, "galley-data", "projects");
+  const ids: string[] = [];
+  for (const project of existsSync(root) ? readdirSync(root) : []) {
+    const dir = join(root, project, "sessions");
+    for (const f of existsSync(dir) ? readdirSync(dir) : []) {
+      if (!f.endsWith(".jsonl")) continue;
+      try {
+        const meta = JSON.parse(readFileSync(join(dir, f), "utf8").split("\n")[0]!);
+        if (meta.type === "meta" && !meta.parentId) ids.push(meta.id);
+      } catch {}
+    }
+  }
+  return ids.sort().pop();
+}
+
+/** The failing test output as the agent is shown it: no colour codes, no timings, no path of this machine, and not
+ *  more than about 16,000 characters (the start and the end are kept). */
+function testOutput(text: string, ws: string, timedOut: boolean): string {
+  if (timedOut) return "Tests timed out!";
+  let out = text
+    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, "")
+    .replace(/\bin \d+\.\d+s\b/g, "")
+    .replaceAll(ws, basename(ws));
+  if (out.length > 16_000) {
+    const cut = out.slice(10_000, out.length - 6_000);
+    out = `${out.slice(0, 10_000)}\n[... ${cut.split("\n").length} lines left out ...]\n${out.slice(out.length - 6_000)}`;
+  }
+  return out.trim();
+}
+
+/** The message of a second attempt, worded as Aider's benchmark words it. */
+function retryPrompt(t: Task, output: string): string {
+  const sol = t.files.solution.filter((f) => !f.endsWith("Cargo.toml"));
+  return `${output}\n####\n\nSee the testing errors above.\nThe tests are correct, don't try and change them.\nFix the code in ${sol.join(" ")} to resolve the errors.\n`;
+}
+
+/** Run the agent on a task. With `retry`, continue its first session with that message instead. */
+async function runAgent(agent: string, t: Task, ws: string, run: string, retry?: string) {
   const tag = `${agent}__${t.lang}__${t.name}`;
   const v = VARIANTS[agent] ?? {};
   const effort = v.effort ?? EFFORT;
@@ -418,7 +460,10 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
     const extra = { ...JSON.parse(process.env.GALLEY_PROVIDER_OPTS ?? "{}"), ...(v.providerOpts ?? {}) };
     writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, ...(v.config ?? {}), providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
-    cmd = [process.execPath, galleyOf(agent), "run", prompt(t), "--yes", "-m", MODEL, "--cwd", ws, ...GALLEY_ARGS, ...(v.args ?? [])];
+    const session = retry ? galleySession(run) : undefined;
+    // Without a first session to continue (the agent died before it had one), the second attempt starts from the task.
+    const text = retry === undefined ? prompt(t) : session ? retry : `${prompt(t)}\n\n${retry}`;
+    cmd = [process.execPath, galleyOf(agent), "run", text, "--yes", "-m", MODEL, "--cwd", ws, ...(session ? ["-s", session] : []), ...GALLEY_ARGS, ...(v.args ?? [])];
   } else if (baseOf(agent) === "opencode") {
     stateDirs = state(["cache", "config", "xdg-data", "xdg-state", "xdg-cache"]);
     mkdirSync(join(run, "config", "opencode"), { recursive: true });
@@ -426,14 +471,14 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
       join(run, "config", "opencode", "opencode.json"),
       JSON.stringify({ $schema: "https://opencode.ai/config.json", autoupdate: false, share: "disabled", provider: { [PROVIDER]: { options: { baseURL: PROVIDER === "anthropic" ? `${PROXY}/${tag}/v1` : `${PROXY}/${tag}` } } } }),
     );
-    if (OC_CACHE_SEED) cpSync(OC_CACHE_SEED, join(run, "xdg-cache"), { recursive: true });
+    if (OC_CACHE_SEED && retry === undefined) cpSync(OC_CACHE_SEED, join(run, "xdg-cache"), { recursive: true });
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), XDG_DATA_HOME: join(run, "xdg-data"), XDG_STATE_HOME: join(run, "xdg-state"), XDG_CACHE_HOME: join(run, "xdg-cache") });
-    cmd = [OPENCODE, "run", "--model", MODEL, "--auto", "--format", "json", ...(PROVIDER === "anthropic" ? ["--variant", effort] : []), ...(v.args ?? []), prompt(t)];
+    cmd = [OPENCODE, "run", ...(retry === undefined ? [] : ["--continue"]), "--model", MODEL, "--auto", "--format", "json", ...(PROVIDER === "anthropic" ? ["--variant", effort] : []), ...(v.args ?? []), retry ?? prompt(t)];
   } else throw new Error(`unknown agent ${agent}`);
-  return runInAgentBox(cmd, { agent, ws, state: stateDirs, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, "agent.log") });
+  return runInAgentBox(cmd, { agent, ws, state: stateDirs, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, retry === undefined ? "agent.log" : "agent-2.log") });
 }
 
-async function grade(t: Task, ws: string, run: string) {
+async function grade(t: Task, ws: string, run: string, log = "grade.log") {
   // Restore the official tests (overwriting anything the agent wrote with the same names).
   for (const f of hidden(t)) {
     mkdirSync(dirname(join(ws, f)), { recursive: true });
@@ -467,7 +512,7 @@ async function grade(t: Task, ws: string, run: string) {
     env.GRADLE_USER_HOME = join(run, "cache", "gradle-grade");
     gradleHome(env.GRADLE_USER_HOME);
   }
-  const g = await box(cmd, { cwd: ws, writable: [ws, join(run, "cache")], network: false, env, timeoutMs: 300_000, stdout: join(run, "grade.log") });
+  const g = await box(cmd, { cwd: ws, writable: [ws, join(run, "cache")], network: false, env, timeoutMs: 300_000, stdout: join(run, log) });
   // The first Java reference solution graded leaves behind a warm Gradle home: keep it as the template.
   if (ORACLE && t.lang === "java" && g.code === 0 && !existsSync(GRADLE_HOME)) {
     cpSync(env.GRADLE_USER_HOME!, GRADLE_HOME, { recursive: true, filter: (src) => !/\/daemon(\/|$)|\.lock$|gradle\.properties$/.test(src) });
@@ -762,10 +807,35 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     }
   }
   const g = await grade(t, ws, run);
+  const pass = g.code === 0 && !g.timedOut;
+  // A second attempt, as in Aider's benchmark: the agent is shown the failing test output, in the session of its
+  // first attempt. The tests themselves are hidden again first.
+  let second: { a: typeof a; g: typeof g; started: number } | undefined;
+  if (ATTEMPTS >= 2 && agent !== "oracle" && !pass) {
+    const output = testOutput(existsSync(join(run, "grade.log")) ? readFileSync(join(run, "grade.log"), "utf8") : "", ws, g.timedOut);
+    for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
+    const started2 = Date.now();
+    const message = retryPrompt(t, output);
+    writeFileSync(join(run, "attempt-2-prompt.txt"), message); // for the audit: what the agent was shown
+    const a2 = await runAgent(agent, t, ws, run, message);
+    if (modelAnswers(`${agent}__${t.lang}__${t.name}`, started2) === 0) {
+      infraErrors++;
+      console.error(`infrastructure error: ${agent} ${t.lang}/${t.name} got no answer from the model in its second attempt; not recording a result`);
+      return;
+    }
+    second = { a: a2, g: await grade(t, ws, run, "grade-2.log"), started: started2 };
+  }
   pruneArtifacts(run, BUILD_DIRS[t.lang]);
-  const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started, memoryKills: a.memoryKills + g.memoryKills };
+  const pass2 = pass || (second !== undefined && second.g.code === 0 && !second.g.timedOut);
+  const r = {
+    agent, lang: t.lang, name: t.name, pass, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started,
+    memoryKills: a.memoryKills + g.memoryKills + (second ? second.a.memoryKills + second.g.memoryKills : 0),
+    // With two attempts allowed: `pass` stays the first attempt's result, `pass2` is the result after both.
+    ...(ATTEMPTS >= 2 ? { attempts: second ? 2 : 1, pass2, ...(second ? { startedAt2: second.started, agentMs2: second.a.ms, agentTimedOut2: second.a.timedOut, gradeExit2: second.g.code } : {}) } : {}),
+  };
   appendFileSync(resultsFile, JSON.stringify(r) + "\n");
   finished++;
-  console.log(`[${finished}/${jobs.length}] ${agent.padEnd(8)} ${t.lang}/${t.name}: ${r.pass ? "PASS" : "fail"} (${Math.round(a.ms / 1000)}s${a.timedOut ? ", timed out" : ""})`);
+  const outcome = r.pass ? "PASS" : second ? (pass2 ? "pass on the second attempt" : "fail twice") : "fail";
+  console.log(`[${finished}/${jobs.length}] ${agent.padEnd(8)} ${t.lang}/${t.name}: ${outcome} (${Math.round((a.ms + (second?.a.ms ?? 0)) / 1000)}s${a.timedOut || second?.a.timedOut ? ", timed out" : ""})`);
 });
 console.log(infraErrors ? `done, with ${infraErrors} infrastructure errors (run again to retry those tasks)` : "done");
