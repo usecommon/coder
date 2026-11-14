@@ -1,0 +1,4 @@
+{"agent": "opencode", "lang": "c", "name": "gigasecond", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 14092, "gradeExit": 2, "startedAt": 1794651926012, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "gigasecond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 20904, "gradeExit": 0, "startedAt": 1794651925983, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "react", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 93875, "gradeExit": 1, "startedAt": 1794651926058, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "react", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 188986, "gradeExit": 1, "startedAt": 1794651926079, "memoryKills": 0}

@@ -1,0 +1,11 @@
+[
+{
+"run": "t3-3",
+"agent": "galley",
+"lang": "elixir",
+"task": "transpose",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

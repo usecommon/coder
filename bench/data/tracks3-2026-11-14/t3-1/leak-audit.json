@@ -1,0 +1,20 @@
+[
+{
+"run": "t3-1",
+"agent": "opencode",
+"lang": "csharp",
+"task": "simple-linked-list",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t3-1",
+"agent": "opencode",
+"lang": "elixir",
+"task": "queen-attack",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

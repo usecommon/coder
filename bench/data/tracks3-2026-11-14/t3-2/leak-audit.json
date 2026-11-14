@@ -1,0 +1,20 @@
+[
+{
+"run": "t3-2",
+"agent": "opencode",
+"lang": "c",
+"task": "all-your-base",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t3-2",
+"agent": "opencode",
+"lang": "c",
+"task": "beer-song",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

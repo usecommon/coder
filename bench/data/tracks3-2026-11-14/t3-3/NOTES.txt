@@ -1,0 +1,6 @@
+14 Nov 2026, 10:25 UTC. After round 3 finished, the interruption guard set aside four results (c/gigasecond and
+csharp/react, both arms) and the driver ran those four task-runs again. That was a fault of the guard: it took the
+hardened proxy's own 403 answer to an agent's probe for a refusal by the model account. The four first results are
+restored in results.jsonl. The re-runs are in reruns-not-used.jsonl and their requests in proxy-reruns-not-used.jsonl;
+neither is used. The run folders of those four task-runs (transcripts, grade logs, workspaces) are those of the
+re-runs, so the counts that read transcripts describe the re-runs for these four.

@@ -1,6 +1,6 @@
 # Galley vs OpenCode on the Aider Polyglot benchmark
 
-A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results are in [RESULTS-fresh2.md](RESULTS-fresh2.md): the second confirmation on fresh tasks (PHP, TypeScript, Ruby), with a flaw in this benchmark found after it that worked against Galley. The first confirmation (JavaScript, Java, C++) is in [RESULTS-fresh.md](RESULTS-fresh.md). Before that: [RESULTS-clean.md](RESULTS-clean.md) (the development tasks, on the sandbox fixed on 12 November 2026). Earlier runs on the old sandbox: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
+A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results are in [RESULTS-fresh3.md](RESULTS-fresh3.md): the third confirmation on fresh tasks (C, C#, Elixir), the first on the corrected benchmark. The second (PHP, TypeScript, Ruby) is in [RESULTS-fresh2.md](RESULTS-fresh2.md), with the flaw found after it that worked against Galley. The first (JavaScript, Java, C++) is in [RESULTS-fresh.md](RESULTS-fresh.md). Before that: [RESULTS-clean.md](RESULTS-clean.md) (the development tasks, on the sandbox fixed on 12 November 2026). Earlier runs on the old sandbox: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
 
 ## Benchmark
 
@@ -21,7 +21,7 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 | Agent mode | Headless and auto-approving: `galley run --yes`, `opencode run --auto` |
 | Limits | 10 minutes per task; several task-runs in parallel, with agents interleaved per task. Since 12 November 2026 each task-run is capped at 4 GB of memory, so a runaway test program cannot starve the others. |
 | Containment (since 12 November 2026) | Each agent runs inside a bubblewrap sandbox that contains only the operating system, the language toolchains, the agent's own program, its workspace and its own state folders. Nothing else on the machine is mounted: not the operator's home directory, not this repository, not other tasks or runs. The agent is an unprivileged user with no capabilities. Package managers are offline (`CARGO_NET_OFFLINE`, `GOPROXY=off`; crates pre-fetched). **There is no internet access.** The only way out is a Unix socket to the logging proxy (relayed inside the sandbox by `forward.ts`), so only the model API is reachable. Galley also applies its own inner sandbox to its commands, as it does in normal use. Runs before this date used a weaker sandbox; see below. |
-| API keys | Agents never hold a real key. They send a placeholder; `proxy.ts` (or the machine's network layer) puts the real key on the request outside the sandbox. |
+| API keys | Agents never hold a real key. They send a placeholder; `proxy.ts` (or the machine's network layer) puts the real key on the request outside the sandbox. Since 14 November 2026 the proxy forwards only the chat endpoint and only the round's model, and refuses everything else itself. |
 | Self-test | Before every round, `run.ts --selftest` plants files an agent must never see (another task's workspace, the results file, a line of a real hidden test) and searches for them from inside the sandbox, tries the known ways out, and checks the toolchains. The round does not start unless it passes. |
 | Leak audit | After every round, `audit_leaks.py` reads each transcript for signs that an agent reached hidden tests anyway. Its count is reported next to the pass rate. |
 | Grading | Official tests restored, every skipped test switched on, then run in a network-less sandbox: `pytest`, `go test ./...`, `cargo test -- --include-ignored`, and for the added languages `jest`, `gradle test` and `cmake` + `make` (the commands Aider's benchmark uses, kept offline) |
@@ -67,6 +67,14 @@ The harness keeps test tools that every task needs in one shared folder: the `no
 
 - **Fix.** The shared folder is now outside `/tmp` (`/opt/bench-deps`, or `BENCH_DEPS`), and the self-test runs every tool check a second time from inside Galley's own sandbox.
 - **Results before the fix are not corrected.** They understate what Galley could do with the tools; by how much is not known.
+
+## A second flaw found on 14 November 2026: the proxy forwarded anything
+
+The proxy that adds the API key sits outside the sandbox and is the agents' only way out. It forwarded every request it was sent.
+
+- **What an agent did with it.** OpenCode's agent, unable to download an exercise's tests, found the proxy's socket, listed the account's models and asked a stronger model (`deepseek-v4-pro`) to recall the official test file. Three recorded task-runs over all campaigns, all OpenCode's; one of them passed (third confirmation, round 1) and was run again for both agents.
+- **Fix.** `proxy.ts` forwards only the chat endpoint, and only the models in `ALLOW_MODELS`, which `round.sh` sets to the round's model. The self-test checks both refusals from inside the sandbox. `audit_leaks.py` flags any answer from another model as contamination, and reports requests an agent's own commands put to the benchmark's model.
+- **Still possible.** An agent can ask the benchmark's own model a question of its own through the proxy. It is the same model and the tokens are counted.
 
 ## Reproduce
 

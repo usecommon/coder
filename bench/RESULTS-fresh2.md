@@ -74,6 +74,7 @@ The two confirmations side by side:
 4. **A smoke test came first.** One exercise (`bowling`) was run once in each language with both agents to check the harness. Nothing in Galley was changed after it.
 5. **Unusual task-runs.** One OpenCode task-run hit the 10-minute limit (it still passed). Two Galley test programs hit the 4 GB memory cap (one task passed, one failed). Seven model responses were cut by a connection reset or failed at the provider (four of OpenCode's, three of Galley's); every affected task-run finished normally.
 6. **The agents still look for the tests.** OpenCode tried the network in 32% of its task-runs and in 17 sent requests to the model proxy to fetch test files; six of its task-runs listed other processes or mounts. Galley tried the network in 7% and did neither of the other two. Every such request was refused, and no task-run reached hidden tests.
+7. **Found on 14 November: one OpenCode task-run asked a stronger model.** In round 2, on PHP `killer-sudoku-helper`, OpenCode's agent found the benchmark's proxy from inside its sandbox and sent it twelve requests of its own that were answered, seven of them by `deepseek-v4-pro`. The task failed anyway (Galley passed it), so no result here changes. The proxy now refuses every model but the benchmark's ([IMPROVEMENT_LOG.md](IMPROVEMENT_LOG.md)).
 
 ## Spend
 

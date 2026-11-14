@@ -92,6 +92,7 @@ Both are now fixed in Galley (commits `27a7407` and `1810aba`). The fixes came a
 4. **The agents still look for the tests.** OpenCode tried the network in 40% of its task-runs, and in 9 it sent requests to the model proxy to fetch the exercise's test file from GitHub. Galley tried the network in 11% and never the proxy. Every such request was refused. Three task-runs in round 4 listed other processes or mounts (one Galley, two OpenCode); the audit flags these for information, and none of them reached anything.
 5. **Twelve model responses were cut by connection resets** (10 of Galley's 5,600 requests, 2 of OpenCode's 5,400). Galley repeated the request each time, OpenCode's two came after its final message, and every affected task-run finished normally. The cut responses are not in the cost figures.
 6. **A smoke test came first.** Before round 1, three of the tasks (one per language) were run once with both agents to check the harness. Nothing in Galley was changed in the light of it.
+7. **Found on 14 November: one OpenCode task-run asked a stronger model.** In round 4, on Java `variable-length-quantity`, OpenCode's agent found the benchmark's proxy from inside its sandbox and sent it nine requests of its own, four of them to `deepseek-v4-pro`. The task failed anyway, so no result here changes; its cost is slightly understated, because those requests were priced as the benchmark's model. The proxy now refuses every model but the benchmark's ([IMPROVEMENT_LOG.md](IMPROVEMENT_LOG.md)).
 
 ## Spend
 

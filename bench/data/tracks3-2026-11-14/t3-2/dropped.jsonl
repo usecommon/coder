@@ -1,0 +1,2 @@
+{"agent": "galley", "lang": "csharp", "name": "rectangles", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 47053, "gradeExit": 0, "startedAt": 1794645499525, "memoryKills": 0, "dropped": "the other arm did not finish in the same session", "droppedAt": 1794645819969}
+{"agent": "opencode", "lang": "csharp", "name": "pythagorean-triplet", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 32024, "gradeExit": 1, "startedAt": 1794645430503, "memoryKills": 0, "dropped": "the other arm did not finish in the same session", "droppedAt": 1794645819969}

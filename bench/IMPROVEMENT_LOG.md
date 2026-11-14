@@ -295,3 +295,38 @@ Written at 08:45 UTC on 14 November. Round 1 was complete and its results known;
 - **Rule for affected tasks, fixed now.** A task in which either agent got an answer from another model is run again for both agents once round 3 is done, and the new results replace the first in the verdict. The first results are kept and reported, and I give the comparison both ways.
 - **Still allowed.** An agent may put its own question to the benchmark's model through the proxy. It is the same model, the tokens are counted, and the audit reports how often it happens.
 - **Not caught earlier because** the audit read the agents' tool calls for file access and did not look at which model a request named.
+
+### Third confirmation results (14 November, three rounds)
+
+Full write-up: [RESULTS-fresh3.md](RESULTS-fresh3.md).
+
+| | OpenCode 1.19.5 | Galley (frozen at `de69760`) |
+|---|---|---|
+| Passes per round (of 201) | 140, 148, 149 | 150, 147, 146 |
+| Pass rate | 72.5% | **73.5%** |
+| Cost per round | $1.13, $1.04, $1.13 (mean $1.10) | $1.03, $1.00, $0.92 (mean **$0.98**) |
+| Cost per solved task | $0.0076 | $0.0067 |
+
+| Win rule | Measured | Met |
+|---|---|---|
+| Lead of 5 points or more | +1.0 (95% interval −1.8 to +4.0) | **No** |
+| Sign test p < 0.05 | 28 tasks better, 23 worse; p = 0.58 | **No** |
+| Lower cost per round | 11% lower (interval 19% to 2% lower) | Yes |
+
+**Verdict by the rule fixed in advance: not a win.** On the corrected benchmark the two agents pass the same share of tasks within the noise, and Galley is the cheaper one. By language the lead is −2.3 points in C, +4.5 in C# and −0.9 in Elixir.
+
+- The task where OpenCode's agent had asked a stronger model was run again for both agents; both failed it. As first measured the lead is +0.8 points. The verdict is the same.
+- Three rounds: round 1 cost $2.21, over the $2.15 set for running four.
+- Two machine restarts; four results were set aside under the interruption rule and their pairs run again.
+- A fault of mine after round 3: the script applying that rule took the hardened proxy's 403 to an agent's probe for an account outage and set four results aside. They are restored; the re-runs it caused are not used.
+- Audit: no task-run of the final results reached hidden tests, got an answer from another model, or put its own request to the model.
+- Spend: $7.59, of which $1.08 for the diagnostics below.
+
+### What the third confirmation taught
+
+1. **Most failures are details only the hidden tests define.** Exact error messages, names of functions the tests call, error types, a trailing newline. 16 of the 76 Elixir tasks need message text that appears in no file the agent can see; 14 of the 43 C tasks are called by names the starting header does not declare. Both agents pass a fifth to a quarter of the first group and 60% of the second, against about 80% of everything else.
+2. **The agents get those right only from the model's memory of the public exercises.** The model says so in its reasoning, and reproduces canonical error messages word for word. Galley's solutions held 53% of the hidden messages and OpenCode's 37%; task by task, where every message has to be right, they are level.
+3. **Nothing I tried raises that recall.** Writing the test file first lowers it (14%). Reasoning effort makes no real difference (every message right in 26%, 30% and 34% of samples at `low`, default and `max`), and `max` costs 56% more output than the default.
+4. **So the harness has little to work with on this benchmark.** Failures a better self-check could have caught are a few task-runs per round. That matches round 7's conclusion that the pass rate is bound by the model.
+5. **The lead is not one number.** +7.6, +3.5 and +1.0 points on the three fresh sets differ by more than chance alone explains (p about 0.03). Pooled over the 503 tasks it is +3.5 points (95% interval +1.4 to +5.5, p = 0.003).
+6. **An agent will use any door left open.** OpenCode's agent went from a blocked download to the proxy's socket, to the account's model list, to a stronger model, in one task-run. The proxy now serves one endpoint and one model.

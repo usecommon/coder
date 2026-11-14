@@ -14,6 +14,7 @@
 6. **The DeepSeek baseline was contaminated, in OpenCode's favour.** OpenCode read hidden tests through holes in the benchmark sandbox in 22 task-runs; Galley in none. With those removed the comparison is 68.8% vs 65.5% (+3.3 points, 95% interval −2.0 to +8.6). **Re-measured on the fixed benchmark it is 70.3% vs 64.0%: a significant 6.3-point lead for Galley, at 11% higher cost.**
 7. **Confirmed on fresh tasks, 13 November: Galley 49.8% vs OpenCode 42.1%** on 121 JavaScript, Java and C++ exercises it was not developed on (+7.6 points, p = 0.001), at 10% higher cost per round. By the win rule that is not a win: the lead holds, the cost condition is missed. Two defects found in the logs account for most of the cost gap and are fixed but not yet measured. Details and next steps are at the end of section 4.
 8. **Second confirmation, 14 November: Galley 55.0% vs OpenCode 51.5%** on 181 fresh PHP, TypeScript and Ruby exercises (+3.5 points, p = 0.16), at 12% lower cost. Not a win by the rule either: now the cost condition is met and the lead is not. A flaw in the benchmark that worked against Galley in both confirmations was found afterwards and fixed. Details at the end of section 4.
+9. **Third confirmation, 14 November, on the corrected benchmark: Galley 73.5% vs OpenCode 72.5%** on 201 fresh C, C# and Elixir exercises (+1.0 points, p = 0.58), at 11% lower cost. Not a win by the rule. Pooled over the three fresh sets Galley leads by 3.5 points (95% interval +1.4 to +5.5). Reading the failures showed why the lead will not grow by harness work on this benchmark: most of them are details only the hidden tests define, which either agent gets right only from the model's memory of the public exercise. Details at the end of section 4.
 
 ## 1. What we know now
 
@@ -306,6 +307,7 @@ A PASS from self-written tests carried almost no information. The reason shows i
 | 4 | **Done:** confirmation on fresh tasks (JavaScript, Java, C++), Galley frozen first, both agents, 4 rounds | $6.38 | **Not a win by the rule.** Lead +7.6 points (p = 0.001): met. Cost 10% higher: missed. |
 | 4a | **Done:** round 10, the frozen Galley against the one with two fixes, side by side, 121 tasks, 2 rounds | $3.15 | Cost 17.5% lower, pass rate 2.5 points higher (within noise). The fixed version goes forward. |
 | 4b | **Done:** second confirmation on 181 fresh PHP, TypeScript and Ruby tasks, the fixed Galley against OpenCode, 4 rounds | $7.40 | **Not a win by the rule.** Cost 12% lower: met. Lead +3.5 points (p = 0.16): missed. |
+| 4c | **Done:** third confirmation on 201 fresh C, C# and Elixir tasks, the same frozen Galley, corrected benchmark, 3 rounds | $7.59 with diagnostics | **Not a win by the rule.** Cost 11% lower: met. Lead +1.0 points (p = 0.58): missed. |
 | 5 | Optional: a benchmark of long tasks, if Docker can be made to run here | Unknown | Decide after steps 1 to 4 |
 
 The saved attempts that step 3 needs are in this session's temporary storage. If that is lost, regenerating them costs about $1.50.
@@ -389,15 +391,44 @@ Full write-up: [`bench/RESULTS-fresh2.md`](../bench/RESULTS-fresh2.md).
 - **A 5-point lead is not shown on the second set.** The two estimates of the lead are compatible with each other and with a true lead near 5 points, which is exactly where the rule's threshold sits. On tasks like these the rule is close to a coin toss on the lead alone.
 - **A flaw in the benchmark worked against Galley in both confirmations.** Its sandbox hides `/tmp`, where the harness kept jest, the Java test libraries and PHPUnit, so Galley could not run them and OpenCode could. It is fixed in the harness. The published results are not corrected for it.
 
+### Results of the third confirmation (14 November)
+
+Full write-up: [`bench/RESULTS-fresh3.md`](../bench/RESULTS-fresh3.md).
+
+| DeepSeek-V4.1-Flash | First (121 tasks) | Second (181 tasks) | Third (201 tasks) |
+|---|---|---|---|
+| Languages | JavaScript, Java, C++ | PHP, TypeScript, Ruby | C, C#, Elixir |
+| Benchmark | flaw against Galley | flaw against Galley | corrected |
+| Pass rate, Galley against OpenCode | 49.8% against 42.1% | 55.0% against 51.5% | 73.5% against 72.5% |
+| Lead | +7.6 points, p = 0.001 | +3.5 points, p = 0.16 | +1.0 points, p = 0.58 |
+| Galley's cost against OpenCode's | 10% higher | 12% lower | 11% lower |
+| Verdict by the rule | Not a win: cost | Not a win: lead | Not a win: lead |
+
+- **Pooled over the 503 fresh tasks the lead is 3.5 points** (95% interval +1.4 to +5.5, p = 0.003). The three sets differ by more than chance alone explains (p about 0.03), so it is not one number.
+- **Correcting the benchmark did not raise the lead.** The smallest lead was measured without the flaw.
+- **The cost advantage held:** about 11% in both campaigns since the two fixes.
+
+### Why the lead will not grow by harness work on this benchmark
+
+Reading the failed gradings of the third confirmation, for both agents:
+
+- **Most failures are details only the hidden tests define:** the exact text of an error message, the name of a function the tests call, an error type, a trailing newline. 16 of the 76 Elixir tasks need message text that is in no visible file; 14 of the 43 C tasks are called by names the starting header does not declare.
+- **Both agents get those right only from the model's memory of the public exercise.** The model reproduces canonical messages word for word and says in its reasoning that it is recalling the official test file.
+- **Three ways to raise that recall were measured and none works:** writing the test file first (recall drops to 14%), a higher reasoning effort (no real difference, 56% more output at `max`), and guidance to keep declared interfaces (the cases are too rare).
+- **What a harness can still win is small.** Failures a better self-check could have caught are a few task-runs per round for each agent.
+
+This agrees with section 1: on these tasks the pass rate is bound by the model, and the method with real evidence behind it, several attempts chosen by running code, has nothing to choose with when the deciding detail is hidden.
+
 ### What could be done from here
 
-1. **Re-run the second confirmation on the corrected harness** (about $7.50). Same frozen Galley, same OpenCode, same 181 tasks, same rule. This is a corrected measurement, not a new confirmation: the tasks have been run before, though Galley has not been changed since. It answers the question the flaw leaves open, which is how the two agents compare when both can reach the test tools.
-2. **Stop here.** The supportable statement is: on DeepSeek-V4.1-Flash, Galley is cheaper than OpenCode (about 12%) and passes somewhat more tasks (3 to 8 points depending on the task set), measured with a benchmark flaw that favoured OpenCode. A 5-point lead with lower cost on one fresh task set has not been shown.
-3. **A third confirmation on new languages** on the corrected harness (set-up work, then about $8). The cleanest evidence, and the slowest.
+1. **Stop here and record the result** (no cost). The supportable statement: on DeepSeek-V4.1-Flash, over 503 fresh tasks in nine languages, Galley passes about 3.5 points more than OpenCode and, since its two fixes, costs about 11% less. A 5-point lead on one fresh set has been shown once, with a higher cost, and not since.
+2. **Another confirmation with the same rule** (about $8; Bash, Lua and Tcl tasks are prepared). With a true lead near 3 to 4 points, the chance of measuring 5 or more with p < 0.05 on about 200 tasks is about one in five, and a pass would be mostly luck.
+3. **Measure something the harness controls.** Aider's own protocol gives a second attempt after showing the failing test output; there the hidden detail is revealed and the agents are compared on using feedback. It needs harness work and about $10, and it changes what "winning" means, so it is a decision, not a continuation.
+4. **A benchmark of long, multi-step tasks** (step 5 of the plan), where context handling, sandboxing and cost per task matter more. Still untested.
 
 ### What "beating OpenCode" realistically looks like now
 
-- **DeepSeek:** cheaper, and ahead by a few points on every task set measured. Whether the lead clears 5 points depends on the task set and, perhaps, on the flaw above.
+- **DeepSeek:** cheaper by about 11%, and ahead by a few points on average. Level on the corrected benchmark's own task set.
 - **Claude:** parity is not shown. The cost advantage is solid and `medium` effort widened it.
 - **Long, multi-step benchmarks:** still untested.
 
@@ -407,6 +438,8 @@ Full write-up: [`bench/RESULTS-fresh2.md`](../bench/RESULTS-fresh2.md).
 - An `xhigh` test on tasks the model already solves.
 - More prompt wording changes without the run budget to measure them.
 - Majority voting, self-review loops, or automated prompt evolution on this benchmark.
+- Prompts that ask the model to recall an exercise's tests, or a higher reasoning effort: both measured on 14 November, neither helps.
+- Repeating confirmations until one clears the bar: with the lead where it is, that would be luck and would have to be reported as such.
 
 ## Sources
 

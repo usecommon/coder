@@ -1,0 +1,402 @@
+{"agent": "galley", "lang": "c", "name": "acronym", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 14947, "gradeExit": 2, "startedAt": 1794643825276, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "acronym", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 17130, "gradeExit": 2, "startedAt": 1794643825287, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "allergies", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19008, "gradeExit": 0, "startedAt": 1794643825308, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "allergies", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25272, "gradeExit": 0, "startedAt": 1794643825303, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "binary", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 12736, "gradeExit": 0, "startedAt": 1794643844521, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "binary", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 10893, "gradeExit": 0, "startedAt": 1794643850837, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "all-your-base", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 45258, "gradeExit": 2, "startedAt": 1794643825293, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "binary-search-tree", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 14311, "gradeExit": 0, "startedAt": 1794643857443, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "binary-search-tree", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 11523, "gradeExit": 0, "startedAt": 1794643861919, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "clock", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 22349, "gradeExit": 0, "startedAt": 1794643873737, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "clock", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 18321, "gradeExit": 0, "startedAt": 1794643896344, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "circular-buffer", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 49345, "gradeExit": 2, "startedAt": 1794643870764, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "complex-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 13313, "gradeExit": 0, "startedAt": 1794643914917, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "complex-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 12078, "gradeExit": 0, "startedAt": 1794643920268, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "beer-song", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 98365, "gradeExit": 2, "startedAt": 1794643840551, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "crypto-square", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 11285, "gradeExit": 0, "startedAt": 1794643928494, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "crypto-square", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 14749, "gradeExit": 0, "startedAt": 1794643932556, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "diamond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15541, "gradeExit": 0, "startedAt": 1794643939146, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "diamond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19525, "gradeExit": 0, "startedAt": 1794643939978, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "dnd-character", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 12668, "gradeExit": 0, "startedAt": 1794643954884, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "dnd-character", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21579, "gradeExit": 0, "startedAt": 1794643947527, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "gigasecond", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 31880, "gradeExit": 2, "startedAt": 1794643959709, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "grade-school", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 42270, "gradeExit": 2, "startedAt": 1794643969317, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "grade-school", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 47941, "gradeExit": 0, "startedAt": 1794643991766, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "beer-song", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 209469, "gradeExit": 0, "startedAt": 1794643842621, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "kindergarten-garden", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 42029, "gradeExit": 0, "startedAt": 1794644011782, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "kindergarten-garden", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 16037, "gradeExit": 0, "startedAt": 1794644040003, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "gigasecond", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 90382, "gradeExit": 2, "startedAt": 1794643967750, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "knapsack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15710, "gradeExit": 0, "startedAt": 1794644052350, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "knapsack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 16262, "gradeExit": 0, "startedAt": 1794644054058, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "linked-list", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15801, "gradeExit": 0, "startedAt": 1794644058339, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "linked-list", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 21806, "gradeExit": 2, "startedAt": 1794644056281, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "list-ops", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15889, "gradeExit": 0, "startedAt": 1794644070509, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "meetup", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 13809, "gradeExit": 0, "startedAt": 1794644078289, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "circular-buffer", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 221451, "gradeExit": 2, "startedAt": 1794643871949, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "meetup", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 26026, "gradeExit": 0, "startedAt": 1794644074334, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "perfect-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 9472, "gradeExit": 0, "startedAt": 1794644093608, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "list-ops", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 41529, "gradeExit": 0, "startedAt": 1794644068284, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "perfect-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 17556, "gradeExit": 0, "startedAt": 1794644100630, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "phone-number", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21858, "gradeExit": 0, "startedAt": 1794644103376, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "phone-number", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 32090, "gradeExit": 0, "startedAt": 1794644110030, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "pig-latin", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 18840, "gradeExit": 0, "startedAt": 1794644125478, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "protein-translation", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 12878, "gradeExit": 2, "startedAt": 1794644144507, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "protein-translation", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21383, "gradeExit": 0, "startedAt": 1794644142316, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "pig-latin", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 45921, "gradeExit": 0, "startedAt": 1794644118379, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "queen-attack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 10908, "gradeExit": 0, "startedAt": 1794644164497, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "pythagorean-triplet", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25717, "gradeExit": 0, "startedAt": 1794644157607, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "queen-attack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 11018, "gradeExit": 0, "startedAt": 1794644175595, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "palindrome-products", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 107982, "gradeExit": 2, "startedAt": 1794644086600, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "palindrome-products", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 100513, "gradeExit": 2, "startedAt": 1794644092319, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "rational-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 33652, "gradeExit": 0, "startedAt": 1794644184315, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "all-your-base", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 402004, "gradeExit": 2, "startedAt": 1794643825296, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "resistor-color-trio", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 39253, "gradeExit": 2, "startedAt": 1794644227470, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "rational-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 80263, "gradeExit": 0, "startedAt": 1794644186845, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "robot-simulator", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 12650, "gradeExit": 0, "startedAt": 1794644267370, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "robot-simulator", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 14749, "gradeExit": 0, "startedAt": 1794644266874, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "react", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 89131, "gradeExit": 0, "startedAt": 1794644194880, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "say", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19725, "gradeExit": 0, "startedAt": 1794644280240, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "say", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19434, "gradeExit": 0, "startedAt": 1794644281825, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "series", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 20447, "gradeExit": 0, "startedAt": 1794644284219, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "series", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 13281, "gradeExit": 0, "startedAt": 1794644300169, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "space-age", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 10077, "gradeExit": 0, "startedAt": 1794644304857, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "pythagorean-triplet", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 151275, "gradeExit": 0, "startedAt": 1794644163926, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "space-age", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15963, "gradeExit": 0, "startedAt": 1794644301499, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "spiral-matrix", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 12077, "gradeExit": 2, "startedAt": 1794644315138, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "spiral-matrix", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15253, "gradeExit": 0, "startedAt": 1794644313691, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "sublist", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 13949, "gradeExit": 0, "startedAt": 1794644315403, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "sublist", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 12097, "gradeExit": 0, "startedAt": 1794644317631, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "triangle", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 7915, "gradeExit": 2, "startedAt": 1794644329606, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "sum-of-multiples", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 10995, "gradeExit": 0, "startedAt": 1794644329136, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "triangle", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 18218, "gradeExit": 2, "startedAt": 1794644329969, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "sum-of-multiples", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 24018, "gradeExit": 0, "startedAt": 1794644327392, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "resistor-color-trio", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 151925, "gradeExit": 2, "startedAt": 1794644218184, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "variable-length-quantity", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 37906, "gradeExit": 0, "startedAt": 1794644348366, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "variable-length-quantity", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 37744, "gradeExit": 0, "startedAt": 1794644351598, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "word-count", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 26327, "gradeExit": 0, "startedAt": 1794644370284, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "two-bucket", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 65696, "gradeExit": 0, "startedAt": 1794644337700, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "word-count", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 17090, "gradeExit": 0, "startedAt": 1794644386496, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "two-bucket", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 65597, "gradeExit": 0, "startedAt": 1794644340332, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "wordy", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21208, "gradeExit": 0, "startedAt": 1794644389556, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "yacht", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 11482, "gradeExit": 2, "startedAt": 1794644403818, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "yacht", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 16745, "gradeExit": 0, "startedAt": 1794644403613, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "wordy", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 29452, "gradeExit": 0, "startedAt": 1794644396849, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "zebra-puzzle", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 26933, "gradeExit": 0, "startedAt": 1794644410975, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "accumulate", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15430, "gradeExit": 0, "startedAt": 1794644420548, "memoryKills": 0}
+{"agent": "galley", "lang": "c", "name": "zebra-puzzle", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 43981, "gradeExit": 0, "startedAt": 1794644406171, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "accumulate", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 29115, "gradeExit": 0, "startedAt": 1794644415532, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "acronym", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21768, "gradeExit": 0, "startedAt": 1794644438164, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "acronym", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 34726, "gradeExit": 0, "startedAt": 1794644426498, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "all-your-base", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 27716, "gradeExit": 1, "startedAt": 1794644453338, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "affine-cipher", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 34287, "gradeExit": 0, "startedAt": 1794644450396, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "all-your-base", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 21576, "gradeExit": 1, "startedAt": 1794644470673, "memoryKills": 0}
+{"agent": "opencode", "lang": "c", "name": "react", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 314890, "gradeExit": 0, "startedAt": 1794644195512, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "allergies", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 27563, "gradeExit": 0, "startedAt": 1794644472563, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "allergies", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 22284, "gradeExit": 0, "startedAt": 1794644491766, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "affine-cipher", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 71043, "gradeExit": 0, "startedAt": 1794644444706, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "bank-account", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 23716, "gradeExit": 1, "startedAt": 1794644512633, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "bank-account", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 26832, "gradeExit": 0, "startedAt": 1794644510778, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "binary-search-tree", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 24272, "gradeExit": 0, "startedAt": 1794644525270, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "alphametics", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 59607, "gradeExit": 1, "startedAt": 1794644504341, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "binary-search-tree", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 44056, "gradeExit": 0, "startedAt": 1794644523688, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "book-store", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 41563, "gradeExit": 0, "startedAt": 1794644556366, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "bottle-song", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19257, "gradeExit": 0, "startedAt": 1794644579453, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "alphametics", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 111010, "gradeExit": 1, "startedAt": 1794644498825, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "bottle-song", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 56157, "gradeExit": 0, "startedAt": 1794644562722, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "book-store", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 72510, "gradeExit": 0, "startedAt": 1794644552946, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "bowling", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 50184, "gradeExit": 1, "startedAt": 1794644583225, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "bowling", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 22484, "gradeExit": 1, "startedAt": 1794644612469, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "change", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 27927, "gradeExit": 0, "startedAt": 1794644622424, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "circular-buffer", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21668, "gradeExit": 0, "startedAt": 1794644637116, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "change", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 47953, "gradeExit": 0, "startedAt": 1794644617201, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "clock", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21187, "gradeExit": 0, "startedAt": 1794644645288, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "circular-buffer", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 37934, "gradeExit": 0, "startedAt": 1794644630550, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "complex-numbers", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 19661, "gradeExit": 1, "startedAt": 1794644668476, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "clock", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 40374, "gradeExit": 0, "startedAt": 1794644645006, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "complex-numbers", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 28630, "gradeExit": 1, "startedAt": 1794644661393, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "crypto-square", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 23942, "gradeExit": 0, "startedAt": 1794644682952, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "crypto-square", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 27648, "gradeExit": 0, "startedAt": 1794644694935, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "custom-set", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 27274, "gradeExit": 0, "startedAt": 1794644696637, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "diamond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15710, "gradeExit": 0, "startedAt": 1794644719437, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "custom-set", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 49910, "gradeExit": 0, "startedAt": 1794644695119, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "connect", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 67338, "gradeExit": 0, "startedAt": 1794644679915, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "diamond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 24196, "gradeExit": 0, "startedAt": 1794644734232, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "dnd-character", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21271, "gradeExit": 0, "startedAt": 1794644744947, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "dnd-character", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 40177, "gradeExit": 0, "startedAt": 1794644734961, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "connect", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 102975, "gradeExit": 0, "startedAt": 1794644679781, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "dominoes", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 30272, "gradeExit": 0, "startedAt": 1794644755856, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "dominoes", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 31587, "gradeExit": 0, "startedAt": 1794644757574, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "error-handling", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 22228, "gradeExit": 0, "startedAt": 1794644791850, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "error-handling", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 30161, "gradeExit": 0, "startedAt": 1794644784773, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "food-chain", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 31070, "gradeExit": 0, "startedAt": 1794644796084, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "food-chain", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 34741, "gradeExit": 0, "startedAt": 1794644797778, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "dot-dsl", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 76193, "gradeExit": 1, "startedAt": 1794644769084, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "gigasecond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15804, "gradeExit": 0, "startedAt": 1794644836691, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "gigasecond", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 20369, "gradeExit": 0, "startedAt": 1794644840697, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "grade-school", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21150, "gradeExit": 0, "startedAt": 1794644869536, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "dot-dsl", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 131769, "gradeExit": 1, "startedAt": 1794644776827, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "grade-school", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19695, "gradeExit": 0, "startedAt": 1794644898525, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "forth", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 107032, "gradeExit": 0, "startedAt": 1794644826401, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "grep", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 39643, "gradeExit": 0, "startedAt": 1794644914467, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "house", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 33502, "gradeExit": 1, "startedAt": 1794644941401, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "forth", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 155299, "gradeExit": 0, "startedAt": 1794644827542, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "grep", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 56714, "gradeExit": 0, "startedAt": 1794644926452, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "house", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 31120, "gradeExit": 1, "startedAt": 1794644962486, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "killer-sudoku-helper", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19654, "gradeExit": 0, "startedAt": 1794644993244, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "killer-sudoku-helper", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 30257, "gradeExit": 0, "startedAt": 1794644982995, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "kindergarten-garden", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 23012, "gradeExit": 0, "startedAt": 1794644993739, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "kindergarten-garden", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 20371, "gradeExit": 1, "startedAt": 1794645003175, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "knapsack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 18079, "gradeExit": 0, "startedAt": 1794645024252, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "knapsack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 24243, "gradeExit": 0, "startedAt": 1794645023945, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "go-counting", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 188277, "gradeExit": 1, "startedAt": 1794644860639, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "linked-list", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 21845, "gradeExit": 0, "startedAt": 1794645050560, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "list-ops", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 24334, "gradeExit": 0, "startedAt": 1794645059706, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "list-ops", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 15924, "gradeExit": 0, "startedAt": 1794645082886, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "go-counting", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 251276, "gradeExit": 1, "startedAt": 1794644851423, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "ledger", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 88189, "gradeExit": 0, "startedAt": 1794645032176, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "matrix", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 29158, "gradeExit": 0, "startedAt": 1794645112344, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "matrix", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19213, "gradeExit": 0, "startedAt": 1794645128554, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "markdown", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 53956, "gradeExit": 0, "startedAt": 1794645107857, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "linked-list", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 107668, "gradeExit": 0, "startedAt": 1794645057688, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "meetup", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25079, "gradeExit": 0, "startedAt": 1794645150478, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "meetup", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25244, "gradeExit": 0, "startedAt": 1794645155590, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "markdown", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 134138, "gradeExit": 0, "startedAt": 1794645092249, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "ocr-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 67130, "gradeExit": 0, "startedAt": 1794645174597, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "palindrome-products", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 61060, "gradeExit": 1, "startedAt": 1794645190349, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "ledger", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 242613, "gradeExit": 0, "startedAt": 1794645026267, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "parallel-letter-frequency", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 37504, "gradeExit": 0, "startedAt": 1794645241397, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "parallel-letter-frequency", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 28686, "gradeExit": 0, "startedAt": 1794645253587, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "perfect-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 28238, "gradeExit": 0, "startedAt": 1794645270449, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "ocr-numbers", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 120891, "gradeExit": 0, "startedAt": 1794645180329, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "perfect-numbers", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 27001, "gradeExit": 1, "startedAt": 1794645283975, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "phone-number", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25228, "gradeExit": 0, "startedAt": 1794645298115, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "phone-number", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 40116, "gradeExit": 0, "startedAt": 1794645295569, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "pig-latin", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 33287, "gradeExit": 0, "startedAt": 1794645310848, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "pig-latin", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 29940, "gradeExit": 0, "startedAt": 1794645313565, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "protein-translation", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 23611, "gradeExit": 0, "startedAt": 1794645355881, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "poker", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 64932, "gradeExit": 0, "startedAt": 1794645320730, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "poker", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 57103, "gradeExit": 0, "startedAt": 1794645332705, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "protein-translation", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 23775, "gradeExit": 0, "startedAt": 1794645388919, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "proverb", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 19962, "gradeExit": 0, "startedAt": 1794645400635, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "proverb", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 32339, "gradeExit": 0, "startedAt": 1794645398291, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "pov", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 76121, "gradeExit": 1, "startedAt": 1794645355758, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "palindrome-products", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 243886, "gradeExit": 0, "startedAt": 1794645188081, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "queen-attack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 26436, "gradeExit": 0, "startedAt": 1794645441524, "memoryKills": 0}
+{"agent": "opencode", "lang": "csharp", "name": "queen-attack", "pass": true, "agentExit": 0, "agentTimedOut": false, "agentMs": 25824, "gradeExit": 0, "startedAt": 1794645443177, "memoryKills": 0}
+{"agent": "galley", "lang": "csharp", "name": "pov", "pass": false, "agentExit": 0, "agentTimedOut": false, "agentMs": 141937, "gradeExit": 1, "startedAt": 1794645348297, "memoryKills": 0}
+{"agent":"opencode","lang":"csharp","name":"pythagorean-triplet","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19388,"gradeExit":0,"startedAt":1794645852636,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"pythagorean-triplet","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24071,"gradeExit":0,"startedAt":1794645852620,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"rational-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":61448,"gradeExit":0,"startedAt":1794645852686,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"rectangles","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":37341,"gradeExit":0,"startedAt":1794645885876,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"resistor-color-trio","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":23827,"gradeExit":1,"startedAt":1794645922893,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"resistor-color-trio","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24422,"gradeExit":0,"startedAt":1794645932241,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"rectangles","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":98359,"gradeExit":0,"startedAt":1794645881353,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"rational-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":162285,"gradeExit":0,"startedAt":1794645852705,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"robot-name","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":37081,"gradeExit":0,"startedAt":1794645989950,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"robot-name","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18820,"gradeExit":0,"startedAt":1794646023532,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"robot-simulator","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27573,"gradeExit":0,"startedAt":1794646036514,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"robot-simulator","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16622,"gradeExit":0,"startedAt":1794646049899,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"satellite","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":19847,"gradeExit":1,"startedAt":1794646075280,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"satellite","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25189,"gradeExit":0,"startedAt":1794646073035,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"rest-api","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":154085,"gradeExit":1,"startedAt":1794645965722,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"say","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":26657,"gradeExit":0,"startedAt":1794646104619,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"say","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":28467,"gradeExit":0,"startedAt":1794646107607,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"series","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20391,"gradeExit":0,"startedAt":1794646139149,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"series","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":32298,"gradeExit":0,"startedAt":1794646129879,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"react","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":335291,"gradeExit":1,"startedAt":1794645852716,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"simple-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":38116,"gradeExit":0,"startedAt":1794646171246,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"sgf-parsing","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":69740,"gradeExit":0,"startedAt":1794646148426,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"simple-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25489,"gradeExit":0,"startedAt":1794646194292,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"rest-api","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":262133,"gradeExit":1,"startedAt":1794645957675,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"space-age","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":11817,"gradeExit":0,"startedAt":1794646230126,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"space-age","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19235,"gradeExit":0,"startedAt":1794646230563,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"spiral-matrix","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":14967,"gradeExit":0,"startedAt":1794646251375,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"sgf-parsing","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":108025,"gradeExit":0,"startedAt":1794646168497,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"spiral-matrix","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18681,"gradeExit":0,"startedAt":1794646258189,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"sublist","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20066,"gradeExit":0,"startedAt":1794646284910,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"react","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":474671,"gradeExit":0,"startedAt":1794645852726,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"sublist","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20177,"gradeExit":0,"startedAt":1794646313805,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"state-of-tic-tac-toe","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":52931,"gradeExit":0,"startedAt":1794646284812,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"simple-linked-list","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":141244,"gradeExit":1,"startedAt":1794646218673,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"sum-of-multiples","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19293,"gradeExit":0,"startedAt":1794646343689,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"sum-of-multiples","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":23283,"gradeExit":0,"startedAt":1794646340186,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"simple-linked-list","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":148068,"gradeExit":1,"startedAt":1794646230061,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"tournament","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":45597,"gradeExit":0,"startedAt":1794646347345,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"state-of-tic-tac-toe","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":120262,"gradeExit":0,"startedAt":1794646274694,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"tournament","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":38702,"gradeExit":1,"startedAt":1794646370886,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"triangle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27674,"gradeExit":0,"startedAt":1794646403334,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"triangle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18168,"gradeExit":0,"startedAt":1794646417314,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"tree-building","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":35727,"gradeExit":0,"startedAt":1794646400978,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"transpose","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":70171,"gradeExit":0,"startedAt":1794646373693,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"tree-building","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":60459,"gradeExit":1,"startedAt":1794646387739,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"twelve-days","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":24904,"gradeExit":1,"startedAt":1794646440704,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"twelve-days","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":28984,"gradeExit":1,"startedAt":1794646443855,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"variable-length-quantity","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25824,"gradeExit":0,"startedAt":1794646475232,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"variable-length-quantity","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":46808,"gradeExit":1,"startedAt":1794646456848,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"word-count","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":37865,"gradeExit":0,"startedAt":1794646484125,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"word-count","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16509,"gradeExit":0,"startedAt":1794646511530,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"two-bucket","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":107383,"gradeExit":1,"startedAt":1794646445063,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"wordy","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27399,"gradeExit":0,"startedAt":1794646563024,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"wordy","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":60797,"gradeExit":0,"startedAt":1794646537331,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"yacht","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20799,"gradeExit":0,"startedAt":1794646605854,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"two-bucket","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":175250,"gradeExit":0,"startedAt":1794646452765,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"yacht","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":32808,"gradeExit":0,"startedAt":1794646600103,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"word-search","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":108092,"gradeExit":1,"startedAt":1794646531176,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"transpose","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":270438,"gradeExit":0,"startedAt":1794646373178,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"acronym","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16240,"gradeExit":0,"startedAt":1794646654713,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"acronym","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":12115,"gradeExit":0,"startedAt":1794646671869,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"zebra-puzzle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":40715,"gradeExit":0,"startedAt":1794646640482,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"zipper","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":30716,"gradeExit":1,"startedAt":1794646650832,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"all-your-base","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":10845,"gradeExit":0,"startedAt":1794646690804,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"affine-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":29921,"gradeExit":0,"startedAt":1794646689974,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"zipper","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":64149,"gradeExit":1,"startedAt":1794646648432,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"all-your-base","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":28329,"gradeExit":0,"startedAt":1794646702695,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"allergies","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":14030,"gradeExit":0,"startedAt":1794646721149,"memoryKills":0}
+{"agent":"opencode","lang":"csharp","name":"zebra-puzzle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":85623,"gradeExit":0,"startedAt":1794646642219,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"allergies","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":17534,"gradeExit":0,"startedAt":1794646720810,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"affine-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":76823,"gradeExit":0,"startedAt":1794646684864,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"bank-account","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":30359,"gradeExit":0,"startedAt":1794646739419,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"binary-search-tree","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":13777,"gradeExit":0,"startedAt":1794646762461,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"bank-account","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":42461,"gradeExit":0,"startedAt":1794646736593,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"binary-search-tree","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":13190,"gradeExit":0,"startedAt":1794646770650,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"bottle-song","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19175,"gradeExit":0,"startedAt":1794646784828,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"book-store","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":44380,"gradeExit":0,"startedAt":1794646780091,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"bottle-song","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":22169,"gradeExit":2,"startedAt":1794646804870,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"book-store","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":91620,"gradeExit":0,"startedAt":1794646777237,"memoryKills":0}
+{"agent":"galley","lang":"csharp","name":"word-search","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":361210,"gradeExit":0,"startedAt":1794646515168,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"change","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27823,"gradeExit":0,"startedAt":1794646870490,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"change","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":17443,"gradeExit":0,"startedAt":1794646887481,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"circular-buffer","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20638,"gradeExit":0,"startedAt":1794646905766,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"circular-buffer","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27092,"gradeExit":0,"startedAt":1794646899544,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"clock","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18894,"gradeExit":0,"startedAt":1794646927617,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"bowling","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":119606,"gradeExit":0,"startedAt":1794646827819,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"clock","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19956,"gradeExit":0,"startedAt":1794646927539,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"complex-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":13703,"gradeExit":0,"startedAt":1794646948543,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"alphametics","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":251638,"gradeExit":0,"startedAt":1794646732061,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"complex-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":41656,"gradeExit":0,"startedAt":1794646947309,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"alphametics","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":250796,"gradeExit":0,"startedAt":1794646736121,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"custom-set","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":15327,"gradeExit":0,"startedAt":1794646990027,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"crypto-square","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20563,"gradeExit":0,"startedAt":1794646989848,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"crypto-square","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25913,"gradeExit":0,"startedAt":1794646984720,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"bowling","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":191882,"gradeExit":2,"startedAt":1794646825553,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"connect","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":56373,"gradeExit":2,"startedAt":1794646963104,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"custom-set","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":15868,"gradeExit":0,"startedAt":1794647006466,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"diamond","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":14054,"gradeExit":2,"startedAt":1794647011575,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"diamond","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":17203,"gradeExit":2,"startedAt":1794647011265,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"connect","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":84078,"gradeExit":0,"startedAt":1794646948733,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"dnd-character","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19054,"gradeExit":0,"startedAt":1794647020751,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"dnd-character","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":22610,"gradeExit":0,"startedAt":1794647018199,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"dominoes","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19450,"gradeExit":0,"startedAt":1794647026687,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"dominoes","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":22955,"gradeExit":0,"startedAt":1794647023710,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"food-chain","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":15123,"gradeExit":2,"startedAt":1794647041694,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"food-chain","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":19895,"gradeExit":2,"startedAt":1794647040525,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"gigasecond","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":12731,"gradeExit":0,"startedAt":1794647057764,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"gigasecond","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":10400,"gradeExit":0,"startedAt":1794647061228,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"dot-dsl","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":118274,"gradeExit":2,"startedAt":1794647029509,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"forth","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":104016,"gradeExit":2,"startedAt":1794647047094,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"grade-school","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":14335,"gradeExit":0,"startedAt":1794647151938,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"dot-dsl","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":141625,"gradeExit":2,"startedAt":1794647033766,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"go-counting","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":106281,"gradeExit":0,"startedAt":1794647072380,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"grep","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25692,"gradeExit":0,"startedAt":1794647167211,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"forth","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":155945,"gradeExit":2,"startedAt":1794647047594,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"go-counting","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":138750,"gradeExit":2,"startedAt":1794647071295,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"house","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":43290,"gradeExit":2,"startedAt":1794647179355,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"killer-sudoku-helper","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":13710,"gradeExit":0,"startedAt":1794647210882,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"house","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":33870,"gradeExit":2,"startedAt":1794647193960,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"grade-school","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":80675,"gradeExit":0,"startedAt":1794647148597,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"killer-sudoku-helper","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24619,"gradeExit":0,"startedAt":1794647204698,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"kindergarten-garden","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":25554,"gradeExit":2,"startedAt":1794647223470,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"knapsack","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19193,"gradeExit":0,"startedAt":1794647230091,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"knapsack","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":41065,"gradeExit":0,"startedAt":1794647228811,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"list-ops","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24155,"gradeExit":0,"startedAt":1794647250285,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"kindergarten-garden","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":59176,"gradeExit":2,"startedAt":1794647225705,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"list-ops","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":17116,"gradeExit":0,"startedAt":1794647270814,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"matrix","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":21299,"gradeExit":2,"startedAt":1794647291328,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"ledger","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":65944,"gradeExit":0,"startedAt":1794647250094,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"grep","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":139767,"gradeExit":2,"startedAt":1794647176320,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"meetup","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":17446,"gradeExit":0,"startedAt":1794647317252,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"matrix","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":21307,"gradeExit":2,"startedAt":1794647313494,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"meetup","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24743,"gradeExit":0,"startedAt":1794647316867,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"ocr-numbers","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":16062,"gradeExit":2,"startedAt":1794647335722,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"markdown","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":74718,"gradeExit":0,"startedAt":1794647285782,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"ocr-numbers","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":32465,"gradeExit":2,"startedAt":1794647335809,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"parallel-letter-frequency","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":24876,"gradeExit":0,"startedAt":1794647361231,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"perfect-numbers","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":26379,"gradeExit":2,"startedAt":1794647386959,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"ledger","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":187493,"gradeExit":0,"startedAt":1794647230171,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"perfect-numbers","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":25513,"gradeExit":2,"startedAt":1794647414203,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"parallel-letter-frequency","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":79673,"gradeExit":0,"startedAt":1794647369118,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"markdown","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":175256,"gradeExit":0,"startedAt":1794647277741,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"pig-latin","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16775,"gradeExit":0,"startedAt":1794647453761,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"phone-number","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":52595,"gradeExit":2,"startedAt":1794647418829,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"phone-number","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":32758,"gradeExit":2,"startedAt":1794647440721,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"palindrome-products","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":124626,"gradeExit":2,"startedAt":1794647352659,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"pig-latin","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":33586,"gradeExit":0,"startedAt":1794647449885,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"protein-translation","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":19636,"gradeExit":2,"startedAt":1794647484233,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"poker","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":34496,"gradeExit":0,"startedAt":1794647472378,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"pov","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":37316,"gradeExit":2,"startedAt":1794647478363,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"proverb","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":8083,"gradeExit":0,"startedAt":1794647508004,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"protein-translation","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":18825,"gradeExit":2,"startedAt":1794647504867,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"proverb","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":10343,"gradeExit":0,"startedAt":1794647516664,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"poker","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":60988,"gradeExit":0,"startedAt":1794647471237,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"pythagorean-triplet","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":22260,"gradeExit":0,"startedAt":1794647524552,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"pythagorean-triplet","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":32787,"gradeExit":0,"startedAt":1794647517074,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"pov","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":80456,"gradeExit":2,"startedAt":1794647474378,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"queen-attack","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":43534,"gradeExit":2,"startedAt":1794647533062,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"rational-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27332,"gradeExit":0,"startedAt":1794647550693,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"rational-numbers","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":31318,"gradeExit":0,"startedAt":1794647547678,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"rectangles","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":39932,"gradeExit":0,"startedAt":1794647579712,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"queen-attack","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":96438,"gradeExit":2,"startedAt":1794647527829,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"rectangles","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":52987,"gradeExit":2,"startedAt":1794647578961,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"palindrome-products","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":293906,"gradeExit":2,"startedAt":1794647342707,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"resistor-color-trio","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":32677,"gradeExit":2,"startedAt":1794647620429,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"robot-simulator","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":21290,"gradeExit":2,"startedAt":1794647637465,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"robot-simulator","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":28504,"gradeExit":2,"startedAt":1794647632906,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"satellite","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":17539,"gradeExit":2,"startedAt":1794647659934,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"say","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":18585,"gradeExit":2,"startedAt":1794647662288,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"series","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":7746,"gradeExit":0,"startedAt":1794647682039,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"satellite","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":41963,"gradeExit":2,"startedAt":1794647653966,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"react","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":121947,"gradeExit":2,"startedAt":1794647577577,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"say","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":25957,"gradeExit":0,"startedAt":1794647678426,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"series","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16996,"gradeExit":0,"startedAt":1794647690694,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"simple-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":20525,"gradeExit":0,"startedAt":1794647705379,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"simple-cipher","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18454,"gradeExit":0,"startedAt":1794647708477,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"simple-linked-list","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":21802,"gradeExit":0,"startedAt":1794647727603,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"resistor-color-trio","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":124555,"gradeExit":2,"startedAt":1794647625027,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"simple-linked-list","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27707,"gradeExit":0,"startedAt":1794647726753,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"space-age","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":12775,"gradeExit":2,"startedAt":1794647750543,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"space-age","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":15748,"gradeExit":0,"startedAt":1794647750653,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"spiral-matrix","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":14411,"gradeExit":0,"startedAt":1794647755424,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"spiral-matrix","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16844,"gradeExit":0,"startedAt":1794647764248,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"sgf-parsing","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":94179,"gradeExit":2,"startedAt":1794647696900,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"react","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":236075,"gradeExit":2,"startedAt":1794647555683,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"sublist","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":21205,"gradeExit":0,"startedAt":1794647782003,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"sum-of-multiples","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":10203,"gradeExit":0,"startedAt":1794647793615,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"sublist","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19286,"gradeExit":0,"startedAt":1794647792024,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"sum-of-multiples","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19750,"gradeExit":0,"startedAt":1794647804689,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"tournament","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":19829,"gradeExit":0,"startedAt":1794647804826,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"tournament","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":27233,"gradeExit":0,"startedAt":1794647812708,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"triangle","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":9982,"gradeExit":2,"startedAt":1794647840592,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"state-of-tic-tac-toe","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":81012,"gradeExit":2,"startedAt":1794647770667,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"triangle","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":15466,"gradeExit":2,"startedAt":1794647851458,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"twelve-days","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":21276,"gradeExit":0,"startedAt":1794647852592,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"sgf-parsing","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":177207,"gradeExit":2,"startedAt":1794647700533,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"twelve-days","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":18369,"gradeExit":0,"startedAt":1794647867795,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"transpose","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":61802,"gradeExit":0,"startedAt":1794647825600,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"variable-length-quantity","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":30009,"gradeExit":0,"startedAt":1794647888271,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"transpose","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":100416,"gradeExit":0,"startedAt":1794647825196,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"word-count","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":7080,"gradeExit":0,"startedAt":1794647919283,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"variable-length-quantity","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":39393,"gradeExit":2,"startedAt":1794647886822,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"word-count","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":12183,"gradeExit":0,"startedAt":1794647926355,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"state-of-tic-tac-toe","pass":false,"agentExit":0,"agentTimedOut":false,"agentMs":173021,"gradeExit":2,"startedAt":1794647767155,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"two-bucket","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":71370,"gradeExit":0,"startedAt":1794647874795,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"word-search","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":26028,"gradeExit":0,"startedAt":1794647927347,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"yacht","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":7969,"gradeExit":0,"startedAt":1794647947055,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"two-bucket","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":85839,"gradeExit":0,"startedAt":1794647878612,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"wordy","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":26821,"gradeExit":0,"startedAt":1794647939175,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"wordy","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":26314,"gradeExit":0,"startedAt":1794647941101,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"yacht","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":16049,"gradeExit":0,"startedAt":1794647954286,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"word-search","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":44129,"gradeExit":0,"startedAt":1794647927296,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"zebra-puzzle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":23842,"gradeExit":0,"startedAt":1794647955972,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"zipper","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":21665,"gradeExit":0,"startedAt":1794647968528,"memoryKills":0}
+{"agent":"opencode","lang":"elixir","name":"zebra-puzzle","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":26784,"gradeExit":0,"startedAt":1794647965268,"memoryKills":0}
+{"agent":"galley","lang":"elixir","name":"zipper","pass":true,"agentExit":0,"agentTimedOut":false,"agentMs":51665,"gradeExit":0,"startedAt":1794647966992,"memoryKills":0}

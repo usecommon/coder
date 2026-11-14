@@ -42,7 +42,10 @@ export POLYGLOT=${BENCH_TASKS:-$WORK/polyglot} OPENCODE_BIN=$WORK/oc/node_module
 bun run.ts --selftest --model "$MODEL" --agents "$AGENTS" ${LANGS:+--langs $LANGS} --out "$OUT" 2>&1 | tee "$OUT/selftest.log"
 [ "${PIPESTATUS[0]}" = 0 ] || { echo "sandbox self-test failed; not running"; exit 1; }
 bun run.ts --model "$MODEL" --agents "$AGENTS" --split "$SPLIT" --concurrency "${CONCURRENCY:-10}" ${LIMIT:+--limit $LIMIT} ${LANGS:+--langs $LANGS} ${ONLY:+--only $ONLY} --out "$OUT" 2>&1 | tee -a "$OUT/run.log" | grep -E "infrastructure error|^done|runs \\("
-bun report.ts "$OUT/results.jsonl" "$OUT/proxy.jsonl" --split="$SPLIT" --prices="$PRICES" ${EXCLUDE:+--exclude=$EXCLUDE} > "$OUT/report.md"
-cat "$OUT/report.md"
+# A self-test-only run (LIMIT=0) has no results to report on.
+if [ -s "$OUT/results.jsonl" ]; then
+  bun report.ts "$OUT/results.jsonl" "$OUT/proxy.jsonl" --split="$SPLIT" --prices="$PRICES" ${EXCLUDE:+--exclude=$EXCLUDE} > "$OUT/report.md"
+  cat "$OUT/report.md"
+fi
 # Did any agent get at hidden tests anyway? Expect no flagged task-runs.
 python3 -I audit_leaks.py scan --polyglot "$POLYGLOT" --out "$OUT/leak-audit.json" "$NAME=$OUT" | tee "$OUT/leak-audit.txt"
