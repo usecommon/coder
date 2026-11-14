@@ -393,3 +393,40 @@ What I expect: the user's rule is not met (about one chance in five). The second
 - **Fix.** The message now starts with an empty line. Nothing else in it changes. I stopped the round at 114 results to apply it; the frozen copy's `run.ts` is replaced by the one of this commit. Results recorded before the fix stay, because a second attempt either ran normally or was not recorded.
 - **The pilot was not affected:** none of the C, C# or Elixir test outputs begins with a dash, and it recorded no such error.
 - **Also on 14 November:** the machine restarted at 16:42 and 16:53 UTC. Five results whose other arm had not finished were set aside and their pairs run again.
+
+### Fourth confirmation results (14 November, one round)
+
+Full write-up: [RESULTS-fresh4.md](RESULTS-fresh4.md). The run stopped after round 1 by the cost rule: it cost $6.01 against the $3.30 set in the design.
+
+| | OpenCode 1.19.5 | Galley (frozen at `de69760`) |
+|---|---|---|
+| Passed on the first attempt (of 200) | 70 (35.0%) | 79 (39.5%) |
+| Passed after both attempts | 168 (84.0%) | 169 (84.5%) |
+| Cost of the first attempts | $2.40 | $1.88 |
+| Cost of the round, both attempts | $3.14 | $2.88 |
+
+| The user's rule, first attempt | Measured | Met |
+|---|---|---|
+| Lead of 5 points or more | +4.5 (95% interval −0.5 to +9.5) | **No** |
+| Sign test p < 0.05 | 18 tasks better, 9 worse; p = 0.12 | **No** |
+| Lower cost per round | 22% lower (interval 33% to 9% lower) | Yes |
+
+| The second question, after both attempts | Measured | Met |
+|---|---|---|
+| Interval for the pass-rate difference wholly above −3 points | +0.5 (interval −4.5 to +5.5) | **No** |
+| Interval for the cost difference wholly below zero | 8% lower (interval 20% lower to 6% higher) | **No** |
+
+**Verdict by the user's rule: not a win.** The second question is not shown either: the measured values are level results at lower cost, but one round cannot exclude a 3-point deficit or a cost tie.
+
+- By language, first attempt: Bash +7.5 points, Lua +6.0, Tcl +1.2. After both attempts: Bash +5.7, Lua +1.5, Tcl −3.8.
+- Pooled over the four fresh sets (703 tasks), first attempt: +3.8 points (95% interval +1.8 to +5.8, p = 0.001).
+- Audit: nothing counts as contamination. The proxy refused 49 requests from agents for other endpoints and 2 for another model.
+- Spend: $6.63.
+
+### What the fourth confirmation taught
+
+1. **Galley cannot resume a session that was cut off in the middle of a step.** Twice its first attempt hit the 10-minute limit while a command was running; the resumed session ended in tool calls without results, the API refused it, and the second attempt never started. Both count as failures. This is a real defect and the first thing the second attempt found that the one-attempt protocol could not.
+2. **The harness must not take every unanswered request for an outage.** It had skipped those two task-runs and run them again. It now grades a task-run whose requests the API refused as invalid, and the two results are corrected.
+3. **A message passed on a command line must not begin with a dash.** Both agents' command lines took such a message for an option.
+4. **Galley's second attempts are dearer than OpenCode's** ($0.0083 against $0.0057 each). Its saving comes from the first attempt.
+5. **The first attempt separates the agents more in these languages** (+4.5 points here, +1.0 on C, C# and Elixir), and the second attempt removes the difference in both.

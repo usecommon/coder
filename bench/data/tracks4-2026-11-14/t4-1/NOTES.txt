@@ -1,0 +1,13 @@
+14 Nov 2026. Two corrections to this round's results, both against Galley.
+
+In two task-runs (bash/palindrome-products at 17:07 UTC, tcl/parallel-letter-frequency at 18:52 UTC) Galley's first
+attempt was cut off at the 10-minute limit, and its second attempt could not start: resuming the session, Galley sent
+the model a history that ended in tool calls without results, and the API refused it (HTTP 400). The harness took
+"no answer from the model" for an outage, recorded nothing, and later ran both arms of those tasks again; for the
+second task this happened twice. That gave Galley a fresh run it was not entitled to.
+
+results.jsonl now holds, for these two tasks, OpenCode's results from the same sessions (they had been set aside as
+unpaired) and a reconstructed Galley result that counts both attempts as failed (field "reconstructed"; timings from
+the proxy log). The re-run results are in reruns-not-used.jsonl and their requests in proxy-reruns-not-used.jsonl;
+neither is used. results-before-correction.jsonl is the file as the driver left it. The run folders of these four
+task-runs (transcripts, grade logs, workspaces) are those of the re-runs.

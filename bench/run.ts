@@ -537,6 +537,21 @@ function modelAnswers(tag: string, since: number): number {
   return n;
 }
 
+/** Requests the model API itself turned down as invalid (HTTP 400 or 422): the agent's own doing, not an outage.
+ *  Seen on 14 November 2026: Galley resumed a session that ended in tool calls without results. */
+function modelRejections(tag: string, since: number): number {
+  if (!PROXY_LOG || !existsSync(PROXY_LOG)) return 0;
+  let n = 0;
+  for (const line of readFileSync(PROXY_LOG, "utf8").split("\n")) {
+    if (!line.includes(`"tag":"${tag}"`)) continue;
+    try {
+      const r = JSON.parse(line);
+      if ((r.status === 400 || r.status === 422) && !r.blocked && (r.t ?? Infinity) >= since) n++;
+    } catch {}
+  }
+  return n;
+}
+
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
   let i = 0;
   await Promise.all(Array.from({ length: n }, async () => {
@@ -802,7 +817,8 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     // Without a proxy log to consult, fall back to the agent's own output. (With one, that output is not used:
     // an agent that probes the proxy can print the same words.)
     const unreachable = !PROXY_LOG && SOCK !== undefined && log.includes("Internal Server Error") && log.includes(new URL(PROXY).host);
-    if (unreachable || modelAnswers(`${agent}__${t.lang}__${t.name}`, started) === 0) {
+    // No answer because the API refused the agent's own requests as invalid is the agent's failure, and is graded.
+    if (unreachable || (modelAnswers(`${agent}__${t.lang}__${t.name}`, started) === 0 && modelRejections(`${agent}__${t.lang}__${t.name}`, started) === 0)) {
       infraErrors++;
       console.error(`infrastructure error: ${agent} ${t.lang}/${t.name} got no answer from the model; not recording a result`);
       return;
@@ -820,7 +836,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     const message = retryPrompt(t, output);
     writeFileSync(join(run, "attempt-2-prompt.txt"), message); // for the audit: what the agent was shown
     const a2 = await runAgent(agent, t, ws, run, message);
-    if (modelAnswers(`${agent}__${t.lang}__${t.name}`, started2) === 0) {
+    if (modelAnswers(`${agent}__${t.lang}__${t.name}`, started2) === 0 && modelRejections(`${agent}__${t.lang}__${t.name}`, started2) === 0) {
       infraErrors++;
       console.error(`infrastructure error: ${agent} ${t.lang}/${t.name} got no answer from the model in its second attempt; not recording a result`);
       return;

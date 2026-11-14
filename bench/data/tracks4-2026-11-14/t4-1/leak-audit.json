@@ -1,0 +1,228 @@
+[
+{
+"run": "t4-1",
+"agent": "galley",
+"lang": "bash",
+"task": "simple-cipher",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "galley",
+"lang": "lua",
+"task": "dnd-character",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "galley",
+"lang": "lua",
+"task": "pov",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "galley",
+"lang": "tcl",
+"task": "change",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "galley",
+"lang": "tcl",
+"task": "dot-dsl",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "clock",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "dnd-character",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "kindergarten-garden",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "palindrome-products",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "phone-number",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "queen-attack",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "satellite",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "simple-cipher",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "bash",
+"task": "triangle",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "lua",
+"task": "alphametics",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "lua",
+"task": "list-ops",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "lua",
+"task": "pov",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "lua",
+"task": "sum-of-multiples",
+"kinds": [
+"model_by_hand",
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "lua",
+"task": "word-search",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "dominoes",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "dot-dsl",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "go-counting",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "robot-simulator",
+"kinds": [
+"model_by_hand"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "satellite",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t4-1",
+"agent": "opencode",
+"lang": "tcl",
+"task": "space-age",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

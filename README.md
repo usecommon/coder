@@ -13,20 +13,23 @@ Research on AI coding agents and the "harnesses" around them, compiled October 2
 
 | | Tasks | Galley | OpenCode | Lead | Galley's cost |
 |---|---|---|---|---|---|
+| Fourth confirmation on fresh tasks, first attempt | 200 (Bash, Lua, Tcl), 1 round | 39.5% | 35.0% | +4.5 points (p = 0.12) | 22% lower |
+| The same round after a second attempt with the test output | | 84.5% | 84.0% | +0.5 points | 8% lower |
 | Third confirmation on fresh tasks, benchmark corrected | 201 (C, C#, Elixir), 3 rounds | 73.5% | 72.5% | +1.0 points (p = 0.58) | 11% lower |
 | Second confirmation on fresh tasks | 181 (PHP, TypeScript, Ruby), 4 rounds | 55.0% | 51.5% | +3.5 points (p = 0.16) | 12% lower |
 | First confirmation on fresh tasks | 121 (JavaScript, Java, C++), 4 rounds | 49.8% | 42.1% | +7.6 points (p = 0.001) | 10% higher |
 | Development tasks | 101 (Python, Go, Rust), 3 rounds | 70.3% | 64.0% | +6.3 points (p = 0.013) | 11% higher |
 
-- **Not a win by our own rule,** which asks for a 5-point lead, p < 0.05 and lower cost, all on one set of tasks Galley was not developed on. The first confirmation missed the cost condition; the second and third, run after two fixes to Galley, met it and missed the lead.
-- **Where it stands:** pooled over the three fresh sets (503 tasks) Galley leads by 3.5 points (95% interval +1.4 to +5.5), and since the fixes it is about 11% cheaper. On the corrected benchmark alone the two are level on pass rate.
+- **Not a win by our own rule,** which asks for a 5-point lead, p < 0.05 and lower cost, all on one set of tasks Galley was not developed on. The first confirmation missed the cost condition; the three since, run after two fixes to Galley, met it and missed the lead.
+- **Where it stands:** pooled over the four fresh sets (703 tasks) Galley leads by 3.8 points on the first attempt (95% interval +1.8 to +5.8), and since the fixes it has been 11 to 22% cheaper. When a failed first attempt gets the test output and one more try, the two agents end level.
+- **A defect in Galley found on 14 November:** it cannot resume a session that was cut off in the middle of a step, so a second attempt after a timeout never starts. It cost two task-runs in the fourth confirmation.
 - **Most failures on this benchmark are details only the hidden tests define** (exact error messages, function names). Both agents get them right only when the model remembers the public exercise, so a harness has little to work with there.
 - **Between the confirmations two defects in Galley were fixed:** helper agents launched to "recall" hidden tests, and test scripts refused under `/tmp`. Side by side on the same tasks the fixed Galley cost 17.5% less and passed as many.
 - **A flaw in the benchmark worked against Galley in the first two confirmations.** Its sandbox hid the shared test tools (jest, the Java test libraries, PHPUnit) that OpenCode could use. It was fixed before the third; the earlier results are not corrected for it.
 - **A second flaw, found during the third:** the proxy that adds the API key forwarded anything, and OpenCode's agent used it to ask a stronger model in three task-runs over all campaigns. It now serves one endpoint and one model. No verdict changes.
 - **Claude Sonnet 5.5** (development tasks): Galley 87 to 88% (re-measured), OpenCode 90.1% (earlier run): a tie within noise, with Galley at well under half the cost.
 
-Earlier DeepSeek results (68.8% vs 67.8%) came from a sandbox that let agents read hidden tests, which OpenCode did in 22 task-runs. Details: [`bench/RESULTS-fresh3.md`](bench/RESULTS-fresh3.md) (latest), [`bench/RESULTS-fresh2.md`](bench/RESULTS-fresh2.md), [`bench/RESULTS-fresh.md`](bench/RESULTS-fresh.md), [`bench/RESULTS-clean.md`](bench/RESULTS-clean.md), [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
+Earlier DeepSeek results (68.8% vs 67.8%) came from a sandbox that let agents read hidden tests, which OpenCode did in 22 task-runs. Details: [`bench/RESULTS-fresh4.md`](bench/RESULTS-fresh4.md) (latest), [`bench/RESULTS-fresh3.md`](bench/RESULTS-fresh3.md), [`bench/RESULTS-fresh2.md`](bench/RESULTS-fresh2.md), [`bench/RESULTS-fresh.md`](bench/RESULTS-fresh.md), [`bench/RESULTS-clean.md`](bench/RESULTS-clean.md), [`bench/RESULTS.md`](bench/RESULTS.md), [`bench/RESULTS-claude.md`](bench/RESULTS-claude.md), [`bench/IMPROVEMENT_LOG.md`](bench/IMPROVEMENT_LOG.md). What to try next, with the evidence behind each option: [`research/beating-opencode.md`](research/beating-opencode.md).
 
 ## Research contents
 
