@@ -378,3 +378,10 @@ Three confirmations have not met the rule, and the pilot shows why the compariso
 - **Also reported:** results by language, the counts from `track_checks.py` for the first attempts, the audit.
 
 What I expect: the user's rule is not met (about one chance in five). The second question is more likely than not answered yes: after two attempts both agents should be near the ceiling, and Galley has been 11 to 15% cheaper in every campaign since its two fixes.
+
+### Fourth confirmation: smoke test (14 November, before round 1)
+
+`acronym` in Bash, Lua and Tcl, both agents, once: $0.02. Five of the six first attempts passed; OpenCode's Bash attempt failed and passed on its second attempt.
+
+- Each agent's own commands ran the language's tools: Bash scripts, `lua` and `busted`, `tclsh`.
+- The second attempt worked as designed. No fault in the benchmark showed, and nothing was changed. The frozen copy for the rounds is commit `c334e2a`.
