@@ -441,3 +441,53 @@ Both come from faults seen in that round. They are after the frozen version `de6
 | **A task that begins with dashes is a task.** The command line treats a word as an option only if it holds no whitespace, and a bare `--` ends the options. | A task starting with `--`, such as pasted test output, was read as an option and the run had no task. | 2 Galley task-runs before the harness was changed to avoid it |
 
 Tests: 76 pass, including one for each change.
+
+## More than one model in a session (14 November, built, not measured)
+
+The user judged the improvements so far insufficient and named what was missing: switching models within a session, with an understanding of what each model is good at and when to switch. Research first ([`research/model-switching.md`](../research/model-switching.md)), then the build.
+
+### What the research found, in five lines
+
+1. Every harness lets the user assign models to roles. Few switch by themselves, and the measured gain over the best single model is small where it exists (+2.7 points for Anthropic's advisor, +1.6 for alternating two equal models).
+2. The repeatable effect of routing is lower cost at about the same quality, not a higher pass rate.
+3. In public per-task results a second run by the same model fixes about a fifth of failures, and a different model of equal strength no more. Only a stronger model adds to that.
+4. On this project's DeepSeek account the other model, `deepseek-v4-pro`, is the weaker one: 6.7% against 38.5% for `deepseek-flash` in the same harness on Terminal-Bench 4.1, at 3 to 7 times the price per token.
+5. A switch is not free. The new model reads the whole session uncached, and so does the same model at a new effort level (measured on DeepSeek: 0 of 2,563 prompt tokens came from the cache after a change of effort, 2,429 after none).
+
+### What was built in Galley (general features, nothing specific to a benchmark)
+
+| Feature | What it does |
+|---|---|
+| Model profiles and `galley models` | Measured strength on agentic tasks, cost per run and prices for 11 models, with source and date; suggests roles for the keys that are set |
+| A checked `/model`, and `/effort` | A mistyped model no longer ends the session; the switch shows its price and warns when the new model is the weaker one |
+| `advisor` | A second model reads the session and gives short advice; asked when a turn goes badly, by the main model through a tool, and optionally before a turn that changed files ends |
+| Signals | The same command failing three times in a row, the same call with the same result three times, four refused calls in a row, two thirds of the step limit used |
+| `escalateModel` | A stronger model takes over the rest of a turn that stays in trouble; refused when the profiles say the model is not stronger |
+| `fallbackModels`, `planModel` | Another model when a provider keeps failing; another model in plan mode |
+| Cost per model | `/cost` and the session file list each model's share |
+
+Tests: 112 pass, 36 of them new.
+
+### Two smoke runs with real models (14 November)
+
+Both ran inside the benchmark sandbox on used-up Lua tasks, as the variant `galley-adv`. They test the mechanics and say nothing about the pass rate.
+
+| Run | Advisor | Tasks | What happened |
+|---|---|---|---|
+| `smoke-adv1` | `deepseek-flash` itself, with review | `acronym`, `all-your-base`, `bank-account` | The review ran in all three and passed all three; two then failed the hidden tests. In one the model asked the advisor of its own accord, about the API the hidden tests expect |
+| `smoke-adv2` | `deepseek-v4-pro`, with review, tool withheld | `acronym`, `all-your-base` | One review answered and cost $0.0094, seven times the rest of that task ($0.0013). The other failed on a dropped connection, which showed the advisor request had no retry; it now has |
+
+Spend: about $0.06 for both runs and the cache measurement in point 5.
+
+### What must change in the harness before a round with two models counts
+
+- **Cost.** The report prices every request as the round's model. `smoke-adv2` is under-priced for that reason.
+- **Audit.** It flags any answer from a second model as contamination. `smoke-adv2` is flagged in both task-runs, correctly by the rule for single-model rounds.
+- **Proxy.** It serves one provider. A second provider needs a second upstream and key.
+- **Rule.** "The same model for both agents" no longer describes the comparison. A new rule has to say which models each agent may use and how cost is compared, before the first run.
+
+### Why this was not run as a campaign
+
+- **With DeepSeek alone there is nothing to measure:** the only other model is weaker and dearer, and a second look by the same model has been measured three times without a gain (self-review, the verifier, the lean verifier, above).
+- **With a second provider the cost condition of the win rule cannot be met:** one consult of Claude Sonnet 5.5 costs about $0.03, three times the whole task on `deepseek-flash`, and as much as doing the whole task on Sonnet with Galley ($0.028, measured in [RESULTS-claude.md](RESULTS-claude.md)).
+- **What could be shown** is the pass rate of a strong model at well under its cost, or a gain on longer tasks. Both need the changes above, the Anthropic key and a budget of roughly $15 to $25 a round. That is the user's decision.

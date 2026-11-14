@@ -28,6 +28,11 @@ export class UndoLog {
     return this.current?.length ?? 0;
   }
 
+  /** The files changed so far in the current turn. */
+  changedPaths(): string[] {
+    return (this.current ?? []).map((s) => s.path);
+  }
+
   /** Restore files changed in the most recent turn that changed anything. Returns the restored paths. */
   undo(): string[] {
     while (this.turns.length) {

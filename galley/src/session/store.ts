@@ -105,6 +105,18 @@ export class Session {
     appendFileSync(this.file, JSON.stringify(r) + "\n");
   }
 
+  /** Tokens and cost per model, for sessions that used more than one (an advisor, a handover, helpers). */
+  byModel(): Record<string, { usage: Usage; costUsd: number }> {
+    const out: Record<string, { usage: Usage; costUsd: number }> = {};
+    for (const r of this.records()) {
+      if (r.type !== "usage") continue;
+      const m = (out[r.model] ??= { usage: emptyUsage(), costUsd: 0 });
+      m.usage = addUsage(m.usage, r.usage);
+      m.costUsd += r.costUsd;
+    }
+    return out;
+  }
+
   /** Raw records, for replay views. */
   records(): SessionRecord[] {
     return readFileSync(this.file, "utf8")

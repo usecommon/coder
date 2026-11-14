@@ -5,15 +5,18 @@ import { mkdirSync, openSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Agent } from "./agent/loop.ts";
 import { INIT_PROMPT } from "./agent/prompt.ts";
-import { loadConfig, type Config } from "./config.ts";
+import { loadConfig, type Config, type Effort } from "./config.ts";
 import type { AgentEvent } from "./core/types.ts";
 import { McpClient } from "./mcp/client.ts";
 import type { Approver } from "./safety/permission.ts";
 import { detectSandbox, sandboxProcMode } from "./safety/sandbox.ts";
 import { parseArgs, type Args } from "./args.ts";
+import { getProvider, splitModel } from "./provider/index.ts";
+import { profiles, weakerWarning } from "./provider/models.ts";
 import { projectDir, Session } from "./session/store.ts";
 import { serve } from "./server/http.ts";
 import type { Tool } from "./tools/types.ts";
+import { modelsReport } from "./ui/models.ts";
 import { c, describeCall, fmtTok, fmtUsd, makeRenderer } from "./ui/render.ts";
 import { repl } from "./ui/repl.ts";
 
@@ -27,9 +30,13 @@ Usage:
   galley show <id>                 replay a session's transcript
   galley init                      write AGENTS.md for this repository
   galley doctor                    check sandbox, config and API keys
+  galley models                    what is known about each model, and which roles suit the ones you can reach
 
 Options:
-  -m, --model <provider/model>     e.g. anthropic/claude-opus-5-5, deepseek/deepseek-v4-flash, ollama/qwen3-coder
+  -m, --model <provider/model>     e.g. anthropic/claude-opus-5-5, deepseek/deepseek-flash, ollama/qwen3-coder
+  --advisor <provider/model>       a second, stronger model to consult when a turn goes badly
+  --escalate <provider/model>      a stronger model that takes over a turn that stays in trouble
+  --effort <level>                 reasoning effort: low, medium, high, xhigh or max
   --plan                           start in read-only plan mode
   -s, --session <id>               resume a session      --fork   continue it as a new session
   -y, --yes                        auto-approve actions that would ask (rules marked deny still apply)
@@ -41,6 +48,8 @@ Options:
   --cwd <dir>                      workspace (default: current directory)
   --no-sandbox                     run commands without the OS sandbox (every command then asks)`;
 
+
+const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
 
 async function loadMcp(cfg: Config, workspace: string): Promise<{ tools: Tool[]; clients: McpClient[] }> {
   const tools: Tool[] = [];
@@ -85,8 +94,16 @@ async function main() {
   if (flags["no-sandbox"]) overrides.sandbox = "off";
   if (flags.verify) overrides.verify = true;
   const cfg = loadConfig(workspace, overrides);
+  // A flag changes one setting of a role and keeps the rest of what the config files say about it.
+  if (typeof flags.advisor === "string") cfg.advisor = { ...cfg.advisor, model: flags.advisor };
+  if (typeof flags.escalate === "string") cfg.escalateModel = flags.escalate;
+  if (typeof flags.effort === "string") {
+    if (!EFFORTS.includes(flags.effort as Effort)) throw new Error(`--effort is one of: ${EFFORTS.join(", ")}`);
+    cfg.effort = flags.effort as Effort;
+  }
 
   if (cmd === "doctor") return doctor(cfg, workspace);
+  if (cmd === "models") return console.log(flags.json ? JSON.stringify(profiles(cfg.models), null, 2) : modelsReport(cfg));
   if (cmd === "sessions") {
     const list = Session.list(workspace);
     if (!list.length) return console.log("No sessions yet.");
@@ -94,6 +111,9 @@ async function main() {
     return;
   }
   if (cmd === "show") return show(workspace, positional[0]);
+
+  // A mistyped model should stop a run here, not in the middle of a turn that needs it.
+  for (const ref of [cfg.model, cfg.smallModel, cfg.planModel, cfg.advisor?.model, cfg.escalateModel, ...(cfg.fallbackModels ?? [])]) if (ref) getProvider(splitModel(ref).provider, cfg);
 
   // Holder lets the interactive UI install its prompt after the agent exists.
   let approve: Approver | undefined = flags.yes ? async () => "once" : undefined;
@@ -153,7 +173,7 @@ async function main() {
   const session = openSession(workspace, cfg, flags);
   const { tools } = await loadMcp(cfg, workspace);
   const agent = new Agent({ cfg, workspace, session, approver, onEvent: makeRenderer(process.stdout, { reasoning: !!flags.reasoning }), extraTools: tools, mode: flags.plan ? "plan" : "build", model: modelFor(flags, cfg, session) });
-  await repl({ agent }, { set: (a) => (approve = flags.yes ? approve : a) });
+  await repl({ agent }, { set: (a) => (approve = flags.yes ? approve : a) }, cfg);
   process.exit(0);
 }
 
@@ -175,7 +195,7 @@ function detach(workspace: string, cfg: Config, flags: Args["flags"], task: stri
   const self = /\.(ts|js|mjs)$/.test(script) && !script.startsWith("/$bunfs") ? [script] : [];
   const args = [...self, "run", task, "--cwd", workspace];
   if (session) args.push("--session-id", session.id);
-  for (const f of ["model"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
+  for (const f of ["model", "advisor", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
   for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify"]) if (flags[f]) args.push(`--${f}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", fd, fd], cwd: workspace });
   child.unref();
@@ -209,6 +229,14 @@ function doctor(cfg: Config, workspace: string) {
   const ok = (b: boolean) => (b ? c.green("ok") : c.yellow("missing"));
   console.log(`workspace   ${workspace}`);
   console.log(`model       ${cfg.model}`);
+  const all = profiles(cfg.models);
+  for (const [role, ref] of [["plan model", cfg.planModel], ["advisor", cfg.advisor?.model], ["takes over", cfg.escalateModel]] as const) {
+    if (!ref) continue;
+    // An advisor or a model that takes over earns its price only by being the stronger one.
+    const weaker = role === "plan model" ? undefined : weakerWarning(cfg.model, ref, all);
+    console.log(`${role.padEnd(11)} ${ref}${weaker ? c.yellow(`  (${weaker})`) : ""}`);
+  }
+  if (cfg.fallbackModels?.length) console.log(`fallbacks   ${cfg.fallbackModels.join(", ")}`);
   const shared = sb === "bwrap" && sandboxProcMode() === "shared";
   console.log(`sandbox     ${sb === "none" ? c.yellow("none — install bubblewrap (Linux) for sandboxed commands") : c.green(sb)}${shared ? c.yellow(" (inside another sandbox or container: commands can see Galley's own process)") : ""}`);
   const keys: [string, string][] = [

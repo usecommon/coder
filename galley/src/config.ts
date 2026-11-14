@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { ModelProfile } from "./provider/models.ts";
 import type { Price } from "./provider/pricing.ts";
 
 export type Action = "allow" | "ask" | "deny";
@@ -24,12 +25,41 @@ export interface McpServerConfig {
   env?: Record<string, string>;
 }
 
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** A second model that reads the session and advises the main one. It runs nothing. */
+export interface AdvisorConfig {
+  /** "provider/model". Worth having only if it is clearly stronger than the main model (`galley models`). */
+  model: string;
+  /** Most consultations in one turn, whoever asks (default 3). */
+  maxUses?: number;
+  /** Ask it when the harness sees the turn going badly (default true). */
+  onStuck?: boolean;
+  /** Let the main model ask it too, through the `advise` tool (default true). */
+  tool?: boolean;
+  /** Have it check a change against the request before the turn ends (default false: it costs a consult every turn). */
+  review?: boolean;
+  effort?: Effort;
+  /** Cap on its answer, thinking included (default 16,000 tokens). */
+  maxTokens?: number;
+}
+
 export interface Config {
-  /** "provider/model", e.g. "anthropic/claude-opus-5-5" or "deepseek/deepseek-v4-flash". */
+  /** "provider/model", e.g. "anthropic/claude-opus-5-5" or "deepseek/deepseek-flash". */
   model: string;
   /** Cheaper model for sub-agents and compaction. Defaults to `model`. */
   smallModel?: string;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Used instead of `model` while in plan mode. */
+  planModel?: string;
+  advisor?: AdvisorConfig;
+  /** Takes over for the rest of a turn that stays in trouble (after the advisor's advice, when there is an advisor).
+   *  Ignored when the model profiles say it is not stronger than the model in use. */
+  escalateModel?: string;
+  /** Tried in order, for the rest of the turn, when the provider of the model in use keeps failing. */
+  fallbackModels?: string[];
+  /** Additions and corrections to the built-in model profiles (src/provider/models.ts). */
+  models: Record<string, Partial<ModelProfile>>;
+  effort?: Effort;
   maxTokens?: number;
   providers: Record<string, ProviderConfig>;
   permission: Record<string, Rule>;
@@ -83,6 +113,7 @@ export const DEFAULT_CONFIG: Config = {
   verify: false,
   mcp: {},
   pricing: {},
+  models: {},
 };
 
 function readJson(path: string): Partial<Config> {
@@ -104,7 +135,7 @@ export function loadConfig(cwd: string, overrides: Partial<Config> = {}): Config
     for (const [k, v] of Object.entries(l)) {
       if (v === undefined) continue;
       const key = k as keyof Config;
-      if (["providers", "permission", "mcp", "pricing"].includes(k)) Object.assign(cfg[key] as object, v);
+      if (["providers", "permission", "mcp", "pricing", "models"].includes(k)) Object.assign(cfg[key] as object, v);
       else (cfg as unknown as Record<string, unknown>)[key] = v;
     }
   }

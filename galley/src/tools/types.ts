@@ -14,6 +14,8 @@ export interface ToolContext {
   signal?: AbortSignal;
   /** Run a read-only sub-agent and return its final answer. */
   runSubagent?: (description: string, prompt: string) => Promise<string>;
+  /** Put a question to the advisor model, which sees the session so far. */
+  consult?: (question: string) => Promise<string>;
 }
 
 export interface Tool {

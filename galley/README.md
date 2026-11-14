@@ -46,7 +46,7 @@ Use `-m provider/model` or set `"model"` in `galley.json`.
 | Provider | Example | Key |
 |---|---|---|
 | Anthropic (official SDK) | `anthropic/claude-opus-5-5` (default), `anthropic/claude-sonnet-5-5` | `ANTHROPIC_API_KEY` |
-| DeepSeek | `deepseek/deepseek-v4-flash`, `deepseek/deepseek-v4-pro` | `DEEPSEEK_API_KEY` |
+| DeepSeek | `deepseek/deepseek-flash` (`deepseek/deepseek-v4-pro` is an older, weaker and dearer model) | `DEEPSEEK_API_KEY` |
 | Qwen (DashScope) | `qwen/qwen3-coder-plus` | `DASHSCOPE_API_KEY` |
 | Kimi (Moonshot) | `moonshot/kimi-k2.5` | `MOONSHOT_API_KEY` |
 | GLM (Z.ai) | `zai/glm-5.2` | `ZAI_API_KEY` |
@@ -62,14 +62,60 @@ For DeepSeek, Galley sends the model's earlier reasoning back between tool calls
 
 Sub-agents (`task`) are for searching a large codebase. They run at low effort whatever the main agent uses: in the benchmark a cheap model launched helpers to "recall" hidden tests from memory, and they spent 6% of all of Galley's cost thinking about it.
 
+## Using more than one model
+
+One model does the work. Others can help in five ways, all off unless you configure them:
+
+| Setting | What it does | When the other model is used |
+|---|---|---|
+| `smallModel` | Helpers (`task`) and compaction run on a cheaper model | Always, for those jobs |
+| `planModel` | Plan mode uses this model; build mode uses `model` | While in `/plan` |
+| `advisor` | A second model reads the session and gives short advice. It runs nothing, and the main model keeps its context and its cached prompt | When Galley sees the turn going badly, when the main model asks through the `advise` tool, and, with `"review": true`, once before a turn that changed files ends |
+| `escalateModel` | A stronger model takes over the rest of the turn; the next turn starts on `model` again | When the trouble comes back after the advisor's advice, or at the first sign of it if there is no advisor |
+| `fallbackModels` | Another model serves the rest of the turn | When the provider keeps failing (dropped connections, time-outs, rate limits, server errors) after three tries |
+
+**How Galley knows a turn is going badly.** It does not ask the model. It reads what the tools returned:
+
+- the same command has failed three times in a row;
+- the same call has returned the same result three times;
+- four calls in a row were refused (bad arguments, text to replace not found);
+- two thirds of the step limit are used and the work is not finished.
+
+**What Galley knows about models.** `galley models` (or `/models`) prints, for each model it has a profile of, the share of hard terminal tasks it solved on the Terminal-Bench 4.1 board, what a run cost there, and its prices. It then suggests roles for the models your keys can reach:
+
+```text
+For the keys that are set:
+  main model   deepseek/deepseek-flash  (the cheapest per run that solves at least half of what the strongest does: 38.5%, $0.56 a run)
+  advisor      anthropic/claude-opus-5-5  (27 points stronger; consult it on hard decisions rather than handing the session over)
+  avoid        deepseek/deepseek-v4-pro  (weaker and dearer: 6.7% against 38.5% for deepseek/deepseek-flash)
+```
+
+- **Galley will not hand a turn to a model its profiles say is not stronger.** A second try by the same model does about as much, for less.
+- **Nothing finer is recorded** (which model for debugging, which for front-end work), because no public source measures it. Add or correct profiles under `"models"` in `galley.json`.
+- **A switch has a price, and Galley states it.** The new model reads the whole session with nothing cached. `/model` shows the amount before you switch. A change of `/effort` costs the same re-read: each effort level has a cache of its own (measured on DeepSeek).
+- **`/cost` lists each model's share** once a session has used more than one.
+
+```jsonc
+{
+  "model": "deepseek/deepseek-flash",
+  "advisor": { "model": "anthropic/claude-opus-5-5", "maxUses": 3, "review": false, "tool": true },
+  "escalateModel": "anthropic/claude-opus-5-5",
+  "fallbackModels": ["anthropic/claude-haiku-5-5"]
+}
+```
+
+**Status: tested, not yet measured.** The mechanics are covered by tests and by a few real runs. Whether they raise the pass rate on real tasks, and at what cost, has not been measured. The evidence from other harnesses says to expect a small gain where the second model is clearly stronger and the signals fire, and a loss of money where it is not: see [`research/model-switching.md`](../research/model-switching.md). On small tasks one consult of a strong model can cost more than the whole task on a cheap one.
+
 ## Using it
 
-**Interactive commands:** `/plan`, `/build`, `/undo`, `/model <ref>`, `/cost`, `/sessions`, `/init`, `/exit`. Ctrl-C cancels a running turn.
+**Interactive commands:** `/plan`, `/build`, `/undo`, `/model <ref>`, `/models`, `/effort <level>`, `/advisor <ref|off>`, `/cost`, `/sessions`, `/init`, `/exit`. Ctrl-C cancels a running turn.
 
 **CLI:**
 
 ```bash
 galley run "task" [--plan] [--yes] [--json] [--worktree] [--detach]
+galley run "task" -m deepseek/deepseek-flash --advisor anthropic/claude-opus-5-5 [--escalate <model>] [--effort high]
+galley models                         # what is known about each model, and roles for the keys you have
 galley -s <session-id> [--fork]       # resume, or branch off a session
 galley sessions                       # id, cost, status, title
 galley show <session-id>              # replay a transcript
@@ -85,8 +131,9 @@ galley serve --port 4096              # HTTP + SSE server (see below)
 
 ```jsonc
 {
-  "model": "deepseek/deepseek-v4-flash",
-  "smallModel": "deepseek/deepseek-v4-flash",   // sub-agents and compaction
+  "model": "deepseek/deepseek-flash",
+  "smallModel": "deepseek/deepseek-flash",      // sub-agents and compaction
+  "planModel": "anthropic/claude-opus-5-5",     // optional: plan mode only
   "effort": "medium",
   "permission": {
     "edit": "allow",
@@ -123,11 +170,14 @@ The user-wide config is `~/.config/galley/config.json`; `GALLEY_MODEL` overrides
 ```
 src/
   cli.ts                 commands, background runs, worktrees
-  agent/loop.ts          model ⇄ tools loop, parallel read-only calls, sub-agents, compaction trigger
+  agent/loop.ts          model ⇄ tools loop, parallel read-only calls, sub-agents, compaction trigger, the model in use
+  agent/signals.ts       signs that a turn is going badly, read from tool results
+  agent/advisor.ts       what a second model is shown and asked
   agent/prompt.ts        short, cache-stable system prompt + AGENTS.md
   agent/compact.ts       summarize old turns without splitting tool calls from results
   provider/anthropic.ts  official SDK: streaming, adaptive thinking, caching, fallbacks
   provider/openai-compat.ts  one streaming adapter for every OpenAI-compatible API
+  provider/models.ts     model profiles: measured strength, cost per run, when a switch is pointless
   safety/permission.ts   allow/ask/deny rules, compound-command splitting, approval queue
   safety/paths.ts        workspace confinement (realpath), .git write protection
   safety/sandbox.ts      bubblewrap / Seatbelt, network off, secret scrubbing, timeouts

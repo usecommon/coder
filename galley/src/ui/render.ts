@@ -21,6 +21,8 @@ export function describeCall(call: ToolCall): string {
       return `${s("pattern")}${s("path") ? ` in ${s("path")}` : ""}`;
     case "task":
       return s("description");
+    case "advise":
+      return s("question").split("\n")[0]!.slice(0, 100);
     default:
       return call.rawInput.slice(0, 80);
   }

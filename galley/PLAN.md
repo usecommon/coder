@@ -67,7 +67,7 @@ OpenCode is the reference: an MIT-licensed, provider-agnostic agent with a clien
 | **0.3 Parity II** | Code intelligence | LSP client (diagnostics after edits, go-to-definition, references); formatters on write; MCP over HTTP/SSE; plugins and hooks |
 | **0.4 Safety+** | Unattended runs | Auto-review approvals (a cheap model judges risky calls); network allowlist per host; Docker and remote sandboxes; secret redaction in logs; signed audit receipts |
 | **0.5 Multi-agent** | Fleets | Agent teams on separate worktrees with a merge step; a scheduler (cron, GitHub and Slack triggers); a job dashboard; ACP so IDEs can host Galley and Galley can host other agents |
-| **0.6 Cost** | Cheapest good result | Model routing (cheap model for exploring, strong model for editing); a cost budget per task; cache-hit diagnostics; a local benchmark harness (Terminal-Bench style) to tune prompts per model |
+| **0.6 Cost** | Cheapest good result | In, not yet measured: model profiles, an advisor model, takeover by a stronger model on signals, a plan model, fallbacks ([research](../research/model-switching.md)). To do: measure them; a cost budget per task; cache-hit diagnostics; a local benchmark harness (Terminal-Bench style) to tune prompts per model |
 | **1.0** | Distribution | Desktop app (Tauri), VS Code extension, curated model list, telemetry-free by default, docs site |
 
 ## 5. Success metrics
