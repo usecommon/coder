@@ -96,8 +96,8 @@ if command -v dotnet >/dev/null && [ ! -d deps/nuget/packages/xunit.v3 ]; then
   done
 fi
 # Bash, Lua and Tcl: the tracks' test tools (bats, busted, tcltest with the thread package some exercises load) from
-# the system's package source.
-command -v bats >/dev/null && command -v busted >/dev/null && echo 'package require Thread' | tclsh 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bats lua5.4 lua-busted tcl tcl-thread >/dev/null 2>&1 || echo "could not install bats, Lua with busted, and Tcl"
+# the system's package source, and GNU awk, which Bash solutions may rely on (it becomes the machine's `awk`).
+command -v bats >/dev/null && command -v busted >/dev/null && command -v gawk >/dev/null && echo 'package require Thread' | tclsh 2>/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bats lua5.4 lua-busted tcl tcl-thread gawk >/dev/null 2>&1 || echo "could not install bats, Lua with busted, Tcl and GNU awk"
 # One-test projects the self-test builds and runs, inside the benchmark's sandbox and inside Galley's own.
 rm -rf deps/checks && cp -r "$HERE/deps-seed/checks" deps/checks
 echo "tracks ready in $WORK/tracks2, $WORK/tracks3 and $WORK/tracks4"
