@@ -9,7 +9,7 @@
 - **Our win rule asks for more than any harness on that board has over OpenCode.** A 5-point lead over the leader would be larger than every gap between two competent harnesses measured there.
 - **Galley has never been run on tasks of that kind.** On small Exercism tasks it is 1 to 8 points ahead of OpenCode 1.19.5 and, since its fixes, 11 to 22% cheaper.
 - **Galley lacks many features the large harnesses have. Few of those features are known to raise a pass rate.** Section 2 sorts them.
-- **Two things have large measured effects and Galley does neither by itself:** feeding test output back (+24 to +49 points in our own runs) and several attempts with a selector (+12 to +27 points on the Terminal-Bench board). A third, the right reasoning effort for each model, it leaves to the user.
+- **Two things have large measured effects and Galley does neither by itself:** giving the agent test results it did not have (+24 to +49 points in our own runs) and several attempts with a selector (+12 to +27 points on the Terminal-Bench board). A third, the right reasoning effort for each model, it leaves to the user.
 - **My recommendation:** measure Galley where harnesses can differ at all (hard tasks, with cost per solved task counted), and build the test-feedback loop and several attempts. Each is the user's decision; costs are in section 4.
 
 ## 1. Measured performance: how much the harness matters on one model
@@ -67,7 +67,7 @@ What this shows:
 | Lever | Size | Measured where |
 |---|---|---|
 | Which model | 6.7% to 65.8% in one harness | Terminal-Bench 4.1 board |
-| Test output fed back for one more attempt | +24 to +49 points | Our pilot and fourth confirmation |
+| The output of tests the agent could not see, fed back for one more attempt | +24 to +49 points | Our pilot and fourth confirmation |
 | Five runs instead of one, if something picks the run that worked | +12 to +27 points | Terminal-Bench 4.1 board |
 | A harness that does not fit the model | −26 points | Harness Leaderboard (Codex with GLM-5.3-Flash on DeepSWE) |
 | A poor harness instead of a good one | −9 to −17 points | Harness Leaderboard, DeepSeek V4.1 Flash |
@@ -94,7 +94,7 @@ What this shows:
 | Edit tools | Exact replace, patch, write | Codex: patch. Aider: several formats | Exact replace, write | Fit to the model matters more than the choice: see Codex with GLM above |
 | Loop guard | Asks the user after three identical calls | Gemini CLI; a vendor's guard that tells the model to change approach | Signals exist since today; acted on only when a second model is configured | Vendor claims only |
 | Check before finishing | No | Aider: lint and test after each edit. Claude Code: hooks | Optional self-review and verifier | On Exercism: no gain at 2 to 3 times the cost (our runs) |
-| Test output fed back automatically | No | Aider | No | The largest effect we have measured, where tests exist |
+| Test output fed back automatically | No | Aider | No | Large when it brings information the agent lacked (+24 to +49 points with hidden tests in our runs). Where the agent can run the tests itself the gain is what it fails to do unprompted: unmeasured |
 | Several attempts | No | Codex cloud: up to four attempts, chosen by hand (secondary) | No; possible by hand with worktrees | Large if something can pick the right run |
 | Extensions | MCP, skills, plug-ins, custom tools and commands | Claude Code: also hooks | MCP only | Reach |
 | Project memory | `AGENTS.md` | Claude Code: also memory across sessions | `AGENTS.md` | Convenience |
@@ -115,9 +115,9 @@ Ordered by the size of the measured effect behind each.
 
 | # | Improvement | Evidence | What it takes | How to measure |
 |---|---|---|---|---|
-| 1 | **Test feedback built in:** find the project's test command, run it after changes, feed failures back until they pass or a budget runs out | +24 to +49 points when we did it by hand as a second attempt | A few hundred lines; no extra model cost when tests pass | Tasks with visible tests (DeepSWE style). Not Exercism, where the tests are hidden |
+| 1 | **Test feedback built in:** run the project's test command after changes and feed failures back until they pass or a budget runs out | +24 to +49 points when a failed attempt was given the output of tests the agent could not see. Where it can run the tests itself the gain is smaller and unmeasured | A setting for the command and a few dozen lines; no extra model cost when tests pass | Tasks with visible tests (DeepSWE style). Not Exercism, where the tests are hidden |
 | 2 | **Several attempts with a selector:** `--attempts N` in separate worktrees; pick by the project's tests, otherwise by a judge | +12 to +27 points for five runs with a perfect selector; +4 to +7 for two | Worktrees and background runs exist. The selector is the hard part. Cost times N | Any benchmark, at N times the cost |
-| 3 | **A place on a hard-task board** | The only place where harnesses are compared on our model | An adapter for the Harbor framework and a container runtime. The Docker client is on this machine; no daemon runs | Terminal-Bench 2.1, three attempts: about $9 a harness at the board's prices |
+| 3 | **A place on a hard-task board** | The only place where harnesses are compared on our model | An adapter for the Harbor framework and a container runtime. Docker is installed on this machine but not running; starting it, and running agents in containers instead of the present sandbox, is the user's decision | Terminal-Bench 2.1, three attempts: about $9 a harness at the board's prices |
 | 4 | **A loop guard on one model:** on a signal, tell the model to stop, say what is failing and change approach | A vendor's claim; common in other harnesses | The signals exist; one message | Hard tasks; Exercism runs are too short to loop |
 | 5 | **Effort chosen per model** | +5.9 points for one model, +0.5 for another, on the same tasks | A profile field and a default | Cheap sweep per model |
 | 6 | **A second model** | +2.7 points at best; needs a clearly stronger model | Built | See [model-switching.md](model-switching.md) |
