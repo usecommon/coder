@@ -8,6 +8,7 @@ A head-to-head run of the two harnesses on a public benchmark, using the same mo
 - `rust/macros` is excluded because its compile-failure tests can't run offline.
 - JavaScript (49), Java (47) and C++ (26) were left out of the first comparisons because they need test dependencies inside the sandbox. `setup.sh` now fetches those once (jest and babel; JUnit and AssertJ as a read-only Gradle cache), and `--langs javascript,java,cpp` runs them. They served as the fresh tasks for the confirmation of 12 and 13 November ([RESULTS-fresh.md](RESULTS-fresh.md)): 121 tasks, after leaving out `javascript/parallel-letter-frequency`, whose reference solution failed a timing test. They are no longer fresh: Galley has since been changed in the light of those runs.
 - **A second set of fresh tasks** comes from Exercism tracks the Polyglot benchmark does not include: PHP (61), TypeScript (58) and Ruby (62). `setup_tracks.sh` fetches the three track repositories at pinned commits and keeps every exercise that shares its name with a Polyglot exercise and is active in its track; 181 of the 183 have a reference solution that passes in the sandbox ([`data/tracks2-tasks.txt`](data/tracks2-tasks.txt)). Run them with `BENCH_TASKS=$WORK/tracks2 LANGS=php,typescript,ruby`. Grading uses each track's own test command without the parts that need the network: `ruby` on the test file, PHPUnit 11.5 on the test file, and `jest` for TypeScript (its separate type check is not run). Ruby's starting files name no classes or methods, so the agent has to infer what the hidden tests call; the Polyglot C++ exercises are the same.
+- **A third set of fresh tasks**, chosen the same way from three more tracks: C (43), C# (82) and Elixir (76). All 201 have a reference solution that passes in the sandbox with every test enabled ([`data/tracks3-tasks.txt`](data/tracks3-tasks.txt)). Run them with `BENCH_TASKS=$WORK/tracks3 LANGS=c,csharp,elixir`. Grading uses `make` (C), `dotnet test` (C#, with .NET 10 and the test packages from an offline folder) and `mix test --include pending` (Elixir). C# tasks run with `/tmp` as the home folder for both agents, because the .NET tools need a writable one.
 
 ## Protocol
 
@@ -76,9 +77,12 @@ export DEEPSEEK_API_KEY=...          # read by the proxy only; agents get a plac
 bench/round.sh myrun                 # self-test, both agents on all tasks, report, leak audit
 
 # the second task set (PHP, TypeScript, Ruby)
-bench/setup_tracks.sh                # track repositories at pinned commits, TypeScript test dependencies, PHPUnit
+bench/setup_tracks.sh                # track repositories at pinned commits, TypeScript test dependencies, PHPUnit, C# test packages
 BENCH_TASKS=/tmp/bench-work/tracks2 LANGS=php,typescript,ruby \
   BENCH_SKIP=typescript/crypto-square,typescript/pythagorean-triplet bench/round.sh myrun2
+
+# the third task set (C, C#, Elixir); setup_tracks.sh also installs the .NET SDK and Elixir with apt
+BENCH_TASKS=/tmp/bench-work/tracks3 LANGS=c,csharp,elixir bench/round.sh myrun3
 ```
 
 `round.sh` takes a name, a split (`all`, `dev`, `holdout`) and a list of agents. To compare configurations of one agent side by side, name a variant `<agent>-<label>` and describe it in `BENCH_VARIANTS`:

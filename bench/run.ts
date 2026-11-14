@@ -62,6 +62,29 @@ const GRADLE_HOME = join(DEPS, "gradle-home");
  *  (jest, babel preset), and a folder holding PHPUnit with a `phpunit` command in bin/. */
 const TS_MODULES = join(DEPS, "ts", "node_modules");
 const PHP_TOOLS = join(DEPS, "php");
+/** The NuGet packages the C# exercises reference (xunit and friends), as a read-only package folder. */
+const NUGET_DIR = join(DEPS, "nuget", "packages");
+/** One-test projects the self-test builds and runs (C#, Elixir), and the script that runs them. */
+const CHECKS = join(DEPS, "checks");
+/** What a language's tasks get in their environment on top of baseEnv: the same for both agents and for grading.
+ *  C#: the home folder is read-only in the sandbox, and in Galley's own sandbox within it. .NET insists on writing
+ *  to ~/.dotnet and cannot be pointed elsewhere, so C# tasks get /tmp as their home: it is writable and empty in
+ *  the benchmark's sandbox and in Galley's. Packages come from the shared read-only folder only; no telemetry, and
+ *  no build or compiler servers left running after a command (an agent's shell tool may wait on them).
+ *  Elixir: its build tool keeps state in a home folder of its own, also put under /tmp. */
+const LANG_ENV: Record<string, Record<string, string>> = {
+  csharp: {
+    HOME: "/tmp",
+    DOTNET_CLI_TELEMETRY_OPTOUT: "1",
+    DOTNET_NOLOGO: "1",
+    DOTNET_CLI_USE_MSBUILD_SERVER: "0",
+    MSBUILDDISABLENODEREUSE: "1",
+    UseSharedCompilation: "false",
+    NUGET_FALLBACK_PACKAGES: NUGET_DIR,
+    RestoreSources: NUGET_DIR,
+  },
+  elixir: { MIX_HOME: "/tmp/mix", HEX_HOME: "/tmp/hex", HEX_OFFLINE: "1" },
+};
 /** The proxy's log. When set, a result is recorded only if the agent got at least one answer from the model. */
 const PROXY_LOG = args["proxy-log"] ?? process.env.PROXY_LOG;
 
@@ -140,7 +163,7 @@ function prepare(t: Task, ws: string, run: string) {
   for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
   if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
   // The other tracks keep a few test-like files their config does not list (a test template, a benchmark test).
-  if (OTHER_TRACKS.has(t.lang)) for (const f of walkFiles(ws)) if (/(_test\.rb|Test\.php(\.twig)?|\.test\.ts|\.tst\.ts)$/.test(f)) rmSync(join(ws, f), { force: true });
+  if (OTHER_TRACKS.has(t.lang)) for (const f of walkFiles(ws)) if (TEST_LIKE.test(f)) rmSync(join(ws, f), { force: true });
   if (t.lang === "typescript") symlinkSync(TS_MODULES, join(ws, "node_modules"));
   // JavaScript: the exercises expect node_modules (jest, babel) next to the code.
   if (t.lang === "javascript") symlinkSync(JS_MODULES, join(ws, "node_modules"));
@@ -153,7 +176,9 @@ function prepare(t: Task, ws: string, run: string) {
 }
 
 /** Languages whose exercises come from Exercism's own track repositories instead of the Polyglot checkout. */
-const OTHER_TRACKS = new Set(["ruby", "php", "typescript"]);
+const OTHER_TRACKS = new Set(["ruby", "php", "typescript", "c", "csharp", "elixir"]);
+/** Names that mark a test file in those tracks, whether or not the exercise's config lists it. */
+const TEST_LIKE = /(_test\.rb|Test\.php(\.twig)?|\.test\.ts|\.tst\.ts|Tests?\.cs|_test\.exs|(^|\/)test_[^/]*\.c)$/;
 
 /** Every file under `dir`, as paths relative to it. */
 function walkFiles(dir: string, rel = ""): string[] {
@@ -177,6 +202,9 @@ function unskip(t: Task, ws: string) {
     if (t.lang === "java") writeFileSync(p, src.replace(/^[ \t]*@Disabled\([^)]*\)[ \t]*\r?\n/gm, ""));
     if (t.lang === "typescript") writeFileSync(p, src.replace(/\bxit\(/g, "it(").replace(/\bxdescribe\(/g, "describe(").replace(/\b(it|test|describe)\.skip\(/g, "$1("));
     if (t.lang === "ruby") writeFileSync(p, src.replace(/^[ \t]*skip[ \t]*\r?\n/gm, ""));
+    if (t.lang === "c") writeFileSync(p, src.replace(/^[ \t]*TEST_IGNORE\(\);[^\n]*\r?\n/gm, ""));
+    if (t.lang === "csharp") writeFileSync(p, src.replace(/\[(Fact|Theory)\(Skip\s*=\s*"[^"]*"\)\]/g, "[$1]"));
+    // Elixir: nothing to edit; grading runs the tests tagged as pending too.
   }
 }
 
@@ -245,7 +273,7 @@ function boxArgs(o: Box): string[] {
   for (const d of ETC_HIDE_DIRS) a.push("--tmpfs", d);
   a.push("--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--tmpfs", "/var/tmp", "--dir", "/run", "--dir", HOME);
   if (boxUser.home) a.push("--dir", boxUser.home);
-  for (const r of [...(o.readable ?? []), ...[JS_MODULES, GRADLE_RO_CACHE, TS_MODULES, PHP_TOOLS].filter((d) => existsSync(d))]) a.push("--ro-bind", r, r);
+  for (const r of [...(o.readable ?? []), ...[JS_MODULES, GRADLE_RO_CACHE, TS_MODULES, PHP_TOOLS, NUGET_DIR, CHECKS].filter((d) => existsSync(d))]) a.push("--ro-bind", r, r);
   for (const w of o.writable) a.push("--bind", w, w);
   if (!o.network) a.push("--unshare-net");
   // Everything not mounted above lives on an empty in-memory root; make that read-only too.
@@ -329,7 +357,7 @@ const netEnv = Object.fromEntries(Object.entries(process.env).filter(([k, v]) =>
 netEnv.NO_PROXY = netEnv.no_proxy = ["127.0.0.1", "localhost", netEnv.NO_PROXY ?? ""].filter(Boolean).join(",");
 const caFiles = [...new Set(Object.entries(netEnv).filter(([k, v]) => !/proxy/i.test(k) && v.startsWith("/") && existsSync(v)).map(([, v]) => v))];
 
-const baseEnv = (run: string): Record<string, string> => ({
+const baseEnv = (run: string, lang?: string): Record<string, string> => ({
   // PHPUnit is not installed on the machine; setup_tracks.sh puts a `phpunit` command in a folder of its own.
   PATH: (LANGS.includes("php") && existsSync(join(PHP_TOOLS, "bin")) ? join(PHP_TOOLS, "bin") + ":" : "") + process.env.PATH!,
   HOME,
@@ -350,6 +378,7 @@ const baseEnv = (run: string): Record<string, string> => ({
   npm_config_cache: join(run, "cache", "npm"),
   GRADLE_USER_HOME: join(run, "cache", "gradle"),
   GRADLE_RO_DEP_CACHE: GRADLE_RO_CACHE,
+  ...(lang ? LANG_ENV[lang] : {}),
 });
 
 /** What an agent's process needs beyond the toolchains: its own program, and the relay to the model proxy. */
@@ -377,7 +406,7 @@ async function runAgent(agent: string, t: Task, ws: string, run: string) {
   // The agent sees its workspace and these state folders. Not the rest of the run folder: the logs written
   // there by the harness stay outside.
   const state = (names: string[]) => names.map((n) => (mkdirSync(join(run, n), { recursive: true }), join(run, n)));
-  const env = { ...baseEnv(run), ...keyEnv() };
+  const env = { ...baseEnv(run, t.lang), ...keyEnv() };
   let cmd: string[];
   let stateDirs: string[];
   if (baseOf(agent) === "galley") {
@@ -422,10 +451,13 @@ async function grade(t: Task, ws: string, run: string) {
     ruby: ["bash", "-c", 'for f in "$@"; do ruby "$f" || exit 1; done', "bash", ...t.files.test],
     php: ["bash", "-c", 'for f in "$@"; do phpunit --no-configuration --do-not-cache-result "$f" || exit 1; done', "bash", ...t.files.test],
     typescript: ["bash", "-c", "node node_modules/jest/bin/jest.js --no-cache"],
+    c: ["make"],
+    csharp: ["dotnet", "test"],
+    elixir: ["mix", "test", "--include", "pending"],
   };
   const cmd = cmds[t.lang] ?? [];
   mkdirSync(join(run, "cache"), { recursive: true });
-  const env = baseEnv(run);
+  const env = baseEnv(run, t.lang);
   if (t.lang === "java") {
     // Grade with a Gradle home the agent never touched.
     env.GRADLE_USER_HOME = join(run, "cache", "gradle-grade");
@@ -465,7 +497,9 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
 // Self-test: plant things an agent must never see, then look for them from inside the sandbox.
 // ---------------------------------------------------------------------------------------------------------
 
-const TOOL_CHECKS = [
+/** Commands that must work in the benchmark's sandbox and in Galley's own. One with a language runs in the
+ *  environment that language's tasks get. */
+const TOOL_CHECKS: (string | { cmd: string; lang: string })[] = [
   "git --version",
   "rg --version",
   ...(LANGS.includes("python") ? ["python3 --version", "pytest --version"] : []),
@@ -477,7 +511,13 @@ const TOOL_CHECKS = [
   ...(LANGS.includes("typescript") ? ["node --version", `test -f ${TS_MODULES}/jest/bin/jest.js`] : []),
   ...(LANGS.includes("php") ? ["php --version", "phpunit --version"] : []),
   ...(LANGS.includes("ruby") ? ["ruby --version", "ruby -e 'require %q(minitest)'"] : []),
+  ...(LANGS.includes("c") ? ["gcc --version", "make --version"] : []),
+  // C# and Elixir: build and test a one-test project, as a task's own commands would.
+  ...(LANGS.includes("csharp") ? ["dotnet --version", { cmd: `sh ${CHECKS}/run.sh csharp`, lang: "csharp" }] : []),
+  ...(LANGS.includes("elixir") ? ["elixir --version", { cmd: `sh ${CHECKS}/run.sh elixir`, lang: "elixir" }] : []),
 ];
+const checkCmd = (c: (typeof TOOL_CHECKS)[number]) => (typeof c === "string" ? c : c.cmd);
+const checkLang = (c: (typeof TOOL_CHECKS)[number]) => (typeof c === "string" ? undefined : c.lang);
 
 async function selftest(): Promise<boolean> {
   const token = (n: string) => `CANARY-${n}-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
@@ -528,7 +568,11 @@ touch ok.txt 2>/dev/null || fail "workspace not writable"
 # Network: nothing but loopback.
 (timeout 3 bash -c 'echo > /dev/tcp/1.1.1.1/53') 2>/dev/null && fail "internet reachable"
 # Toolchains still work.
-${TOOL_CHECKS.map((c) => `${c} >/dev/null 2>&1 || fail ${JSON.stringify("tool broken: " + c)}`).join("\n")}
+${TOOL_CHECKS.map((c) => {
+  const lang = checkLang(c);
+  const env = lang ? `env ${Object.entries(LANG_ENV[lang]!).map(([k, v]) => `${k}=${v}`).join(" ")} ` : "";
+  return `${env}${checkCmd(c)} >/dev/null 2>&1 || fail ${JSON.stringify("tool broken: " + checkCmd(c))}`;
+}).join("\n")}
 env | grep -iE 'key|token|secret|password' | grep -v ${JSON.stringify(PLACEHOLDER_KEY)} | sed 's/=.*//' | while read n; do fail "secret-looking variable in environment: $n"; done
 echo "probe finished"
 `;
@@ -536,7 +580,7 @@ echo "probe finished"
   for (const agent of ORACLE ? [] : AGENTS) {
     const state = ["cache", "config", "galley-data"].map((n) => (mkdirSync(join(run, n), { recursive: true }), join(run, n)));
     const log = join(root, `probe-${agent}.log`);
-    await runInAgentBox(["bash", "-c", script], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv() }, timeoutMs: 120_000, stdout: log });
+    await runInAgentBox(["bash", "-c", script], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv() }, timeoutMs: 600_000, stdout: log });
     const outText = readFileSync(log, "utf8");
     const fails = outText.split("\n").filter((l) => l.startsWith("FAIL"));
     const finished = outText.includes("probe finished");
@@ -556,21 +600,34 @@ echo "probe finished"
         ok = false;
       }
       // The toolchains must work from inside Galley's own sandbox too. It shows less than the benchmark's does:
-      // commands there get a private /tmp, so a tool kept under /tmp exists for OpenCode and not for Galley.
-      const nlog = join(root, `nested-${agent}.log`);
-      const probe = `import { exec, detectSandbox } from ${JSON.stringify(join(dirname(galleyOf(agent)), "safety", "sandbox.ts"))};
-for (const c of ${JSON.stringify(TOOL_CHECKS)}) {
-  const r = await exec(c, { cwd: process.cwd(), workspace: process.cwd(), readOnly: false, network: false, timeoutMs: 60000, kind: detectSandbox() });
-  if (r.exitCode !== 0) console.log("FAIL: not usable inside Galley's own sandbox: " + c);
+      // commands there get a private /tmp, so a tool kept under /tmp exists for OpenCode and not for Galley. And
+      // it passes on only part of the environment, so a check with a language starts from that language's
+      // environment, as Galley itself would in a task, and has to find its settings still there.
+      let ntext = "";
+      for (const lang of [...new Set(TOOL_CHECKS.map(checkLang))]) {
+        const nlog = join(root, `nested-${agent}${lang ? "-" + lang : ""}.log`);
+        // The same call Galley's shell tool makes: its own cache folder, and its own folder as /tmp.
+        const src = dirname(galleyOf(agent));
+        const probe = `import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { exec, detectSandbox } from ${JSON.stringify(join(src, "safety", "sandbox.ts"))};
+import { projectDir } from ${JSON.stringify(join(src, "session", "store.ts"))};
+const ws = process.cwd(), cacheDir = join(projectDir(ws), "cache"), tmpDir = join(projectDir(ws), "tmp");
+mkdirSync(cacheDir, { recursive: true });
+mkdirSync(tmpDir, { recursive: true });
+for (const c of ${JSON.stringify(TOOL_CHECKS.filter((c) => checkLang(c) === lang).map(checkCmd))}) {
+  const r = await exec(c, { cwd: ws, workspace: ws, readOnly: false, network: false, timeoutMs: 240000, kind: detectSandbox(), cacheDir, tmpDir });
+  if (r.exitCode !== 0) console.log("FAIL: not usable inside Galley's own sandbox: " + c + "\\n" + r.output.split("\\n").slice(-12).join("\\n"));
 }
-console.log("nested probe finished");`;
-      await runInAgentBox([process.execPath, "-e", probe], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv() }, timeoutMs: 180_000, stdout: nlog });
-      const ntext = readFileSync(nlog, "utf8");
+console.log("nested probe finished ${lang ?? "general"}");`;
+        await runInAgentBox([process.execPath, "-e", probe], { agent, ws, state, env: { ...baseEnv(run, lang), ...keyEnv(), XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") }, timeoutMs: 900_000, stdout: nlog });
+        const t = readFileSync(nlog, "utf8");
+        ntext += t + (t.includes(`nested probe finished ${lang ?? "general"}`) ? "" : `FAIL: the probe inside Galley's own sandbox did not finish (${lang ?? "general"}):\n${t.split("\n").slice(-5).join("\n")}\n`);
+      }
       const nfails = ntext.split("\n").filter((l) => l.startsWith("FAIL"));
-      const nok = nfails.length === 0 && ntext.includes("nested probe finished");
+      const nok = nfails.length === 0;
       console.log(`selftest ${agent}: toolchains inside Galley's own sandbox: ${nok ? "ok" : "FAILED"}`);
       for (const f of nfails) console.log("  " + f);
-      if (!nok && !nfails.length) console.log("  probe did not finish:\n" + ntext.split("\n").slice(-5).join("\n"));
       if (!nok) ok = false;
     }
   }
@@ -605,9 +662,10 @@ if (SELFTEST) {
 
 if (args["box-exec"]) {
   // Debugging aid: run one shell command exactly as the first listed agent would be run, and show its output.
+  // With a single --langs language, in the environment that language's tasks get.
   const dir = join(OUT, `box-exec-${process.pid}`);
   const state = ["ws", "cache", "config", "galley-data"].map((n) => (mkdirSync(join(dir, n), { recursive: true }), join(dir, n)));
-  const r = await runInAgentBox(["bash", "-c", args["box-exec"]], { agent: AGENTS[0]!, ws: state[0]!, state: state.slice(1), env: { ...baseEnv(dir), ...keyEnv(), XDG_CONFIG_HOME: join(dir, "config"), GALLEY_DATA_DIR: join(dir, "galley-data") }, timeoutMs: AGENT_TIMEOUT, stdout: join(dir, "out.log") });
+  const r = await runInAgentBox(["bash", "-c", args["box-exec"]], { agent: AGENTS[0]!, ws: state[0]!, state: state.slice(1), env: { ...baseEnv(dir, LANGS.length === 1 ? LANGS[0] : undefined), ...keyEnv(), XDG_CONFIG_HOME: join(dir, "config"), GALLEY_DATA_DIR: join(dir, "galley-data") }, timeoutMs: AGENT_TIMEOUT, stdout: join(dir, "out.log") });
   process.stdout.write(readFileSync(join(dir, "out.log"), "utf8"));
   rmSync(dir, { recursive: true, force: true });
   process.exit(r.code ?? 1);
@@ -622,14 +680,16 @@ jobs.sort((a, b) => all.indexOf(a.t) - all.indexOf(b.t) || a.agent.localeCompare
 console.log(`${jobs.length} runs (${all.length} tasks × ${ORACLE ? 1 : AGENTS.length} agents), concurrency ${CONC}`);
 
 /** Delete build outputs and caches after grading (Rust targets alone are ~100 MB per task); keep logs and sessions. */
-function pruneArtifacts(dir: string) {
+function pruneArtifacts(dir: string, extra: string[] = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     if (!e.isDirectory()) continue;
     const p = join(dir, e.name);
-    if (["target", "cache", "xdg-cache", "node_modules", "__pycache__", "build", ".gradle"].includes(e.name)) rmSync(p, { recursive: true, force: true });
-    else pruneArtifacts(p);
+    if (["target", "cache", "xdg-cache", "node_modules", "__pycache__", "build", ".gradle", ...extra].includes(e.name)) rmSync(p, { recursive: true, force: true });
+    else pruneArtifacts(p, extra);
   }
 }
+/** Build output folders of the languages whose names are too common to remove everywhere. */
+const BUILD_DIRS: Record<string, string[]> = { csharp: ["bin", "obj"], elixir: ["_build"] };
 
 /** Refuse to start a job when the disk is nearly full: a full disk silently turns runs into failures. */
 function assertDiskSpace() {
@@ -693,7 +753,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     }
   }
   const g = await grade(t, ws, run);
-  pruneArtifacts(run);
+  pruneArtifacts(run, BUILD_DIRS[t.lang]);
   const r = { agent, lang: t.lang, name: t.name, pass: g.code === 0 && !g.timedOut, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started, memoryKills: a.memoryKills + g.memoryKills };
   appendFileSync(resultsFile, JSON.stringify(r) + "\n");
   finished++;

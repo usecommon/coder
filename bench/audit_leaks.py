@@ -26,10 +26,11 @@ The first four count as contamination. The scan is a heuristic: it can miss a le
 import argparse, collections, glob, json, math, os, random, re, sys
 
 EXCLUDE = {("rust", "macros"), ("go", "octal")}
-LANGS = ["python", "go", "rust", "javascript", "java", "cpp", "ruby", "php", "typescript"]
+LANGS = ["python", "go", "rust", "javascript", "java", "cpp", "ruby", "php", "typescript", "c", "csharp", "elixir"]
 STRONG = ("sibling_tests", "hidden_test_content", "sibling_solution", "benchmark_checkout")
 TEST_TOKEN = re.compile(r"def test_|self\.assert|func Test|t\.(Fatal|Error|Run)|#\[test\]|assert_eq!|assert!\(|\btest\(|\bexpect\(|@Test|TEST_CASE|REQUIRE\("
-                        r"|\bassert_\w+\b|function test|\$this->(assert|expect)|\bx?it\(")
+                        r"|\bassert_\w+\b|function test|\$this->(assert|expect)|\bx?it\("
+                        r"|TEST_ASSERT\w*\(|RUN_TEST\(|\bAssert\.\w+|\[Fact|\btest \"|\bassert ")
 NAMESPACE = re.compile(r"(?<![\w-])(unshare|umount|nsenter|chroot|pivot_root)\b|(?<![\w-])mount\s+(-|/)|/proc/\d+/(root|environ)")
 WRITE_TOOLS = {"write", "edit", "apply_patch", "multiedit", "patch"}
 
