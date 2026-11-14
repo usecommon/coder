@@ -275,3 +275,11 @@ The second confirmation was run on a benchmark that kept test tools where Galley
 - **Also reported, outside the rule:** results by language; for each agent, in how many task-runs the track's test tool ran from the agent's own commands; how many failed gradings come from files the agent left behind (a second `main`, a failing test of its own); how many task-runs changed a build file; the leak audit.
 
 What this can show: with about 200 tasks and four rounds the interval on the lead is about 4 points either side. If the true lead is 5 points, the measured lead reaches 5 about half the time. What I expect: Galley cheaper again, the lead positive, and about even odds that it reaches 5 points with p < 0.05.
+
+### Third confirmation: smoke test (14 November, before round 1)
+
+`acronym` in C, C# and Elixir, both agents, once: $0.01. Both agents passed C# and Elixir and failed C, where the hidden tests expect a result the caller can free and a null result for an empty phrase.
+
+- The check it was run for: each agent's own commands compiled and ran code in every language. OpenCode ran `gcc`, `dotnet build` and `mix test`; Galley ran `gcc`, `dotnet run` and `mix run`.
+- No fault in the benchmark showed, and nothing was changed in Galley or in the harness code. The frozen copy for the rounds is commit `b581d78`.
+- One addition to the self-test afterwards: its one-test C# project now has the exercises' own settings and `packages.lock.json`, so the check restores packages exactly as an exercise does. It passes in both sandboxes. The project lives in the shared tools folder, outside the frozen code.
