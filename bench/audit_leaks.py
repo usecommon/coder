@@ -21,13 +21,18 @@ What `scan` looks for in each tool call the agent made (inputs and outputs only)
   results_files        read the run's results or logs            (informational)
   operator_files       read the operator's session log or repo   (informational)
   namespace_cmds       ran unshare / umount / mount / nsenter or read another process's environment (informational)
-The first four count as contamination. The scan is a heuristic: it can miss a leak it has no pattern for.
+and in the round's proxy log, for the attempt that produced each recorded result:
+  other_model          the agent got an answer from a model other than the round's (its own request to the model
+                       API, through the proxy): breaks the same-model protocol
+  model_by_hand        the agent's own commands got an answer from the model API (not streamed, so not sent by the
+                       agent's client); the same model is within the protocol                  (informational)
+The first four and other_model count as contamination. The scan is a heuristic: it can miss a leak it has no pattern for.
 """
 import argparse, collections, glob, json, math, os, random, re, sys
 
 EXCLUDE = {("rust", "macros"), ("go", "octal")}
 LANGS = ["python", "go", "rust", "javascript", "java", "cpp", "ruby", "php", "typescript", "c", "csharp", "elixir"]
-STRONG = ("sibling_tests", "hidden_test_content", "sibling_solution", "benchmark_checkout")
+STRONG = ("sibling_tests", "hidden_test_content", "sibling_solution", "benchmark_checkout", "other_model")
 TEST_TOKEN = re.compile(r"def test_|self\.assert|func Test|t\.(Fatal|Error|Run)|#\[test\]|assert_eq!|assert!\(|\btest\(|\bexpect\(|@Test|TEST_CASE|REQUIRE\("
                         r"|\bassert_\w+\b|function test|\$this->(assert|expect)|\bx?it\("
                         r"|TEST_ASSERT\w*\(|RUN_TEST\(|\bAssert\.\w+|\[Fact|\btest \"|\bassert ")
@@ -112,8 +117,47 @@ def calls(run, agent):
                 yield p.get("tool"), st.get("input") or {}, str(st.get("output"))
 
 
+def proxy_kinds(base):
+    """From the proxy log: answers the agent obtained from the model API by its own requests."""
+    started = {}
+    try:
+        for line in open(f"{base}/results.jsonl"):
+            try:
+                o = json.loads(line)
+            except Exception:
+                continue
+            started[(o["agent"], o["lang"], o["name"])] = o.get("startedAt", 0)
+    except OSError:
+        pass
+    path = next((p for p in (f"{base}/proxy.jsonl", f"{base}/proxy-usage.jsonl") if os.path.exists(p)), None)
+    if not path:
+        return {}
+    recs = []
+    for line in open(path):
+        try:
+            o = json.loads(line)
+        except Exception:
+            continue
+        key = tuple(o.get("tag", "").split("__"))
+        req = o.get("req") or {}
+        if len(key) == 3 and o.get("status") == 200 and req.get("model"):
+            recs.append((key, o.get("t") or 0, req["model"], req.get("stream") is True))
+    streamed = collections.Counter(m for _, _, m, s in recs if s)
+    main = streamed.most_common(1)[0][0] if streamed else None
+    out = collections.defaultdict(collections.Counter)
+    for key, t, model, is_stream in recs:
+        if started and (key not in started or t < started[key] - 2000):
+            continue                              # an attempt that was interrupted and run again
+        if main and model != main and not (is_stream and model.startswith("claude-haiku")):   # OpenCode's own small model
+            out[key]["other_model"] += 1
+        if not is_stream:
+            out[key]["model_by_hand"] += 1
+    return out
+
+
 def scan_run(label, base, poly):
     rows = []
+    by_proxy = proxy_kinds(base)
     for run in sorted(glob.glob(f"{base}/runs/*/*/*")):
         agent, lang, task = run.split("/")[-3:]
         dist = distinctive(poly, task)
@@ -146,8 +190,11 @@ def scan_run(label, base, poly):
             for lines in dist.values():
                 if not own_store and sum(1 for s in lines if s in out and s not in wrote) >= 3:
                     kinds["hidden_test_content"] += 1
+        kinds.update(by_proxy.pop((agent, lang, task), {}))
         if kinds:
             rows.append({"run": label, "agent": agent, "lang": lang, "task": task, "kinds": sorted(kinds)})
+    for (agent, lang, task), kinds in by_proxy.items():   # recorded results whose run folder is not here
+        rows.append({"run": label, "agent": agent, "lang": lang, "task": task, "kinds": sorted(kinds)})
     return rows
 
 
@@ -173,7 +220,7 @@ def cmd_scan(a):
         by[k]["contaminated"] += any(x in STRONG for x in r["kinds"])
         for x in r["kinds"]:
             by[k][x] += 1
-    cols = ["contaminated", *STRONG, "results_files", "operator_files", "namespace_cmds"]
+    cols = ["contaminated", *STRONG, "results_files", "operator_files", "namespace_cmds", "model_by_hand"]
     print(f"{'run':14}{'agent':10}" + "".join(f"{c[:15]:>17}" for c in cols))
     for k in sorted(by):
         print(f"{k[0]:14}{k[1]:10}" + "".join(f"{by[k][c]:>17}" for c in cols))

@@ -4,6 +4,10 @@
 //
 // It also keeps the real API key out of the agents' sandboxes: agents send a placeholder, and the proxy
 // replaces it with UPSTREAM_KEY. Leave UPSTREAM_KEY unset when the machine's own network layer adds the key.
+//
+// It serves the model's chat endpoint only, and (with ALLOW_MODELS set, as round.sh does) only the benchmark's
+// model. An agent can find this proxy from inside its sandbox. Before 14 November 2026 it forwarded anything: an
+// agent listed the account's models and put its questions to a stronger one.
 import { appendFileSync } from "node:fs";
 
 const UPSTREAM = process.env.UPSTREAM ?? "https://api.deepseek.com";
@@ -11,6 +15,8 @@ const UPSTREAM_KEY = process.env.UPSTREAM_KEY || undefined;
 // A TCP port is only needed for agents that share the host's network. Sandboxed agents use the socket.
 const port = process.env.PORT ? Number(process.env.PORT) : undefined;
 const log = process.env.LOG ?? "proxy.jsonl";
+const ALLOW_MODELS = (process.env.ALLOW_MODELS ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+const ALLOW_PATHS = new Set(["chat/completions", "v1/chat/completions", "v1/messages"]);
 
 function usageFrom(text: string): any {
   // OpenAI-style streams: the last chunk carrying usage. Anthropic streams: usage from message_start
@@ -73,6 +79,13 @@ async function handle(req: Request): Promise<Response> {
     }
     const started = Date.now();
     const record = (r: object) => appendFileSync(log, JSON.stringify({ tag, path: rest.join("/"), t: started, ms: Date.now() - started, req: reqInfo, ...r }) + "\n");
+    // Refused here, never forwarded: anything but a chat request, and any model but the benchmark's.
+    const refuse = (blocked: string, message: string) => {
+      record({ status: 403, blocked });
+      return new Response(JSON.stringify({ error: { message, type: "benchmark_proxy" } }), { status: 403, headers: { "content-type": "application/json" } });
+    };
+    if (req.method !== "POST" || !ALLOW_PATHS.has(rest.join("/"))) return refuse("endpoint", "this proxy serves the model's chat endpoint only");
+    if (ALLOW_MODELS.length && !ALLOW_MODELS.includes(reqInfo.model)) return refuse("model", `this proxy serves only: ${ALLOW_MODELS.join(", ")}`);
     let upstream: Response;
     try {
       upstream = await fetch(target, { method: req.method, headers, body: bodyText });

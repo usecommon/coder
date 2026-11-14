@@ -567,6 +567,9 @@ touch ok.txt 2>/dev/null || fail "workspace not writable"
 (touch /x) 2>/dev/null && fail "/ writable"
 # Network: nothing but loopback.
 (timeout 3 bash -c 'echo > /dev/tcp/1.1.1.1/53') 2>/dev/null && fail "internet reachable"
+${SOCK ? `# The model proxy: the chat endpoint and the benchmark's model, nothing else (both refused by the proxy itself).
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 ${PROXY}/selftest/models); [ "$code" = 403 ] || fail "the model proxy forwards other endpoints (HTTP $code for /models)"
+code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -X POST ${PROXY}/selftest/chat/completions -H 'content-type: application/json' -d '{"model":"another-model","messages":[]}'); [ "$code" = 403 ] || fail "the model proxy forwards other models (HTTP $code)"` : ""}
 # Toolchains still work.
 ${TOOL_CHECKS.map((c) => {
   const lang = checkLang(c);

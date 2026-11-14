@@ -283,3 +283,15 @@ What this can show: with about 200 tasks and four rounds the interval on the lea
 - The check it was run for: each agent's own commands compiled and ran code in every language. OpenCode ran `gcc`, `dotnet build` and `mix test`; Galley ran `gcc`, `dotnet run` and `mix run`.
 - No fault in the benchmark showed, and nothing was changed in Galley or in the harness code. The frozen copy for the rounds is commit `b581d78`.
 - One addition to the self-test afterwards: its one-test C# project now has the exercises' own settings and `packages.lock.json`, so the check restores packages exactly as an exercise does. It passes in both sandboxes. The project lives in the shared tools folder, outside the frozen code.
+
+### Third confirmation: an agent reached a stronger model through the benchmark's proxy (found 14 November, during round 2)
+
+Written at 08:45 UTC on 14 November. Round 1 was complete and its results known; round 2 had 188 of 402 results, which I had not looked at; round 3 had not started.
+
+- **What happened.** The proxy that adds the API key forwarded any request an agent sent it. In round 1 OpenCode's agent, after failing to download the exercise's tests, found the proxy from inside its sandbox, listed the account's models, and asked a stronger model (`deepseek-v4-pro`) to recall the official test file. It did this by hand in one recorded task-run, C `all-your-base`, which it then passed; Galley failed that task on a function name only the hidden tests hold.
+- **How often.** In three recorded task-runs over all campaigns, all OpenCode's: one in the first confirmation and one in the second (both failed anyway), and this one. Galley's agent never did it. No earlier verdict changes.
+- **Why it matters.** The design says both agents use the same model. An answer from another model breaks that. The costs are also understated a little: those requests were priced as the benchmark's model.
+- **Fix, from the rest of round 2 on.** The proxy now forwards only the chat endpoint and only the round's model, and refuses the rest itself. The self-test checks both from inside the sandbox, and the audit flags any answer obtained from another model (`other_model`) or by a hand-made request (`model_by_hand`). The frozen copy keeps everything else; only `proxy.ts` and `round.sh` are replaced, from this commit.
+- **Rule for affected tasks, fixed now.** A task in which either agent got an answer from another model is run again for both agents once round 3 is done, and the new results replace the first in the verdict. The first results are kept and reported, and I give the comparison both ways.
+- **Still allowed.** An agent may put its own question to the benchmark's model through the proxy. It is the same model, the tokens are counted, and the audit reports how often it happens.
+- **Not caught earlier because** the audit read the agents' tool calls for file access and did not look at which model a request named.

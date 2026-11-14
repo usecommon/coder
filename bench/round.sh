@@ -5,6 +5,8 @@
 #      GALLEY_ARGS (extra Galley flags), BENCH_VARIANTS (named agent variants, see run.ts), CONCURRENCY, LIMIT, LANGS, ONLY,
 #      BENCH_SKIP (tasks to leave out, lang/name,...), EXCLUDE (tasks the report leaves out of scoring),
 #      BENCH_TASKS (the task checkout, default $WORK/polyglot; $WORK/tracks2 for the exercises from setup_tracks.sh).
+#      ALLOW_MODELS (models the proxy forwards, comma-separated; default: the round's model, plus the small model
+#      OpenCode uses beside an Anthropic one). The proxy refuses every other model and every other endpoint.
 #      API key: agents never get it. The proxy adds UPSTREAM_KEY to their requests; it defaults to
 #      BENCH_ANTHROPIC_API_KEY for anthropic/* models and DEEPSEEK_API_KEY otherwise. Set UPSTREAM_KEY= (empty)
 #      when the machine's network layer adds the key by itself.
@@ -18,6 +20,10 @@ case "$MODEL" in
   *) DEFAULT_UPSTREAM=https://api.deepseek.com; DEFAULT_KEY=${DEEPSEEK_API_KEY:-} ;;
 esac
 UPSTREAM=${UPSTREAM:-$DEFAULT_UPSTREAM}
+case "$MODEL" in
+  anthropic/*) DEFAULT_ALLOW=${MODEL#*/},claude-haiku-5-5 ;;
+  *) DEFAULT_ALLOW=${MODEL#*/} ;;
+esac
 KEY=${UPSTREAM_KEY-$DEFAULT_KEY}
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$WORK/rounds/$NAME; mkdir -p "$OUT"
@@ -25,7 +31,7 @@ OUT=$WORK/rounds/$NAME; mkdir -p "$OUT"
 SOCKDIR=$(mktemp -d "$WORK/sock.XXXXXX"); SOCK=$SOCKDIR/p.sock
 
 cd "$HERE"
-UPSTREAM=$UPSTREAM UPSTREAM_KEY=$KEY SOCK=$SOCK LOG=$OUT/proxy.jsonl bun proxy.ts >> "$OUT/proxy.log" 2>&1 &
+UPSTREAM=$UPSTREAM UPSTREAM_KEY=$KEY SOCK=$SOCK LOG=$OUT/proxy.jsonl ALLOW_MODELS=${ALLOW_MODELS:-$DEFAULT_ALLOW} bun proxy.ts >> "$OUT/proxy.log" 2>&1 &
 PROXY_PID=$!
 trap 'kill $PROXY_PID 2>/dev/null; rm -f "$SOCK"; rmdir "$SOCKDIR" 2>/dev/null' EXIT
 for i in $(seq 50); do [ -S "$SOCK" ] && break; sleep 0.1; done
