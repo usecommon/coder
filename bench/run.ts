@@ -435,10 +435,12 @@ function testOutput(text: string, ws: string, timedOut: boolean): string {
   return out.trim();
 }
 
-/** The message of a second attempt, worded as Aider's benchmark words it. */
+/** The message of a second attempt, worded as Aider's benchmark words it. It starts with an empty line: test output
+ *  can begin with dashes (busted prints a row of them), and a message that begins with a dash is taken for an
+ *  option by both agents' command lines. */
 function retryPrompt(t: Task, output: string): string {
   const sol = t.files.solution.filter((f) => !f.endsWith("Cargo.toml"));
-  return `${output}\n####\n\nSee the testing errors above.\nThe tests are correct, don't try and change them.\nFix the code in ${sol.join(" ")} to resolve the errors.\n`;
+  return `\n${output}\n####\n\nSee the testing errors above.\nThe tests are correct, don't try and change them.\nFix the code in ${sol.join(" ")} to resolve the errors.\n`;
 }
 
 /** Run the agent on a task. With `retry`, continue its first session with that message instead. */

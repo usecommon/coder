@@ -385,3 +385,11 @@ What I expect: the user's rule is not met (about one chance in five). The second
 
 - Each agent's own commands ran the language's tools: Bash scripts, `lua` and `busted`, `tclsh`.
 - The second attempt worked as designed. No fault in the benchmark showed, and nothing was changed. The frozen copy for the rounds is commit `c334e2a`.
+
+### Fourth confirmation: a fault in the second-attempt code, found and fixed in round 1 (14 November)
+
+- **What happened.** The second attempt's message is passed to each agent on its command line. Lua's test runner starts its output with a row of dashes, and a message that begins with a dash is taken for an option by both agents' command lines: OpenCode printed its help text, Galley found no prompt. Neither called the model.
+- **What it touched.** Four task-runs in round 1, two of each agent (one Bash, three Lua). The harness refuses to record a task-run in which the agent got no answer from the model, so none of them is in the results.
+- **Fix.** The message now starts with an empty line. Nothing else in it changes. I stopped the round at 114 results to apply it; the frozen copy's `run.ts` is replaced by the one of this commit. Results recorded before the fix stay, because a second attempt either ran normally or was not recorded.
+- **The pilot was not affected:** none of the C, C# or Elixir test outputs begins with a dash, and it recorded no such error.
+- **Also on 14 November:** the machine restarted at 16:42 and 16:53 UTC. Five results whose other arm had not finished were set aside and their pairs run again.
