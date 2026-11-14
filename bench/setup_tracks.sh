@@ -11,6 +11,9 @@ WORK=${WORK:-/tmp/bench-work}
 HERE=$(cd "$(dirname "$0")" && pwd)
 [ -d "$WORK/polyglot" ] || { echo "run setup.sh first"; exit 1; }
 cd "$WORK"
+# Shared test tools live outside /tmp (see setup.sh); deps/ in $WORK is a link to them.
+DEPS=${BENCH_DEPS:-/opt/bench-deps}
+mkdir -p "$DEPS"; [ -e deps ] || ln -s "$DEPS" deps
 
 # The track repositories at the commits the task list was fixed on (13 November 2026).
 declare -A PIN=(

@@ -49,8 +49,11 @@ const GALLEY_ARGS = (args["galley-args"] ?? process.env.GALLEY_ARGS ?? "").split
 /** Unix socket of the logging proxy. When set, agents run with no network at all except this socket. */
 const SOCK = args.sock ?? process.env.PROXY_SOCK;
 /** Pre-fetched dependencies, made by setup.sh, shown read-only in every sandbox: the JavaScript exercises'
- *  node_modules (jest, babel) and a Gradle dependency cache for the Java exercises (JUnit, AssertJ). */
-const DEPS = args.deps ?? process.env.BENCH_DEPS ?? (POLYGLOT ? join(dirname(POLYGLOT), "deps") : "");
+ *  node_modules (jest, babel) and a Gradle dependency cache for the Java exercises (JUnit, AssertJ).
+ *  They must NOT live under /tmp: Galley gives its commands a private /tmp, so anything kept there is invisible to
+ *  them. Until 14 November 2026 this folder was under /tmp, and Galley could not run jest, Gradle's test
+ *  libraries or PHPUnit while OpenCode could (bench/RESULTS-fresh2.md). The self-test now checks for it. */
+const DEPS = args.deps ?? process.env.BENCH_DEPS ?? (existsSync("/opt/bench-deps") ? "/opt/bench-deps" : POLYGLOT ? join(dirname(POLYGLOT), "deps") : "");
 const JS_MODULES = join(DEPS, "js", "node_modules");
 const GRADLE_RO_CACHE = join(DEPS, "gradle-ro");
 /** A Gradle home that has already compiled the exercises' build script; copied for each task so Gradle starts warm. */
@@ -552,6 +555,23 @@ echo "probe finished"
         console.log(d.split("\n").slice(0, 8).join("\n"));
         ok = false;
       }
+      // The toolchains must work from inside Galley's own sandbox too. It shows less than the benchmark's does:
+      // commands there get a private /tmp, so a tool kept under /tmp exists for OpenCode and not for Galley.
+      const nlog = join(root, `nested-${agent}.log`);
+      const probe = `import { exec, detectSandbox } from ${JSON.stringify(join(dirname(galleyOf(agent)), "safety", "sandbox.ts"))};
+for (const c of ${JSON.stringify(TOOL_CHECKS)}) {
+  const r = await exec(c, { cwd: process.cwd(), workspace: process.cwd(), readOnly: false, network: false, timeoutMs: 60000, kind: detectSandbox() });
+  if (r.exitCode !== 0) console.log("FAIL: not usable inside Galley's own sandbox: " + c);
+}
+console.log("nested probe finished");`;
+      await runInAgentBox([process.execPath, "-e", probe], { agent, ws, state, env: { ...baseEnv(run), ...keyEnv() }, timeoutMs: 180_000, stdout: nlog });
+      const ntext = readFileSync(nlog, "utf8");
+      const nfails = ntext.split("\n").filter((l) => l.startsWith("FAIL"));
+      const nok = nfails.length === 0 && ntext.includes("nested probe finished");
+      console.log(`selftest ${agent}: toolchains inside Galley's own sandbox: ${nok ? "ok" : "FAILED"}`);
+      for (const f of nfails) console.log("  " + f);
+      if (!nok && !nfails.length) console.log("  probe did not finish:\n" + ntext.split("\n").slice(-5).join("\n"));
+      if (!nok) ok = false;
     }
   }
   rmSync(root, { recursive: true, force: true });

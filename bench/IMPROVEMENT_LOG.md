@@ -227,3 +227,35 @@ The JavaScript, Java and C++ tasks are used up: Galley has been changed in the l
 
 What I expect: the lead conditions are more likely than not to be met again. The cost condition is close to a coin toss, because with the two defects fixed the estimate from the logs is parity.
 
+### Second confirmation results (13 and 14 November, four rounds)
+
+Full write-up: [RESULTS-fresh2.md](RESULTS-fresh2.md).
+
+| | OpenCode 1.19.5 | Galley (frozen at `de69760`) |
+|---|---|---|
+| Passes per round (of 181) | 88, 100, 94, 91 | 104, 94, 104, 96 |
+| Pass rate | 51.5% | **55.0%** |
+| Cost per round | $0.89, $1.03, $1.00, $0.94 (mean $0.97) | $0.89, $0.86, $0.88, $0.78 (mean **$0.85**) |
+| Cost per solved task | $0.0104 | $0.0086 |
+
+| Win rule | Measured | Met |
+|---|---|---|
+| Lead of 5 points or more | +3.5 (95% interval −0.3 to +7.3) | **No** |
+| Sign test p < 0.05 | 50 tasks better, 36 worse; p = 0.16 | **No** |
+| Lower cost per round | 12% lower (interval 21% to 2% lower) | Yes |
+
+**Verdict by the rule fixed in advance: not a win.** The cost condition, missed in the first confirmation, is met. The lead is positive in three rounds of four but smaller than on the first set of fresh tasks, and the interval includes zero. By language the lead is 0.8 points in PHP, 6.5 in TypeScript and 3.2 in Ruby.
+
+- Leak audit: no task-run reached hidden tests.
+- Round 1 was split by the model account running out of balance, round 4 by a pause; the task-runs they touched were run again.
+- Spend: $7.40, all outside peak hours.
+
+### A flaw found afterwards: Galley could not reach the shared test tools
+
+Galley's sandbox gives commands a private `/tmp`. The benchmark kept the shared test tools under `/tmp`: the `node_modules` of the JavaScript and TypeScript exercises, the Java test libraries, and PHPUnit. OpenCode's commands could use them; Galley's could not. Over both confirmations jest ran for OpenCode in 88 task-runs and for Galley in none of the 246 where it tried.
+
+- It touches Galley's JavaScript and Java results (first confirmation, round 10) and its TypeScript and PHP results (second confirmation). Python, Go, Rust, C++ and Ruby are not affected.
+- It works against Galley only. How much is not measured, and no result above is corrected for it.
+- Fixed in the harness: the shared tools now live outside `/tmp` (`/opt/bench-deps` by default), and the self-test repeats every tool check from inside Galley's own sandbox. On the old set-up that check fails.
+- For Java one difference remains: inside Galley's sandbox Gradle starts without the warm cache the harness prepares, so its first build is slower.
+

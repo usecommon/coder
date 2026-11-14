@@ -2,6 +2,8 @@
 
 *Run on 12 and 13 November 2026. Galley was frozen at commit `61300b4` before the first run and is compared with OpenCode 1.19.5 on DeepSeek-V4.1-Flash. Tasks: the 121 JavaScript, Java and C++ exercises of Aider Polyglot, which neither agent had been run on. Four rounds; in each, both agents ran every task side by side, outside DeepSeek's peak hours. The design and the rule were written down before the first run ([IMPROVEMENT_LOG.md](IMPROVEMENT_LOG.md)).*
 
+> **Added 14 November 2026.** A flaw in the benchmark set-up, found after the second confirmation, worked against Galley on the JavaScript and Java tasks here: its commands could not reach jest or the Java test libraries, while OpenCode's could. The results below are as measured and are not corrected for it. See [RESULTS-fresh2.md](RESULTS-fresh2.md).
+
 ## Verdict
 
 **By the rule fixed in advance, Galley does not beat OpenCode. It meets both accuracy conditions and misses the cost condition.**
@@ -104,6 +106,7 @@ About $7 was planned. The cost-cutting rounds before this (round 9 in the [impro
 ## Caveats
 
 - **One cheap model, one version of each agent, three languages.** `deepseek-flash` is an alias and can change.
+- **Galley could not use the exercises' own test tools in JavaScript and Java** (see the note at the top). OpenCode ran jest in 48 of its 192 JavaScript task-runs; Galley tried in 82 and it never ran.
 - **Fresh, but of the same kind.** Galley was not developed on these tasks, but they are Exercism exercises like the development tasks, and many exist in both sets in different languages.
 - **Both agents may remember Exercism's public tests** from the model's training. The model is the same for both.
 - **The tasks are no longer fresh.** I have now read these transcripts and changed Galley because of them. Any claim about a later version of Galley needs tasks it has not been run on.

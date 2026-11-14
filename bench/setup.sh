@@ -4,8 +4,12 @@
 # and the test dependencies of the JavaScript and Java exercises.
 set -euo pipefail
 WORK=${WORK:-/tmp/bench-work}
-mkdir -p "$WORK"
+# Test dependencies shared by all tasks. Not under /tmp: Galley's own sandbox gives commands a private /tmp, so
+# anything kept there would be invisible to them (see run.ts).
+DEPS=${BENCH_DEPS:-/opt/bench-deps}
+mkdir -p "$WORK" "$DEPS"
 cd "$WORK"
+[ -e deps ] || ln -s "$DEPS" deps   # the rest of this script writes to deps/...
 
 [ -d polyglot ] || git clone -q --depth 1 https://github.com/Aider-AI/polyglot-benchmark.git polyglot
 if [ ! -x oc/node_modules/opencode-ai/bin/opencode.exe ]; then

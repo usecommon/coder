@@ -1,6 +1,6 @@
 # Galley vs OpenCode on the Aider Polyglot benchmark
 
-A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results are in [RESULTS-fresh.md](RESULTS-fresh.md): the confirmation on tasks Galley was not developed on (JavaScript, Java, C++). Before that: [RESULTS-clean.md](RESULTS-clean.md) (the development tasks, on the sandbox fixed on 12 November 2026). Earlier runs on the old sandbox: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
+A head-to-head run of the two harnesses on a public benchmark, using the same model, prompts, limits and grading. The latest results are in [RESULTS-fresh2.md](RESULTS-fresh2.md): the second confirmation on fresh tasks (PHP, TypeScript, Ruby), with a flaw in this benchmark found after it that worked against Galley. The first confirmation (JavaScript, Java, C++) is in [RESULTS-fresh.md](RESULTS-fresh.md). Before that: [RESULTS-clean.md](RESULTS-clean.md) (the development tasks, on the sandbox fixed on 12 November 2026). Earlier runs on the old sandbox: [RESULTS.md](RESULTS.md) (DeepSeek) and [RESULTS-claude.md](RESULTS-claude.md).
 
 ## Benchmark
 
@@ -60,11 +60,18 @@ python3 -I audit_leaks.py scan --polyglot $WORK/polyglot --out data/leak-audit.j
 
 Galley's own sandbox had the root problem too (a command could remount the filesystem read-write when Galley ran as root). That is fixed in `galley/src/safety/sandbox.ts`, with tests.
 
+## A flaw found on 14 November 2026: shared test tools were out of Galley's reach
+
+The harness keeps test tools that every task needs in one shared folder: the `node_modules` of the JavaScript and TypeScript exercises, the Java test libraries, PHPUnit. That folder used to be under `/tmp`. Galley runs commands in its own sandbox inside the benchmark's, and its sandbox gives them a private `/tmp`, so for Galley those tools did not exist. OpenCode saw them. In both confirmations Galley could never run jest, Gradle's test libraries or PHPUnit.
+
+- **Fix.** The shared folder is now outside `/tmp` (`/opt/bench-deps`, or `BENCH_DEPS`), and the self-test runs every tool check a second time from inside Galley's own sandbox.
+- **Results before the fix are not corrected.** They understate what Galley could do with the tools; by how much is not known.
+
 ## Reproduce
 
 ```bash
 apt-get install -y bubblewrap        # if bwrap is missing
-bench/setup.sh                       # benchmark checkout, OpenCode 1.19.5, Rust crates -> /tmp/bench-work
+bench/setup.sh                       # benchmark checkout, OpenCode 1.19.5, Rust crates -> /tmp/bench-work; shared test tools -> /opt/bench-deps
 export DEEPSEEK_API_KEY=...          # read by the proxy only; agents get a placeholder
 bench/round.sh myrun                 # self-test, both agents on all tasks, report, leak audit
 

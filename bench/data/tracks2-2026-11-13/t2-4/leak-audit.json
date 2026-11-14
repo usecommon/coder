@@ -1,0 +1,29 @@
+[
+{
+"run": "t2-4",
+"agent": "opencode",
+"lang": "php",
+"task": "two-bucket",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t2-4",
+"agent": "opencode",
+"lang": "typescript",
+"task": "change",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "t2-4",
+"agent": "opencode",
+"lang": "typescript",
+"task": "word-search",
+"kinds": [
+"namespace_cmds"
+]
+}
+]
