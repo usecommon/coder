@@ -1,0 +1,47 @@
+[
+{
+"run": "p2-1",
+"agent": "galley",
+"lang": "elixir",
+"task": "connect",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "p2-1",
+"agent": "opencode",
+"lang": "csharp",
+"task": "go-counting",
+"kinds": [
+"model_by_hand"
+]
+},
+{
+"run": "p2-1",
+"agent": "opencode",
+"lang": "csharp",
+"task": "linked-list",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "p2-1",
+"agent": "opencode",
+"lang": "elixir",
+"task": "connect",
+"kinds": [
+"namespace_cmds"
+]
+},
+{
+"run": "p2-1",
+"agent": "opencode",
+"lang": "elixir",
+"task": "kindergarten-garden",
+"kinds": [
+"namespace_cmds"
+]
+}
+]

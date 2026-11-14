@@ -340,4 +340,25 @@ With one attempt and hidden tests, most failures are details the agent cannot kn
 - **The pilot.** All 201 C, C# and Elixir tasks of the third confirmation, which are used up, one round, both agents, the same frozen Galley (`de69760`) and OpenCode 1.19.5, the hardened proxy. About $2.50.
 - **What it is for.** It is not a verdict and cannot be one: the tasks are used up and the win rule is defined on one attempt. It tells whether the two agents differ once feedback is available, and by roughly how much.
 - **What I will do with it.** If, after two attempts, Galley is ahead by 3 points or more, or cheaper per solved task by 10% or more, I will propose a confirmation on fresh tasks (Bash, Lua and Tcl are prepared) under a rule the user agrees to. Otherwise I report that the two are level under this protocol too.
-- **Smoke test done:** four tasks, both agents ($0.05). Failures caused by a hidden message or error type were fixed on the second attempt by whichever agent had failed; the audit treats what the harness showed the agent as known to it.
+- **Smoke test done:** four tasks, both agents ($0.13). Failures caused by a hidden message or error type were fixed on the second attempt by whichever agent had failed; the audit treats what the harness showed the agent as known to it.
+
+### Pilot results (14 November, one round, 201 used-up tasks)
+
+| | OpenCode 1.19.5 | Galley (frozen at `de69760`) |
+|---|---|---|
+| Passed on the first attempt | 144 (71.6%) | 155 (77.1%) |
+| Second attempts, and how many of them passed | 57, 51 (89%) | 46, 40 (87%) |
+| **Passed after both attempts** | **195 (97.0%)** | **195 (97.0%)** |
+| Cost of the round | $1.47 | **$1.25** |
+| Cost per solved task | $0.0075 | $0.0064 |
+
+- **After two attempts the two agents are exactly level:** 195 of 201 each (95% interval for the difference ±2.5 points). Each still fails six tasks, two of them the same.
+- **The second attempt does what the first cannot.** It fixes nearly nine failures in ten for both agents, because the test output shows the detail that was hidden. With it both agents are near the ceiling, so pass rate no longer separates them.
+- **Galley is cheaper here too:** 15% per round (95% interval 30% lower to 3% higher, from one round) and 15% per solved task. A second attempt costs about half a cent for either agent.
+- **By language, after both attempts:** C 97.7% against 95.3%, C# 100% against 96.3%, Elixir 93.4% against 98.7%.
+- **First attempt in this round:** Galley ahead by 5.5 points (p = 0.07). It is a fourth run of used-up tasks and changes nothing in the third confirmation; it shows again how much one round moves.
+- Audit: nothing counts as contamination. One OpenCode task-run put a question of its own to the benchmark's model through the proxy, which is allowed; that task failed both attempts.
+- One Galley task-run hit the 10-minute limit in each attempt, and one of OpenCode's in the first.
+- Spend: $2.85 with the smoke test.
+
+**What follows from it.** By the criteria set before the pilot, the pass-rate one is not met (no lead after two attempts) and the cost one is (15% cheaper per solved task). So the comparison that the data can support is not "more tasks solved" but "the same tasks solved for less". Whether to confirm that on fresh tasks, and by what rule, is the user's decision.
