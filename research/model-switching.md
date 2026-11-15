@@ -2,6 +2,8 @@
 
 *Researched on 14 November 2026. This document compares how coding harnesses use several models in one session, what the published results say that buys, what current data says each model is good at, and where Galley falls short. It extends [coding-harnesses.md](coding-harnesses.md), which compares the harnesses on everything else.*
 
+*For the academic research on these methods (reviewers, observers, committees, debate, several attempts), see [multi-model-methods.md](multi-model-methods.md).*
+
 **How to read the evidence labels.** *Official board* means numbers read from a benchmark's own leaderboard. *Vendor* means a company's figures about its own product. *Our analysis* means numbers I computed from public per-task results; the scripts are in [`tools/`](tools/). *Secondary* means a third party's account that I could not check against the original.
 
 ## Bottom line
