@@ -31,6 +31,24 @@ export const stepQuestion = (step: number, steps: string[]) =>
   "Later steps are not this step's job; do not ask for them. If you find nothing that needs changing, reply with exactly: OK\n" +
   "Otherwise list each problem as: what is required, what the code does.";
 
+/** The question for a look at work in progress. */
+export const OBSERVE_QUESTION =
+  "You are looking in on the agent while it works; it has not finished. From what you can see, is it on a sound track? " +
+  "If it is, reply with exactly: OK\n" +
+  "If not, say in a few sentences what is going wrong and what it should do instead. Do not comment on work it has not reached yet.";
+
+/** The question for the review of a plan, before any of it is carried out. */
+export const planQuestion = (steps: string[]) =>
+  `The agent has looked at the project and proposes this plan:\n${steps.map((s, k) => `${k + 1}. ${s}`).join("\n")}\n\n` +
+  "Check the plan against the task before any work is done: does it cover every requirement, do the steps come in an order that works, " +
+  "can each be checked on its own, is anything in it unnecessary? If the plan is sound, reply with exactly: OK\n" +
+  "Otherwise list what to change.";
+
+export const planRevision = (advisor: string, report: string) =>
+  `A second model (${advisor}) reviewed your plan and reported:\n\n${report}\n\n` +
+  "It has seen only what you looked at, and can be wrong: check each point. Then reply with the plan to follow, as a numbered list " +
+  "with nothing after it: changed where the points are right, as it was where they are not.";
+
 /** True when a review found nothing to change. */
 export const reviewPassed = (reply: string) => /^\s*ok[.!]?\s*$/i.test(reply);
 

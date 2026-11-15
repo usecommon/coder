@@ -1,6 +1,6 @@
 // The agent loop: call the model, run the tools it asks for, feed results back, repeat until it stops.
 import { realpathSync } from "node:fs";
-import type { Config, Effort } from "../config.ts";
+import type { AdvisorConfig, Config, Effort } from "../config.ts";
 import type { AgentEvent, AgentEventInput, Message, StopReason, ToolCall, ToolResult, Usage } from "../core/types.ts";
 import { addUsage, emptyUsage } from "../core/types.ts";
 import { getProvider, splitModel } from "../provider/index.ts";
@@ -14,7 +14,7 @@ import { adviseTool } from "../tools/advise.ts";
 import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import { ToolError, type Tool, type ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
-import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, handoverMessage, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
+import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
@@ -61,6 +61,9 @@ const transient = (err: unknown) => {
 
 const usd = (n: number) => `$${n.toFixed(n >= 0.01 ? 2 : 4)}`;
 
+/** How often the advisor may be asked in one turn. An advisor that looks in on the work needs more room. */
+const maxConsults = (adv: AdvisorConfig) => adv.maxUses ?? (adv.every ? 8 : 3);
+
 /** The result recorded for a tool call that a cut-off session left without one. */
 const INTERRUPTED = "This call did not finish: the session was interrupted while it ran. Whether it took effect is not known, so check before relying on it.";
 
@@ -105,6 +108,11 @@ export class Agent {
   /** The model a turn starts on: the plan model in plan mode when one is set, otherwise the session's model. */
   get turnModel(): string {
     return this.mode === "plan" && !this.o.subagent && this.o.cfg.planModel ? this.o.cfg.planModel : this.model;
+  }
+
+  /** The advisor model, if one is configured. */
+  get advisor(): string | undefined {
+    return this.o.cfg.advisor?.model;
   }
 
   /** Tokens the last request sent: what another model would have to read after a switch. */
@@ -166,6 +174,11 @@ export class Agent {
     const failed = new Set<string>();
     const maxSteps = this.o.maxSteps ?? cfg.maxSteps;
     const watch = new Watch(maxSteps);
+    // An advisor that looks in on the work: how many steps since its last look, how long until the next, and from
+    // where in the session the next look reads.
+    let sinceLook = 0;
+    let lookAfter = cfg.advisor?.every ?? 0;
+    let lookFrom = turnStart;
 
     passes: for (let pass = 0; pass < 2; pass++) {
     for (let step = 0; step < maxSteps; step++) {
@@ -211,7 +224,7 @@ export class Agent {
           continue;
         }
         // The advisor's review: once per turn, a second model checks the change against the request.
-        else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < (cfg.advisor.maxUses ?? 3) && !signal?.aborted) {
+        else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < maxConsults(cfg.advisor) && !signal?.aborted) {
           advisorReviewed = true;
           const scoped = o.review?.scope === "turn";
           const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, changes(this.workspace, this.undo.snapshots()), scoped ? turnStart : undefined);
@@ -234,7 +247,7 @@ export class Agent {
       if (sig) {
         const adv = cfg.advisor;
         const up = cfg.escalateModel;
-        const canAsk = !!adv && adv.onStuck !== false && this.consults < (adv.maxUses ?? 3);
+        const canAsk = !!adv && adv.onStuck !== false && this.consults < maxConsults(adv);
         const canHandOver = !!up && up !== ref && !handedOver;
         if (canAsk && (stuckConsults === 0 || !canHandOver)) {
           stuckConsults++;
@@ -256,6 +269,20 @@ export class Agent {
             watch.rearm();
           }
         }
+        sinceLook = 0;
+        lookFrom = this.session.messages.length;
+      } else if (cfg.advisor?.every && !this.o.subagent && !signal?.aborted && step < maxSteps - 1 && ++sinceLook >= lookAfter && this.consults < maxConsults(cfg.advisor)) {
+        // A look at work in progress. Guidance during a run is where an observer was measured to help most, and the
+        // interval that worked adapts: sooner again after a finding, later after none (research/multi-model-methods.md).
+        const adv = cfg.advisor;
+        const from = lookFrom;
+        sinceLook = 0;
+        lookFrom = this.session.messages.length;
+        const view = await this.consult(OBSERVE_QUESTION, "to look at the work so far", signal, changes(this.workspace, this.undo.snapshots()), from);
+        if (view && !reviewPassed(view)) {
+          this.session.addMessage({ role: "user", content: adviceMessage(adv.model, "it looks in on the work every few steps", view) });
+          lookAfter = adv.every!;
+        } else if (view) lookAfter = Math.min(lookAfter + 2, adv.every! * 4);
       }
     }
 
@@ -326,6 +353,19 @@ export class Agent {
     );
   }
 
+  /** Ask the advisor between turns, for the review of a plan. `from` is where in the session it starts reading.
+   *  Returns its answer and what the question cost, or nothing when there is no reviewing advisor. */
+  async review(question: string, why: string, from: number, signal?: AbortSignal): Promise<{ text?: string; usage: Usage; costUsd: number } | undefined> {
+    if (!this.o.cfg.advisor?.review || this.o.subagent) return undefined;
+    const [usage, cost] = [this.consultUsage, this.consultCost];
+    this.consultUsage = emptyUsage();
+    this.consultCost = 0;
+    const text = await this.consult(question, why, signal, undefined, from);
+    const out = { text, usage: this.consultUsage, costUsd: this.consultCost };
+    [this.consultUsage, this.consultCost] = [usage, cost];
+    return out;
+  }
+
   /** Put a question to the advisor model. It reads the session so far, and for a review the changed files; it
    *  runs nothing. `why` completes "Asked <model> …". Returns its answer, or undefined when there is none (the turn
    *  then goes on without). */
@@ -370,7 +410,7 @@ export class Agent {
       consult:
         this.o.cfg.advisor && !this.o.subagent
           ? async (q) => {
-              const max = this.o.cfg.advisor!.maxUses ?? 3;
+              const max = maxConsults(this.o.cfg.advisor!);
               if (this.consults >= max) throw new ToolError(`The advisor has been asked ${max} times this turn, which is the limit. Decide with what you have.`);
               const advice = await this.consult(q, "at the model's request", signal);
               if (!advice) throw new ToolError("The advisor could not be reached. Decide with what you have.");

@@ -38,6 +38,7 @@ Options:
   --advisor <provider/model>       a second, stronger model to consult when a turn goes badly
   --reviewer <provider/model>      the same, and it also checks each finished piece of work before the run moves on
   --steps                          plan first, then work in small steps (each one checked when there is a reviewer)
+  --observe <n>                    the advisor or reviewer also looks in on the work every n steps
   --escalate <provider/model>      a stronger model that takes over a turn that stays in trouble
   --effort <level>                 reasoning effort: low, medium, high, xhigh or max
   --plan                           start in read-only plan mode
@@ -103,6 +104,12 @@ async function main() {
   // worker is not also given a tool to call it, unless the config says so.
   if (typeof flags.reviewer === "string") cfg.advisor = { ...cfg.advisor, model: flags.reviewer, review: true, tool: cfg.advisor?.tool ?? false };
   if (flags.steps) cfg.steps = true;
+  if (typeof flags.observe === "string") {
+    const n = Number(flags.observe);
+    if (!cfg.advisor) throw new Error("--observe needs --reviewer or --advisor: there is no one to look in");
+    if (!Number.isInteger(n) || n < 1) throw new Error("--observe takes a number of steps, 1 or more");
+    cfg.advisor = { ...cfg.advisor, every: n };
+  }
   if (typeof flags.escalate === "string") cfg.escalateModel = flags.escalate;
   if (typeof flags.effort === "string") {
     if (!EFFORTS.includes(flags.effort as Effort)) throw new Error(`--effort is one of: ${EFFORTS.join(", ")}`);
@@ -202,7 +209,7 @@ function detach(workspace: string, cfg: Config, flags: Args["flags"], task: stri
   const self = /\.(ts|js|mjs)$/.test(script) && !script.startsWith("/$bunfs") ? [script] : [];
   const args = [...self, "run", task, "--cwd", workspace];
   if (session) args.push("--session-id", session.id);
-  for (const f of ["model", "advisor", "reviewer", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
+  for (const f of ["model", "advisor", "reviewer", "observe", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
   for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify", "steps"]) if (flags[f]) args.push(`--${f}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", fd, fd], cwd: workspace });
   child.unref();

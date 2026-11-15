@@ -179,13 +179,15 @@ Several widely cited systems give copies of one model different roles: AgentCode
 
 **What the research says to change:**
 
-| # | Change | Why | Size |
+| # | Change | Why | Status |
 |---|---|---|---|
-| 1 | **The reviewer checks the plan before work starts** | The worker, the weaker model, writes the plan now. In the studies the stronger model plans, and a bad plan is worse than none | One short request per task |
-| 2 | **The reviewer also observes during a step,** every few steps, looking more often after it has found something | The largest measured gains come from guidance during the run, and the right interval adapts | One request per look |
-| 3 | **Give the reviewer test output, not only code to read** | Reading-only review is the weakest kind; one test settles what many reviewers cannot | Needs a check command per project |
-| 4 | **For several reviews, use different reviewers and take what two agree on** | Two different reviewers cover more; a vote of single reviews beat extra rounds | Optional; costs a second review |
-| 5 | **Do not build debate or blending** | No reliable gain over voting; mixing unequal models lowers quality | None |
+| 1 | **The reviewer checks the plan before work starts** | The worker, the weaker model, wrote the plan unchecked. In the studies the stronger model plans, and a bad plan is worse than none | **Done** on 15 November: one request per task, one revision at most |
+| 2 | **The reviewer also observes during a step,** every few steps, sooner again after it has found something | The largest measured gains come from guidance during the run, and the interval that worked adapts | **Done** on 15 November: `--observe <n>` |
+| 3 | **Give the reviewer test output, not only code to read** | Reading-only review is the weakest kind; one test settles what many reviewers cannot | Open: needs a check command per project |
+| 4 | **For several reviews, use different reviewers and take what two agree on** | Two different reviewers cover more; a vote of single reviews beat extra rounds | Open: costs a second review |
+| 5 | **Do not build debate or blending** | No reliable gain over voting; mixing unequal models lowers quality | Not built |
+
+Changes 1 and 2 are covered by tests and ran once with a real model (two Lua tasks, DeepSeek in both roles, $0.013). In that run the plan review found a fault in one plan and the worker revised it; five looks during the work found nothing. Like the rest of this mode they are not measured on a benchmark.
 
 **What to expect, and where:**
 

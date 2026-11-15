@@ -1,7 +1,7 @@
 // More than one model in a session: what is known about models, the signals that a turn is going badly,
 // the advisor, the handover and the fallback.
 import { describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { advisorRequest, changes, digest, reviewPassed } from "../src/agent/advisor.ts";
 import { Agent } from "../src/agent/loop.ts";
@@ -418,6 +418,63 @@ describe("a second model in the session", () => {
   });
 });
 
+describe("an advisor that looks in on the work", () => {
+  /** A worker that lists a different folder at each step, so that no signal of trouble fires. */
+  const busy = (steps: number) => (_req: ChatRequest, n: number): MockReply => (n < steps ? { toolCalls: [{ name: "list", input: { path: `dir${n}` } }] } : { text: "Finished." });
+  const folders = (ws: string, n: number) => {
+    for (let i = 0; i < n; i++) mkdirSync(join(ws, `dir${i}`));
+  };
+
+  test("it looks every few steps; after a look that found nothing the next one comes later", async () => {
+    const adv = second("obs1", () => ({ text: "OK" }));
+    const { ws, mock, agent } = setup(busy(12), { advisor: { model: "obs1/strong", every: 2 } });
+    folders(ws, 12);
+    await agent.send("go through the folders");
+    // Looks after steps 2, 6 (2 + 4) and 12 (6 + 6): the wait grows by two steps each time nothing is found.
+    expect(adv.requests).toHaveLength(3);
+    expect(lastUser(adv.requests[0]!)).toContain("You are looking in on the agent while it works");
+    // Nothing was said to the worker.
+    expect(mock.requests.every((q) => q.messages.every((m) => m.role !== "user" || !m.content.includes("A second model")))).toBe(true);
+  });
+
+  test("what it finds reaches the worker at once, and it looks again as soon as at first", async () => {
+    const adv = second("obs2", (_req, n) => ({ text: n === 0 ? "It is listing folders that do not exist; the task names src/." : "OK" }));
+    const { ws, mock, agent } = setup(busy(7), { advisor: { model: "obs2/strong", every: 2 } });
+    folders(ws, 7);
+    await agent.send("go through the folders");
+    expect(lastUser(mock.requests[2]!)).toContain("it looks in on the work every few steps");
+    expect(lastUser(mock.requests[2]!)).toContain("the task names src/");
+    // After the finding at step 2 the next look is at step 4, not later; then 4 + 4 would be past the end.
+    expect(adv.requests).toHaveLength(2);
+    // The second look reads from the first one on, so it sees its own earlier remark and not the steps before it.
+    const second2 = lastUser(adv.requests[1]!);
+    expect(second2).toContain("the task names src/");
+    expect(second2).not.toContain('"path":"dir0"');
+    expect(second2).toContain('"path":"dir2"');
+  });
+
+  test("it does not look when the tools already show trouble: that consultation counts as the look", async () => {
+    const adv = second("obs3", () => ({ text: "Try present.txt." }));
+    const { agent } = setup([stuck, stuck, stuck, { text: "Done." }], { advisor: { model: "obs3/strong", every: 3 } });
+    await agent.send("read the file");
+    // Step 3 is both the third identical call and the third step: one consultation, about the trouble.
+    expect(adv.requests).toHaveLength(1);
+    expect(lastUser(adv.requests[0]!)).toContain("the same read call has returned the same result 3 times");
+  });
+
+  test("looking is limited to eight consultations a turn unless the config says otherwise", async () => {
+    const adv = second("obs4", () => ({ text: "Still wrong." }));
+    const { ws, agent } = setup(busy(30), { advisor: { model: "obs4/strong", every: 1 } });
+    folders(ws, 30);
+    await agent.send("go");
+    expect(adv.requests).toHaveLength(8);
+  });
+
+  test("--observe is read from the command line", () => {
+    expect(parseArgs(["run", "x", "--reviewer", "a/b", "--observe", "5"]).flags).toEqual({ reviewer: "a/b", observe: "5" });
+  });
+});
+
 describe("other ways the model in use changes", () => {
   test("plan mode uses the plan model when one is set", async () => {
     const planner = second("plan1", [{ text: "Step 1: read. Step 2: edit." }]);
@@ -513,15 +570,17 @@ describe("a task done in small steps", () => {
   });
 
   test("the reviewer checks each step on its own, and its findings go back before the next step starts", async () => {
-    const reviewer = second("rev1", [{ text: "The step says the file must end in a newline; a.txt does not." }, { text: "OK" }]);
+    const reviewer = second("rev1", [{ text: "OK" }, { text: "The step says the file must end in a newline; a.txt does not." }, { text: "OK" }]);
     const { mock, agent } = setup(
       [{ text: "1. Write a.txt ending in a newline\n2. Write b.txt" }, write("a.txt", "A"), { text: "Step 1 done." }, write("a.txt", "A\n"), { text: "Fixed." }, write("b.txt", "B\n"), { text: "Step 2 done." }],
       { advisor: { model: "rev1/strong", review: true, tool: false } },
     );
     const r = await runSteps(agent, "write two files");
     expect(r.done).toBe(2);
-    expect(reviewer.requests).toHaveLength(2);
-    const [one, two] = reviewer.requests.map(lastUser) as [string, string];
+    // The plan is reviewed once, then each step.
+    expect(reviewer.requests).toHaveLength(3);
+    const [plan, one, two] = reviewer.requests.map(lastUser) as [string, string, string];
+    expect(plan).toContain("proposes this plan:\n1. Write a.txt ending in a newline\n2. Write b.txt");
     // Review of step 1: the plan, which step is meant, the task, that step's work and its change.
     expect(one).toContain("1. Write a.txt ending in a newline\n2. Write b.txt");
     expect(one).toContain("It has just finished step 1.");
@@ -538,6 +597,52 @@ describe("a task done in small steps", () => {
     expect(two).not.toContain("--- a.txt");
     // The worker was not given a tool to call the reviewer itself.
     expect(mock.requests.every((q) => !q.tools.some((t) => t.name === "advise"))).toBe(true);
+  });
+
+  test("the reviewer checks the plan before any of it is carried out, and the worker revises it once", async () => {
+    const reviewer = second("rev3", [{ text: "The task also asks for c.txt; the plan never writes it." }, { text: "OK" }, { text: "OK" }, { text: "OK" }]);
+    const { mock, agent } = setup(
+      [
+        { text: "1. Write a.txt\n2. Write b.txt" },
+        { text: "1. Write a.txt\n2. Write b.txt\n3. Write c.txt" },
+        write("a.txt", "A"),
+        { text: "a done." },
+        write("b.txt", "B"),
+        { text: "b done." },
+        write("c.txt", "C"),
+        { text: "c done." },
+      ],
+      { advisor: { model: "rev3/strong", review: true, tool: false } },
+    );
+    const r = await runSteps(agent, "write a.txt, b.txt and c.txt");
+    expect(r.steps).toEqual(["Write a.txt", "Write b.txt", "Write c.txt"]);
+    expect(r.done).toBe(3);
+    // The reviewer's finding goes to the worker while it is still planning: nothing has been changed yet.
+    expect(lastUser(mock.requests[1]!)).toContain("reviewed your plan and reported");
+    expect(lastUser(mock.requests[1]!)).toContain("never writes it");
+    expect(mock.requests[1]!.system).toContain("PLAN mode");
+    expect(lastUser(mock.requests[2]!)).toStartWith("Step 1 of 3");
+    // One review of the plan (the revised plan is not reviewed again), then one for each step.
+    expect(reviewer.requests).toHaveLength(4);
+    // The whole run is on the books: eight worker requests and four reviews at 100 input tokens each.
+    expect(r.usage.inputTokens).toBe(1200);
+  });
+
+  test("a revision that is not a plan leaves the first plan in force", async () => {
+    second("rev4", [{ text: "Consider doing it differently." }, { text: "OK" }, { text: "OK" }]);
+    const { agent } = setup([{ text: "1. Write a.txt\n2. Write b.txt" }, { text: "I think the plan is fine as it is." }, write("a.txt", "A"), { text: "a done." }, write("b.txt", "B"), { text: "b done." }], {
+      advisor: { model: "rev4/strong", review: true, tool: false },
+    });
+    const r = await runSteps(agent, "write two files");
+    expect(r.steps).toEqual(["Write a.txt", "Write b.txt"]);
+    expect(r.done).toBe(2);
+  });
+
+  test("without a reviewing advisor the plan is not reviewed", async () => {
+    const adv = second("rev5", () => ({ text: "never asked" }));
+    const { agent } = setup([{ text: "1. Write a.txt\n2. Write b.txt" }, write("a.txt", "A"), { text: "a." }, write("b.txt", "B"), { text: "b." }], { advisor: { model: "rev5/strong" } });
+    expect((await runSteps(agent, "write two files")).done).toBe(2);
+    expect(adv.requests).toHaveLength(0);
   });
 
   test("a task the model does not split runs as one unit and is reviewed as a whole", async () => {

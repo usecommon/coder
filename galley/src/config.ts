@@ -31,8 +31,11 @@ export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export interface AdvisorConfig {
   /** "provider/model". Worth having only if it is clearly stronger than the main model (`galley models`). */
   model: string;
-  /** Most consultations in one turn, whoever asks (default 3). */
+  /** Most consultations in one turn, whoever asks (default 3; 8 when `every` is set). */
   maxUses?: number;
+  /** Have it look in on the work every this many steps of a turn. After a look that found nothing the next one comes
+   *  later (two steps more each time, up to four times this number); after one that found something, this soon again. */
+  every?: number;
   /** Ask it when the harness sees the turn going badly (default true). */
   onStuck?: boolean;
   /** Let the main model ask it too, through the `advise` tool (default true). */

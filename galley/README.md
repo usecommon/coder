@@ -109,14 +109,18 @@ For the keys that are set:
 One arrangement of the above: a cheap model does the work and a stronger one checks each finished piece before the run moves on.
 
 ```bash
-galley run "task" -m deepseek/deepseek-flash --reviewer anthropic/claude-sonnet-5-5 --steps
+galley run "task" -m deepseek/deepseek-flash --reviewer anthropic/claude-sonnet-5-5 --steps --observe 5
 ```
 
 - **`--reviewer <model>`** makes that model the advisor and has it review every finished unit of work. It is also consulted when a turn goes badly. The worker gets no tool to call it: the reviewer speaks when it has something to say.
 - **`--steps`** (or `"steps": true`, or `/steps <task>` in a session) cuts the task into small units. The worker first plans without changing anything and replies with a numbered list. Each step is then a turn of its own, so `/undo` takes back one step at a time. A plan of one step runs as a single unit.
+- **The reviewer checks the plan first.** The plan is the weaker model's, and a poor plan costs more than none. The reviewer sees what the worker looked at and its plan, and replies once; the worker revises the plan or keeps it, and only then starts.
+- **`--observe <n>`** (or `"every": n` under `advisor`) has the reviewer also look in on the work every `n` steps of a turn. A look that finds nothing puts the next one two steps later, up to four times `n`; a look that finds something brings the next one back to `n`. A look is skipped when a sign of trouble has already brought the reviewer in. Up to eight consultations a turn in this mode.
 - **What the reviewer reads for a step:** the task, the plan, that step's work, and a diff of what the step changed. Not the earlier steps. That keeps each review short. If it finds problems, they go back to the worker before the next step starts; if not, the run goes on without a word.
 - **Without `--steps`** the unit is the whole task: one review when the worker says it has finished.
-- **Cost:** one request to the reviewer for each step that changed files. With a reviewer that costs 13 times as much per token as the worker, three reviews can cost more than the rest of a small task. It suits long tasks, where the worker's many steps dominate the bill.
+- **Cost:** one request to the reviewer for the plan, one for each step that changed files, and one for each look. With a reviewer that costs 13 times as much per token as the worker, three reviews can cost more than the rest of a small task. It suits long tasks, where the worker's many steps dominate the bill.
+
+The choices in this mode follow published research: a reviewer stronger than the worker, a review in a fresh context, one round only, guidance during the run at an interval that adapts, and the stronger model checking the plan. The studies and their limits are in [`research/multi-model-methods.md`](../research/multi-model-methods.md).
 
 **Status: tested, not yet measured.** The mechanics are covered by tests and by a few real runs. Whether they raise the pass rate on real tasks, and at what cost, has not been measured. The evidence from other harnesses says to expect a small gain where the second model is clearly stronger and the signals fire, and a loss of money where it is not: see [`research/model-switching.md`](../research/model-switching.md). On small tasks one consult of a strong model can cost more than the whole task on a cheap one.
 

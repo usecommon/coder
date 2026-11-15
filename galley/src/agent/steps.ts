@@ -3,7 +3,7 @@
 // step's work and its changes before the next step starts, so each review is short and a mistake is caught where
 // it is made.
 import { addUsage } from "../core/types.ts";
-import { stepQuestion } from "./advisor.ts";
+import { planQuestion, planRevision, reviewPassed, stepQuestion } from "./advisor.ts";
 import type { Agent, TurnResult } from "./loop.ts";
 
 /** More steps than this are folded into the last one: a plan that long is not a list of checkable units. */
@@ -45,13 +45,17 @@ export interface StepsResult extends TurnResult {
 /** Plan the task, then do it one step at a time. Usage and cost are those of the whole run. */
 export async function runSteps(agent: Agent, task: string, signal?: AbortSignal): Promise<StepsResult> {
   const mode = agent.mode;
+  const planStart = agent.session.messages.length;
   let last: TurnResult;
-  agent.mode = "plan";
-  try {
-    last = await agent.send(planRequest(task), signal);
-  } finally {
-    agent.mode = mode;
-  }
+  const planning = async (text: string) => {
+    agent.mode = "plan";
+    try {
+      return await agent.send(text, signal);
+    } finally {
+      agent.mode = mode;
+    }
+  };
+  last = await planning(planRequest(task));
   let usage = last.usage;
   let costUsd = last.costUsd;
   const run = async (text: string, review?: { question: string; scope: "turn" }) => {
@@ -63,7 +67,26 @@ export async function runSteps(agent: Agent, task: string, signal?: AbortSignal)
   const result = (steps: string[], done: number): StepsResult => ({ ...last, usage, costUsd, steps, done });
 
   if (last.stopReason !== "end_turn" || signal?.aborted) return result([], 0);
-  const steps = parsePlan(last.text);
+  let steps = parsePlan(last.text);
+  // The plan is the worker's, and a poor plan costs more than none. A reviewing advisor checks it once before any of
+  // it is carried out; the worker decides what to take from that (research/multi-model-methods.md, section 3).
+  if (steps.length >= 2) {
+    const verdict = await agent.review(planQuestion(steps), "to review the plan", planStart, signal);
+    if (verdict) {
+      usage = addUsage(usage, verdict.usage);
+      costUsd += verdict.costUsd;
+    }
+    if (verdict?.text && !reviewPassed(verdict.text) && !signal?.aborted) {
+      const planned = last;
+      last = await planning(planRevision(agent.advisor!, verdict.text));
+      usage = addUsage(usage, last.usage);
+      costUsd += last.costUsd;
+      if (last.stopReason !== "end_turn") return result(steps, 0);
+      const revised = parsePlan(last.text);
+      if (revised.length) steps = revised;
+      else last = planned;
+    }
+  }
   // Nothing to split: the task is one unit, and is reviewed as a whole.
   if (steps.length < 2) return result(steps, (await run(WHOLE_TASK)) ? steps.length : 0);
 

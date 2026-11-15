@@ -521,3 +521,16 @@ Tests: 121 pass, 45 of them for the multi-model features.
 **What it would cost with Sonnet as the reviewer (estimate, not measured).** The same reviews at Sonnet's prices are about $0.003 to $0.035 each, so two or three of them cost $0.03 to $0.05 on a small task: more than Galley doing the whole task on Sonnet ($0.028). On tasks the size of the hard-task boards, where the worker spends $0.10 or more a run and Sonnet alone costs tens of times that, five reviews would add a small share. So the arrangement suits long tasks.
 
 **Not run:** any round with Sonnet as the reviewer. That needs the three harness changes listed above (cost per model, the audit's list of allowed models, a second provider behind the proxy) and the user's go-ahead for the spend.
+
+### What published research says about these methods, and two changes that follow (15 November)
+
+A survey of about 45 studies is in [`research/multi-model-methods.md`](../research/multi-model-methods.md). In short: an observer model raised weak coding agents' results by 5 to 25 points in three 2026 preprints, but only when it was stronger than the worker or trained for the job; a model cannot reliably check its own work by rereading it; one review in a fresh context is better than several rounds; voting works where debate and blending do not; a bad plan is worse than no plan.
+
+Two changes to the worker-and-reviewer mode follow from it:
+
+| Change | Evidence |
+|---|---|
+| **The reviewer checks the plan** before any step is carried out; the worker revises it once or keeps it | Planning sits with the stronger model in every arrangement that worked; "a subpar plan hurts performance even more than no plan at all" |
+| **`--observe <n>`: the reviewer looks in on the work every n steps,** later after a look that found nothing, as soon again after one that found something | Guidance during the run is where the gains were measured, and an adapting interval did best |
+
+Tests: 129 pass. Smoke run `smoke-obs1` (two used-up Lua tasks, DeepSeek in both roles): two plan reviews, one of which found a fault that the worker then fixed in its plan; five looks, none with a finding; five step reviews. Spend: $0.013. Not measured on a benchmark.
