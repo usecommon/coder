@@ -203,6 +203,7 @@ Galley's model profiles hold the first three, with sources and dates, and the co
 | Change effort in a session | Claude Code, Codex | No | `/effort`, `--effort` |
 | A model per role | Everyone | One smaller model for helpers and compaction | Also `planModel` for plan mode |
 | Second-opinion model | Claude Code (Anthropic models only), Amp | No | `advisor`: any provider. The model can ask; Galley asks for it on the signals below; optionally before finishing |
+| A worker and a reviewer on small steps | Aider plans with one model and edits with another; no harness found that reviews each step with a second model | No | `--reviewer` and `--steps`: the worker plans, each step is a turn of its own, and the reviewer checks that step's diff before the next one starts (added 15 November) |
 | Automatic switch | Routers at Cursor, Copilot, Factory, Gemini CLI | No | `escalateModel`: after the signals fire again, the stronger model takes over for the rest of the turn |
 | Signals for "when" | Not published by anyone | None | The same command failing three times, the same call repeated three times, four tool errors in a row, two thirds of the step limit used |
 | Knowledge of the models | Private at the routers | A price table | Profiles with strength, cost per task, effort levels, source and date; `galley models` prints them and suggests roles for the keys you have |
@@ -220,7 +221,7 @@ How to use it is in [`galley/README.md`](../galley/README.md#using-more-than-one
 
 **Status: built and tested; not measured on a benchmark.**
 
-- **Tests:** 36 new tests with scripted providers cover the profiles, the signals, the advisor, the takeover, the refusal to hand over to a weaker model, the fallback and the plan model.
+- **Tests:** 45 new tests with scripted providers cover the profiles, the signals, the advisor, the takeover, the refusal to hand over to a weaker model, the fallback, the plan model, and work in reviewed steps.
 - **Two smoke runs with real models** inside the benchmark sandbox, five Lua task-runs, about $0.06 in all. The advisor's review ran and was billed in all five. In one the model asked the advisor of its own accord. One consult of `deepseek-v4-pro` cost $0.0094, seven times the rest of that task ($0.0013). One dropped connection showed that the advisor request had no retry; it now has.
 - **What the smoke runs do not show:** any effect on the pass rate. Five task-runs say nothing about that.
 - **What to expect from a second look by the *same* model** on Exercism tasks is known from earlier measurements: self-review doubled cost for no gain, and an independent verifier tripled cost for a gain that did not hold at scale ([`bench/IMPROVEMENT_LOG.md`](../bench/IMPROVEMENT_LOG.md)). In the smoke runs the same-model review passed a solution that then failed the hidden tests.

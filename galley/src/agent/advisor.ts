@@ -1,8 +1,10 @@
 // A second model that reads the session and advises the one doing the work. It runs nothing and its answer is
 // short, so the main model keeps its context and its cached prompt: the advisor is consulted, the session is not
 // handed over (research/model-switching.md, section 4).
-import { existsSync, readFileSync } from "node:fs";
-import { relative } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import type { Message } from "../core/types.ts";
 
 export const ADVISOR_SYSTEM = [
@@ -21,6 +23,13 @@ export const REVIEW_QUESTION =
   "The agent says it has finished. Check its change against the task: every stated requirement, names and signatures, " +
   "output formats, edge cases and error behaviour. If you find nothing that needs changing, reply with exactly: OK\n" +
   "Otherwise list each problem as: what the task requires, what the code does.";
+
+/** The question for the review of one step of a plan. The reviewer sees the task, this step's work and its changes. */
+export const stepQuestion = (step: number, steps: string[]) =>
+  `The agent is working through this plan one step at a time:\n${steps.map((s, k) => `${k + 1}. ${s}`).join("\n")}\n\n` +
+  `It has just finished step ${step}. Check that step only: does the change do what the step says, and does it leave the task's requirements and the earlier steps' work intact? ` +
+  "Later steps are not this step's job; do not ask for them. If you find nothing that needs changing, reply with exactly: OK\n" +
+  "Otherwise list each problem as: what is required, what the code does.";
 
 /** True when a review found nothing to change. */
 export const reviewPassed = (reply: string) => /^\s*ok[.!]?\s*$/i.test(reply);
@@ -49,45 +58,68 @@ function line(m: Message): string[] {
   return m.results.map((r) => `RESULT ${r.name}${r.isError ? " (refused)" : ""}: ${clip(r.content, 3000)}`);
 }
 
-/** The session for the advisor: the opening request in full, then as many of the latest steps as fit. */
-export function digest(messages: Message[], maxChars = 80_000): string {
+/** The session for the advisor: the opening request in full, then as many of the latest steps as fit.
+ *  With `from`, only the messages from that index on follow the opening request: one unit of work, not the whole session. */
+export function digest(messages: Message[], maxChars = 80_000, from = 1): string {
   if (!messages.length) return "(empty session)";
   const first = line(messages[0]!).join("\n");
-  const rest = messages.slice(1).map((m) => line(m).join("\n"));
+  const start = Math.max(1, from);
+  const rest = messages.slice(start).map((m) => line(m).join("\n"));
   const kept: string[] = [];
   let used = first.length;
+  let left = start - 1;
   for (let i = rest.length - 1; i >= 0; i--) {
     if (used + rest[i]!.length > maxChars) {
-      kept.unshift(`[… ${i + 1} earlier message${i ? "s" : ""} left out …]`);
+      left += i + 1;
       break;
     }
     kept.unshift(rest[i]!);
     used += rest[i]!.length + 1;
   }
+  if (left > 0) kept.unshift(`[… ${left} earlier message${left > 1 ? "s" : ""} left out …]`);
   return [first, ...kept].join("\n");
 }
 
-/** The files a turn changed, as they are now, for a review at the end of the turn. */
-export function changedFiles(workspace: string, paths: string[], maxChars = 40_000): string {
+/** A unified diff of a file against what it held before, "" when nothing differs, undefined when `diff` cannot be run. */
+function unifiedDiff(name: string, before: string, path: string): string | undefined {
+  const dir = mkdtempSync(join(tmpdir(), "galley-diff-"));
+  try {
+    const old = join(dir, "before");
+    writeFileSync(old, before);
+    const r = spawnSync("diff", ["-u", "--label", `a/${name}`, "--label", `b/${name}`, old, path], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+    // diff exits with 0 when the files are the same, 1 when they differ and 2 on trouble.
+    return r.status === 0 ? "" : r.status === 1 ? r.stdout.trimEnd() : undefined;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/** What a turn changed, for a review: a diff for each file that existed before, the whole of each new file. */
+export function changes(workspace: string, snapshots: { path: string; before: string | null }[], maxChars = 40_000): string {
   const out: string[] = [];
   let used = 0;
-  for (const p of paths) {
-    const name = relative(workspace, p) || p;
-    if (!existsSync(p)) {
-      out.push(`--- ${name} (deleted)`);
-      continue;
+  for (const s of snapshots) {
+    const name = relative(workspace, s.path) || s.path;
+    let text: string;
+    if (!existsSync(s.path)) {
+      if (s.before === null) continue; // created and removed again within the turn
+      text = `--- ${name} (deleted)`;
+    } else if (s.before === null) text = `--- ${name} (new file)\n${readFileSync(s.path, "utf8")}`;
+    else {
+      const diff = unifiedDiff(name, s.before, s.path);
+      if (diff === "") continue; // changed and changed back
+      text = diff ?? `--- ${name} (as it is now)\n${readFileSync(s.path, "utf8")}`;
     }
-    const text = readFileSync(p, "utf8");
     if (used + text.length > maxChars) {
-      out.push(`--- ${name} (${text.length} characters, not shown: over the size limit for a review)`);
+      out.push(`--- ${name} (changed; ${text.length} characters not shown: over the size limit for a review)`);
       continue;
     }
     used += text.length;
-    out.push(`--- ${name}\n${text}`);
+    out.push(text);
   }
   return out.join("\n");
 }
 
-export function advisorRequest(messages: Message[], question: string, files?: string): string {
-  return `<session>\n${digest(messages)}\n</session>\n${files ? `\n<files_changed>\n${files}\n</files_changed>\n` : ""}\n${question}`;
+export function advisorRequest(messages: Message[], question: string, files?: string, from?: number): string {
+  return `<session>\n${digest(messages, 80_000, from)}\n</session>\n${files ? `\n<files_changed>\n${files}\n</files_changed>\n` : ""}\n${question}`;
 }

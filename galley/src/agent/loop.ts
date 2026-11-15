@@ -14,7 +14,7 @@ import { adviseTool } from "../tools/advise.ts";
 import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import { ToolError, type Tool, type ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
-import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changedFiles, handoverMessage, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
+import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, handoverMessage, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
@@ -38,6 +38,12 @@ export interface AgentOptions {
   effort?: Effort;
   /** First wait before a failed model request is tried again; it triples each time (default 1500 ms). */
   retryDelayMs?: number;
+}
+
+export interface SendOptions {
+  /** How the advisor's review at the end of this turn is put: its question, and whether it reads the whole session
+   *  or only this turn (one step of a plan). Used when `advisor.review` is on. */
+  review?: { question: string; scope: "turn" | "session" };
 }
 
 export interface TurnResult {
@@ -68,7 +74,7 @@ export class Agent {
   /** Reasoning effort; undefined means the configured default. */
   effort?: Effort;
   private lastInputTokens = 0;
-  private baseTools: Tool[];
+  private tools: Tool[];
   /** Consultations of the advisor in the current turn, and what they cost. */
   private consults = 0;
   private consultUsage = emptyUsage();
@@ -83,13 +89,17 @@ export class Agent {
     const all = [...BUILTIN_TOOLS, ...(o.extraTools ?? [])];
     // Helpers get read-only tools plus bash (which runs read-only in plan mode). The tool list stays fixed
     // across modes so the cached prompt prefix survives a /plan ↔ /build switch.
-    this.baseTools = o.subagent ? all.filter((t) => (t.readOnly && t.spec.name !== "task") || t.spec.name === "bash") : all;
+    const base = o.subagent ? all.filter((t) => (t.readOnly && t.spec.name !== "task") || t.spec.name === "bash") : all;
+    // `advise` is offered when the session starts with an advisor that allows it. Like the rest of the list it then
+    // stays as it is: a tool list that changes mid-session loses the cached prompt, and the newest Claude models
+    // reject a history whose tools were edited.
+    const adv = o.cfg.advisor;
+    this.tools = adv && adv.tool !== false && !o.subagent ? [...base, adviseTool] : base;
   }
 
-  /** The tools offered to the model. `advise` is there only while an advisor is configured, and comes last. */
-  private get tools(): Tool[] {
-    const adv = this.o.cfg.advisor;
-    return adv && adv.tool !== false && !this.o.subagent ? [...this.baseTools, adviseTool] : this.baseTools;
+  /** Say something to whoever follows the session, without telling the model. */
+  note(text: string, level: "info" | "warn" = "info"): void {
+    this.emit({ type: "notice", level, text });
   }
 
   /** The model a turn starts on: the plan model in plan mode when one is set, otherwise the session's model. */
@@ -124,7 +134,7 @@ export class Agent {
   }
 
   /** Send one user message and run until the model stops asking for tools. */
-  async send(text: string, signal?: AbortSignal): Promise<TurnResult> {
+  async send(text: string, signal?: AbortSignal, o: SendOptions = {}): Promise<TurnResult> {
     const cfg = this.o.cfg;
     // The model in use. It changes within the turn when a stronger model takes over or a provider keeps failing,
     // and the next turn starts from the session's own model again.
@@ -141,6 +151,7 @@ export class Agent {
       this.session.addMessage({ role: "tool", results: last.toolCalls.map((c) => ({ callId: c.id, name: c.name, isError: true, content: INTERRUPTED })) });
     // The system prompt names no project, so a session's first message says where the agent is.
     const first = this.session.messages.length === 0;
+    const turnStart = this.session.messages.length;
     this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${text}` : text });
     if (!this.session.title) this.session.setTitle(text.split("\n")[0]!.slice(0, 80));
 
@@ -202,7 +213,8 @@ export class Agent {
         // The advisor's review: once per turn, a second model checks the change against the request.
         else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < (cfg.advisor.maxUses ?? 3) && !signal?.aborted) {
           advisorReviewed = true;
-          const report = await this.consult(REVIEW_QUESTION, "to review the finished change", signal, changedFiles(this.workspace, this.undo.changedPaths()));
+          const scoped = o.review?.scope === "turn";
+          const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, changes(this.workspace, this.undo.snapshots()), scoped ? turnStart : undefined);
           if (report && !reviewPassed(report)) {
             this.session.addMessage({ role: "user", content: reviewMessage(cfg.advisor.model, report) });
             continue;
@@ -317,14 +329,14 @@ export class Agent {
   /** Put a question to the advisor model. It reads the session so far, and for a review the changed files; it
    *  runs nothing. `why` completes "Asked <model> …". Returns its answer, or undefined when there is none (the turn
    *  then goes on without). */
-  private async consult(question: string, why: string, signal?: AbortSignal, files?: string): Promise<string | undefined> {
+  private async consult(question: string, why: string, signal?: AbortSignal, files?: string, from?: number): Promise<string | undefined> {
     const adv = this.o.cfg.advisor;
     if (!adv) return undefined;
     this.consults++;
     try {
       const { provider: pid, model } = splitModel(adv.model);
       const provider = getProvider(pid, this.o.cfg);
-      const content = advisorRequest(this.session.messages, question, files);
+      const content = advisorRequest(this.session.messages, question, files, from);
       const res = await this.withRetry(
         () => provider.chat({ model, system: ADVISOR_SYSTEM, messages: [{ role: "user", content }], tools: [], maxTokens: adv.maxTokens ?? 16_000, effort: adv.effort ?? "high", signal }),
         signal,

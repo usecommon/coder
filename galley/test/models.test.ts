@@ -1,11 +1,13 @@
 // More than one model in a session: what is known about models, the signals that a turn is going badly,
 // the advisor, the handover and the fallback.
 import { describe, expect, test } from "bun:test";
-import { writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { advisorRequest, changedFiles, digest, reviewPassed } from "../src/agent/advisor.ts";
+import { advisorRequest, changes, digest, reviewPassed } from "../src/agent/advisor.ts";
 import { Agent } from "../src/agent/loop.ts";
 import { LIMITS, Watch } from "../src/agent/signals.ts";
+import { parsePlan, runSteps } from "../src/agent/steps.ts";
+import { parseArgs } from "../src/args.ts";
 import type { Config } from "../src/config.ts";
 import type { AgentEvent, Message, ToolCall, ToolResult } from "../src/core/types.ts";
 import { registerProvider } from "../src/provider/index.ts";
@@ -182,12 +184,41 @@ describe("what the advisor reads", () => {
     expect(d).not.toContain("CALL read");
   });
 
-  test("a review also gets the changed files as they are now", () => {
+  test("a review gets what changed: a diff of each file that existed, the whole of each new one", () => {
     const ws = tempDir();
-    writeFileSync(join(ws, "a.txt"), "alpha");
-    const files = changedFiles(ws, [join(ws, "a.txt"), join(ws, "gone.txt")]);
-    expect(files).toBe("--- a.txt\nalpha\n--- gone.txt (deleted)");
-    expect(advisorRequest(msgs, "Is it right?", files)).toContain("<files_changed>\n--- a.txt\nalpha");
+    writeFileSync(join(ws, "new.txt"), "alpha\n");
+    writeFileSync(join(ws, "old.txt"), "one\ntwo\nthree\n");
+    writeFileSync(join(ws, "same.txt"), "kept\n");
+    const files = changes(ws, [
+      { path: join(ws, "new.txt"), before: null },
+      { path: join(ws, "old.txt"), before: "one\n2\nthree\n" },
+      { path: join(ws, "gone.txt"), before: "bye\n" },
+      { path: join(ws, "same.txt"), before: "kept\n" },
+      { path: join(ws, "never.txt"), before: null },
+    ]);
+    expect(files).toStartWith("--- new.txt (new file)\nalpha\n");
+    expect(files).toContain("--- a/old.txt\n+++ b/old.txt\n");
+    expect(files).toContain("-2\n+two\n");
+    expect(files).toEndWith("--- gone.txt (deleted)");
+    // A file changed back, and one created and removed again, are not changes.
+    expect(files).not.toContain("same.txt");
+    expect(files).not.toContain("never.txt");
+    expect(advisorRequest(msgs, "Is it right?", files)).toContain("<files_changed>\n--- new.txt (new file)\nalpha");
+  });
+
+  test("a review of one step reads the request and that step, not the steps before it", () => {
+    const d = digest(msgs, 80_000, 3);
+    expect(d).toStartWith("USER: Make add() handle negative numbers.");
+    expect(d).toContain("2 earlier messages left out");
+    expect(d).not.toContain("CALL read");
+    expect(d).toContain("CALL write");
+    expect(advisorRequest(msgs, "Step 2 right?", undefined, 3)).not.toContain("CALL read");
+  });
+
+  test("a change too large to show is named, not dropped", () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "big.txt"), "x".repeat(500));
+    expect(changes(ws, [{ path: join(ws, "big.txt"), before: null }], 100)).toBe("--- big.txt (changed; 523 characters not shown: over the size limit for a review)");
   });
 
   test("only a bare OK passes a review", () => {
@@ -349,7 +380,7 @@ describe("a second model in the session", () => {
     const { mock, agent } = setup([write("hi"), { text: "Done." }, write("hi\n"), { text: "Fixed the newline." }], { advisor: { model: "adv6/strong", review: true } });
     const r = await agent.send("write hello.txt ending in a newline");
     expect(adv.requests).toHaveLength(1);
-    expect(lastUser(adv.requests[0]!)).toContain("<files_changed>\n--- hello.txt\nhi\n</files_changed>");
+    expect(lastUser(adv.requests[0]!)).toContain("<files_changed>\n--- hello.txt (new file)\nhi\n</files_changed>");
     expect(lastUser(mock.requests[2]!)).toContain("reviewed your change against the request and reported");
     expect(lastUser(mock.requests[2]!)).toContain("trailing newline");
     expect(r.text).toBe("Fixed the newline.");
@@ -432,5 +463,128 @@ describe("other ways the model in use changes", () => {
     agent.effort = "max";
     await agent.send("two");
     expect(mock.requests.map((r) => r.effort)).toEqual(["medium", "max"]);
+  });
+});
+
+describe("a task done in small steps", () => {
+  test("a plan is its numbered lines, whatever stands around them", () => {
+    expect(parsePlan("Here is the plan:\n\n1. Add the parser - check with the unit tests\n2) **Wire it into the CLI**\n   - detail that is not a step\n3. Update the README\n\nThat's all.")).toEqual([
+      "Add the parser - check with the unit tests",
+      "Wire it into the CLI",
+      "Update the README",
+    ]);
+    expect(parsePlan("- **Step 1:** Do it\n- **Step 2:** Check it")).toEqual(["Do it", "Check it"]);
+    // A second list replaces a first one; a number out of order is not a step.
+    expect(parsePlan("1. draft a\n2. draft b\n\nRevised:\n1. final a\n3. stray\n2. final b")).toEqual(["final a", "final b"]);
+    expect(parsePlan("I would just fix the typo in line 3.")).toEqual([]);
+    expect(parsePlan(Array.from({ length: 12 }, (_, i) => `${i + 1}. s${i + 1}`).join("\n"))).toHaveLength(9);
+  });
+
+  const write = (path: string, content: string): MockReply => ({ toolCalls: [{ name: "write", input: { path, content } }] });
+
+  test("the worker plans without changing anything, then does each step in a turn of its own", async () => {
+    const { ws, mock, agent, notices } = setup([
+      { toolCalls: [{ name: "write", input: { path: "early.txt", content: "no" } }] },
+      { text: "1. Write a.txt\n2. Write b.txt" },
+      write("a.txt", "A"),
+      { text: "a.txt written." },
+      write("b.txt", "B"),
+      { text: "b.txt written." },
+    ]);
+    const r = await runSteps(agent, "write two files");
+    expect(r.steps).toEqual(["Write a.txt", "Write b.txt"]);
+    expect(r.done).toBe(2);
+    expect(r.text).toBe("b.txt written.");
+    // Planning is read-only: the write it tried was refused, and the mode is back to what it was.
+    expect(existsSync(join(ws, "early.txt"))).toBe(false);
+    expect(agent.mode).toBe("build");
+    expect(mock.requests[0]!.system).toContain("PLAN mode");
+    expect(mock.requests[2]!.system).not.toContain("PLAN mode");
+    expect(lastUser(mock.requests[2]!)).toStartWith("Step 1 of 2: Write a.txt");
+    expect(lastUser(mock.requests[4]!)).toStartWith("Step 2 of 2: Write b.txt");
+    expect(readFileSync(join(ws, "a.txt"), "utf8") + readFileSync(join(ws, "b.txt"), "utf8")).toBe("AB");
+    expect(notices()).toContain("Working in 2 steps.");
+    // The whole run is on the books: six requests at 100 input tokens each.
+    expect(r.usage.inputTokens).toBe(600);
+    // Each step is a turn, so undo takes back one step at a time.
+    agent.undo.undo();
+    expect(existsSync(join(ws, "b.txt"))).toBe(false);
+    expect(existsSync(join(ws, "a.txt"))).toBe(true);
+  });
+
+  test("the reviewer checks each step on its own, and its findings go back before the next step starts", async () => {
+    const reviewer = second("rev1", [{ text: "The step says the file must end in a newline; a.txt does not." }, { text: "OK" }]);
+    const { mock, agent } = setup(
+      [{ text: "1. Write a.txt ending in a newline\n2. Write b.txt" }, write("a.txt", "A"), { text: "Step 1 done." }, write("a.txt", "A\n"), { text: "Fixed." }, write("b.txt", "B\n"), { text: "Step 2 done." }],
+      { advisor: { model: "rev1/strong", review: true, tool: false } },
+    );
+    const r = await runSteps(agent, "write two files");
+    expect(r.done).toBe(2);
+    expect(reviewer.requests).toHaveLength(2);
+    const [one, two] = reviewer.requests.map(lastUser) as [string, string];
+    // Review of step 1: the plan, which step is meant, the task, that step's work and its change.
+    expect(one).toContain("1. Write a.txt ending in a newline\n2. Write b.txt");
+    expect(one).toContain("It has just finished step 1.");
+    expect(one).toContain("write two files");
+    expect(one).toContain("--- a.txt (new file)\nA\n</files_changed>");
+    // Its finding reaches the worker inside step 1, before step 2 is started.
+    expect(lastUser(mock.requests[3]!)).toContain("does not");
+    expect(lastUser(mock.requests[5]!)).toStartWith("Step 2 of 2");
+    // Review of step 2 reads step 2 only: step 1's work is left out, and so is its file.
+    expect(two).toContain("It has just finished step 2.");
+    expect(two).toContain("earlier messages left out");
+    expect(two).not.toContain('"path":"a.txt"');
+    expect(two).toContain("--- b.txt (new file)");
+    expect(two).not.toContain("--- a.txt");
+    // The worker was not given a tool to call the reviewer itself.
+    expect(mock.requests.every((q) => !q.tools.some((t) => t.name === "advise"))).toBe(true);
+  });
+
+  test("a task the model does not split runs as one unit and is reviewed as a whole", async () => {
+    const reviewer = second("rev2", () => ({ text: "OK" }));
+    const { mock, agent, notices } = setup([{ text: "1. Fix the typo in a.txt and re-read it" }, write("a.txt", "fixed"), { text: "Done." }], { advisor: { model: "rev2/strong", review: true } });
+    const r = await runSteps(agent, "fix the typo");
+    expect(r.steps).toHaveLength(1);
+    expect(r.done).toBe(1);
+    expect(lastUser(mock.requests[1]!)).toStartWith("Go ahead");
+    expect(reviewer.requests).toHaveLength(1);
+    expect(lastUser(reviewer.requests[0]!)).toContain("The agent says it has finished.");
+    expect(notices().some((n) => n.startsWith("Working in"))).toBe(false);
+  });
+
+  test("a step that does not finish stops the run there", async () => {
+    registerProvider({
+      id: "half",
+      chat: (() => {
+        let n = 0;
+        return async (): Promise<ChatResponse> => {
+          const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 };
+          if (n++ === 0) return { text: "1. First\n2. Second\n3. Third", toolCalls: [], usage, stopReason: "end_turn" };
+          if (n === 2) return { text: "First done.", toolCalls: [], usage, stopReason: "end_turn" };
+          throw Object.assign(new Error("HTTP 400 bad request"), { status: 400 });
+        };
+      })(),
+    });
+    const ws = tempDir();
+    const events: AgentEvent[] = [];
+    const agent = new Agent({ cfg: testConfig({ model: "half/x" }), workspace: ws, session: Session.create(ws, "half/x"), onEvent: (e) => events.push(e), retryDelayMs: 1 });
+    const r = await runSteps(agent, "three things");
+    expect(r.done).toBe(1);
+    expect(r.stopReason).toBe("error");
+    expect(events.some((e) => e.type === "notice" && e.text === "Stopped in step 2 of 3: it did not finish.")).toBe(true);
+  });
+
+  test("the tool list is fixed when a session starts, whatever is configured later", async () => {
+    const { mock, agent, cfg } = setup([{ text: "a" }, { text: "b" }]);
+    await agent.send("one");
+    cfg.advisor = { model: "rev1/strong" };
+    await agent.send("two");
+    expect(mock.requests[1]!.tools.map((t) => t.name)).toEqual(mock.requests[0]!.tools.map((t) => t.name));
+  });
+
+  test("--reviewer and --steps are read from the command line", () => {
+    const { cmd, positional, flags } = parseArgs(["run", "do it", "-m", "deepseek/deepseek-flash", "--reviewer", "anthropic/claude-sonnet-5-5", "--steps"]);
+    expect([cmd, positional]).toEqual(["run", ["do it"]]);
+    expect(flags).toEqual({ model: "deepseek/deepseek-flash", reviewer: "anthropic/claude-sonnet-5-5", steps: true });
   });
 });

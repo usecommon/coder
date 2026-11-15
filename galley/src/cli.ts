@@ -4,6 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, openSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Agent } from "./agent/loop.ts";
+import { runSteps } from "./agent/steps.ts";
 import { INIT_PROMPT } from "./agent/prompt.ts";
 import { loadConfig, type Config, type Effort } from "./config.ts";
 import type { AgentEvent } from "./core/types.ts";
@@ -35,6 +36,8 @@ Usage:
 Options:
   -m, --model <provider/model>     e.g. anthropic/claude-opus-5-5, deepseek/deepseek-flash, ollama/qwen3-coder
   --advisor <provider/model>       a second, stronger model to consult when a turn goes badly
+  --reviewer <provider/model>      the same, and it also checks each finished piece of work before the run moves on
+  --steps                          plan first, then work in small steps (each one checked when there is a reviewer)
   --escalate <provider/model>      a stronger model that takes over a turn that stays in trouble
   --effort <level>                 reasoning effort: low, medium, high, xhigh or max
   --plan                           start in read-only plan mode
@@ -96,6 +99,10 @@ async function main() {
   const cfg = loadConfig(workspace, overrides);
   // A flag changes one setting of a role and keeps the rest of what the config files say about it.
   if (typeof flags.advisor === "string") cfg.advisor = { ...cfg.advisor, model: flags.advisor };
+  // A reviewer is an advisor that checks every finished unit of work. It decides for itself when to speak, so the
+  // worker is not also given a tool to call it, unless the config says so.
+  if (typeof flags.reviewer === "string") cfg.advisor = { ...cfg.advisor, model: flags.reviewer, review: true, tool: cfg.advisor?.tool ?? false };
+  if (flags.steps) cfg.steps = true;
   if (typeof flags.escalate === "string") cfg.escalateModel = flags.escalate;
   if (typeof flags.effort === "string") {
     if (!EFFORTS.includes(flags.effort as Effort)) throw new Error(`--effort is one of: ${EFFORTS.join(", ")}`);
@@ -160,7 +167,7 @@ async function main() {
     session.setStatus("running");
     const ctrl = new AbortController();
     process.on("SIGINT", () => ctrl.abort());
-    const r = await agent.send(task, ctrl.signal);
+    const r = cfg.steps ? await runSteps(agent, task, ctrl.signal) : await agent.send(task, ctrl.signal);
     session.setStatus(r.stopReason === "error" ? "error" : "done", r.stopReason);
     if (!json && stdoutMid) process.stdout.write("\n");
     clients.forEach((m) => m.close());
@@ -195,8 +202,8 @@ function detach(workspace: string, cfg: Config, flags: Args["flags"], task: stri
   const self = /\.(ts|js|mjs)$/.test(script) && !script.startsWith("/$bunfs") ? [script] : [];
   const args = [...self, "run", task, "--cwd", workspace];
   if (session) args.push("--session-id", session.id);
-  for (const f of ["model", "advisor", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
-  for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify"]) if (flags[f]) args.push(`--${f}`);
+  for (const f of ["model", "advisor", "reviewer", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
+  for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify", "steps"]) if (flags[f]) args.push(`--${f}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", fd, fd], cwd: workspace });
   child.unref();
   console.log(`Started background run ${session ? `in session ${session.id}` : ""} (pid ${child.pid}).`);
@@ -230,7 +237,7 @@ function doctor(cfg: Config, workspace: string) {
   console.log(`workspace   ${workspace}`);
   console.log(`model       ${cfg.model}`);
   const all = profiles(cfg.models);
-  for (const [role, ref] of [["plan model", cfg.planModel], ["advisor", cfg.advisor?.model], ["takes over", cfg.escalateModel]] as const) {
+  for (const [role, ref] of [["plan model", cfg.planModel], [cfg.advisor?.review ? "reviewer" : "advisor", cfg.advisor?.model], ["takes over", cfg.escalateModel]] as const) {
     if (!ref) continue;
     // An advisor or a model that takes over earns its price only by being the stronger one.
     const weaker = role === "plan model" ? undefined : weakerWarning(cfg.model, ref, all);

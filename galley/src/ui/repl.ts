@@ -2,6 +2,7 @@
 import { createInterface } from "node:readline";
 import type { Agent } from "../agent/loop.ts";
 import { INIT_PROMPT } from "../agent/prompt.ts";
+import { runSteps } from "../agent/steps.ts";
 import type { Config, Effort } from "../config.ts";
 import { getProvider, splitModel } from "../provider/index.ts";
 import type { Approver } from "../safety/permission.ts";
@@ -17,6 +18,7 @@ const HELP = `Commands:
   /models        what is known about each model, and which roles suit the ones you can reach
   /effort <lvl>  reasoning effort: low, medium, high, xhigh or max
   /advisor <ref> a second model to consult when a turn goes badly; /advisor off removes it
+  /steps <task>  plan the task, then do it in small steps (each one checked when the advisor reviews)
   /cost          tokens and cost for this session, per model
   /sessions      list sessions in this workspace
   /init          create or improve AGENTS.md
@@ -140,6 +142,7 @@ export async function repl(agentRef: { agent: Agent }, approverHolder: { set(a: 
           for (const l of switchNotes(cfg, a().model, arg, 0)) console.log(c.dim(`  ${l}`));
         }
         console.log(c.dim(`advisor: ${cfg.advisor?.model ?? "none"}`));
+        if (arg) console.log(c.dim("  This applies to Galley's own consultations at once. Whether the model can call the advisor itself is fixed when a session starts."));
       } else if (cmd === "cost") {
         const s = a().session;
         const u = s.usage;
@@ -148,6 +151,9 @@ export async function repl(agentRef: { agent: Agent }, approverHolder: { set(a: 
         if (per.length > 1) for (const [m, v] of per) console.log(c.dim(`  ${m}: ${fmtTok(v.usage.inputTokens + v.usage.cacheReadTokens + v.usage.cacheWriteTokens)} in, ${fmtTok(v.usage.outputTokens)} out — ${fmtUsd(v.costUsd)}`));
       } else if (cmd === "sessions") {
         for (const s of Session.list(a().workspace).slice(0, 20)) console.log(`${s.id}  ${fmtUsd(s.costUsd).padStart(7)}  ${s.title ?? ""}`);
+      } else if (cmd === "steps") {
+        if (!arg) console.log(c.red("usage: /steps <task>"));
+        else await turn(arg, true);
       } else if (cmd === "init") await turn(INIT_PROMPT);
       else console.log(c.red(`unknown command /${cmd}`) + "\n" + HELP);
       continue;
@@ -156,10 +162,11 @@ export async function repl(agentRef: { agent: Agent }, approverHolder: { set(a: 
   }
   if (!closed) rl.close();
 
-  async function turn(text: string) {
+  async function turn(text: string, steps = false) {
     running = new AbortController();
     try {
-      await a().send(text, running.signal);
+      if (steps) await runSteps(a(), text, running.signal);
+      else await a().send(text, running.signal);
     } catch (err) {
       // A turn that cannot start (a model name no provider knows, say) must not end the session.
       console.log(c.red(`error: ${(err as Error).message}`));

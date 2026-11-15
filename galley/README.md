@@ -104,17 +104,32 @@ For the keys that are set:
 }
 ```
 
+### A worker and a reviewer, on small steps
+
+One arrangement of the above: a cheap model does the work and a stronger one checks each finished piece before the run moves on.
+
+```bash
+galley run "task" -m deepseek/deepseek-flash --reviewer anthropic/claude-sonnet-5-5 --steps
+```
+
+- **`--reviewer <model>`** makes that model the advisor and has it review every finished unit of work. It is also consulted when a turn goes badly. The worker gets no tool to call it: the reviewer speaks when it has something to say.
+- **`--steps`** (or `"steps": true`, or `/steps <task>` in a session) cuts the task into small units. The worker first plans without changing anything and replies with a numbered list. Each step is then a turn of its own, so `/undo` takes back one step at a time. A plan of one step runs as a single unit.
+- **What the reviewer reads for a step:** the task, the plan, that step's work, and a diff of what the step changed. Not the earlier steps. That keeps each review short. If it finds problems, they go back to the worker before the next step starts; if not, the run goes on without a word.
+- **Without `--steps`** the unit is the whole task: one review when the worker says it has finished.
+- **Cost:** one request to the reviewer for each step that changed files. With a reviewer that costs 13 times as much per token as the worker, three reviews can cost more than the rest of a small task. It suits long tasks, where the worker's many steps dominate the bill.
+
 **Status: tested, not yet measured.** The mechanics are covered by tests and by a few real runs. Whether they raise the pass rate on real tasks, and at what cost, has not been measured. The evidence from other harnesses says to expect a small gain where the second model is clearly stronger and the signals fire, and a loss of money where it is not: see [`research/model-switching.md`](../research/model-switching.md). On small tasks one consult of a strong model can cost more than the whole task on a cheap one.
 
 ## Using it
 
-**Interactive commands:** `/plan`, `/build`, `/undo`, `/model <ref>`, `/models`, `/effort <level>`, `/advisor <ref|off>`, `/cost`, `/sessions`, `/init`, `/exit`. Ctrl-C cancels a running turn.
+**Interactive commands:** `/plan`, `/build`, `/undo`, `/model <ref>`, `/models`, `/effort <level>`, `/advisor <ref|off>`, `/steps <task>`, `/cost`, `/sessions`, `/init`, `/exit`. Ctrl-C cancels a running turn.
 
 **CLI:**
 
 ```bash
 galley run "task" [--plan] [--yes] [--json] [--worktree] [--detach]
 galley run "task" -m deepseek/deepseek-flash --advisor anthropic/claude-opus-5-5 [--escalate <model>] [--effort high]
+galley run "task" -m deepseek/deepseek-flash --reviewer anthropic/claude-sonnet-5-5 --steps   # a worker and a reviewer, step by step
 galley models                         # what is known about each model, and roles for the keys you have
 galley -s <session-id> [--fork]       # resume, or branch off a session
 galley sessions                       # id, cost, status, title
@@ -173,6 +188,7 @@ src/
   agent/loop.ts          model ⇄ tools loop, parallel read-only calls, sub-agents, compaction trigger, the model in use
   agent/signals.ts       signs that a turn is going badly, read from tool results
   agent/advisor.ts       what a second model is shown and asked
+  agent/steps.ts         a task planned first and done in small steps, each a turn of its own
   agent/prompt.ts        short, cache-stable system prompt + AGENTS.md
   agent/compact.ts       summarize old turns without splitting tool calls from results
   provider/anthropic.ts  official SDK: streaming, adaptive thinking, caching, fallbacks

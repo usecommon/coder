@@ -28,9 +28,9 @@ export class UndoLog {
     return this.current?.length ?? 0;
   }
 
-  /** The files changed so far in the current turn. */
-  changedPaths(): string[] {
-    return (this.current ?? []).map((s) => s.path);
+  /** The files changed so far in the current turn, each with its content before the turn (null: it did not exist). */
+  snapshots(): { path: string; before: string | null }[] {
+    return [...(this.current ?? [])];
   }
 
   /** Restore files changed in the most recent turn that changed anything. Returns the restored paths. */

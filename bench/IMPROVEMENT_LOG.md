@@ -502,3 +502,22 @@ The [Harness Leaderboard](https://huggingface.co/spaces/joelniklaus/harness-lead
 - **Galley has not been run on such tasks.** It needs a container runtime and an adapter for the Harbor framework.
 
 The analysis, the feature comparison and the options with their costs are in [`research/galley-against-the-field.md`](../research/galley-against-the-field.md).
+
+### A worker and a reviewer on small steps (15 November, built, not measured)
+
+The user's design: DeepSeek does the work, Claude Sonnet observes and reviews, and the work is cut into small units so that each review is small.
+
+| Piece | What it does |
+|---|---|
+| `--reviewer <model>` | That model reviews every finished unit of work and is consulted when a turn goes badly. The worker gets no tool to call it |
+| `--steps` | The worker plans without changing anything and replies with a numbered list; each step is then a turn of its own |
+| Step review | The reviewer reads the task, the plan, that step's work and a diff of what it changed, not the earlier steps. Problems go back to the worker before the next step |
+| Fixed tool list | The tools offered to the model no longer change within a session: the newest Claude models reject a history whose tools were edited |
+
+Tests: 121 pass, 45 of them for the multi-model features.
+
+**Smoke run `smoke-steps1`** (three used-up Lua tasks, DeepSeek as both worker and reviewer, in the benchmark sandbox): the model wrote plans of 2, 5 and 5 steps, all parsed; every step ran as its own turn; six step reviews ran and cost $0.0002 to $0.0022 each at DeepSeek's prices; the reviewer found nothing in any of them, and two of the three tasks then failed the hidden tests. Spend: $0.03. It shows the mechanics work and that a reviewer of the worker's own strength adds nothing, as before.
+
+**What it would cost with Sonnet as the reviewer (estimate, not measured).** The same reviews at Sonnet's prices are about $0.003 to $0.035 each, so two or three of them cost $0.03 to $0.05 on a small task: more than Galley doing the whole task on Sonnet ($0.028). On tasks the size of the hard-task boards, where the worker spends $0.10 or more a run and Sonnet alone costs tens of times that, five reviews would add a small share. So the arrangement suits long tasks.
+
+**Not run:** any round with Sonnet as the reviewer. That needs the three harness changes listed above (cost per model, the audit's list of allowed models, a second provider behind the proxy) and the user's go-ahead for the spend.

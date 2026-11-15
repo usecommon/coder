@@ -55,6 +55,9 @@ export interface Config {
   /** Takes over for the rest of a turn that stays in trouble (after the advisor's advice, when there is an advisor).
    *  Ignored when the model profiles say it is not stronger than the model in use. */
   escalateModel?: string;
+  /** Work on a task in small steps: a plan first, then one turn for each step. With `advisor.review` on, each step
+   *  is checked by the advisor before the next one starts. */
+  steps?: boolean;
   /** Tried in order, for the rest of the turn, when the provider of the model in use keeps failing. */
   fallbackModels?: string[];
   /** Additions and corrections to the built-in model profiles (src/provider/models.ts). */
