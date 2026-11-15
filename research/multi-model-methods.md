@@ -1,6 +1,6 @@
 # Using several models at once: what the research says
 
-*Researched on 15 November 2026. A survey of published work on methods in which more than one model, or more than one copy of a model, works on the same task: a worker with a reviewer or observer, a strong model directing a weak one, committees that vote or debate, blended answers, and several attempts with a selector. It was prompted by Galley's worker-and-reviewer mode ([`galley/README.md`](../galley/README.md#a-worker-and-a-reviewer-on-small-steps)). Companion notes: [model-switching.md](model-switching.md) covers what coding harnesses ship and routing between models; [beating-opencode.md](beating-opencode.md) covers several attempts with selection in more depth.*
+*Researched on 15 November 2026. A survey of published work on methods in which more than one model, or more than one copy of a model, works on the same task: a worker with a reviewer or observer, a strong model directing a weak one, committees that vote or debate, blended answers, and several attempts with a selector. It was prompted by Galley's worker-and-reviewer mode ([`galley/README.md`](../galley/README.md#a-worker-and-a-reviewer-on-small-steps)). Companion notes: [model-switching.md](model-switching.md) covers what coding harnesses ship and routing between models; [beating-opencode.md](beating-opencode.md) covers several attempts with selection in more depth. A second survey, [Further ways to use several models](reports/Multi%20model%20methods%20further%20areas.md), covers nine areas this one leaves out, from routing to teams of agents.*
 
 **Evidence labels.** *[read]*: the paper's own text was read for this note. *[abstract]*: only its abstract. *[summary]*: the figure comes from a machine summary of a part of the page that was not read word for word, and should be checked before it is relied on. *[secondary]*: a third party's account. "Preprint" means not peer-reviewed as far as I could tell.
 
@@ -142,7 +142,7 @@ Several widely cited systems give copies of one model different roles: AgentCode
 ### Many agents on one task
 
 - **Towards a Science of Scaling Agent Systems** (Google and MIT, 2025) *[read, part summary]*: 260 configurations, six benchmarks. Teams gained 81% on a financial analysis task that splits into parallel parts and lost 39 to 70% on a planning task that does not. On SWE-bench Verified every team arrangement was slightly worse than one agent *[summary]*. Teams stop paying once a single agent passes about 45%. Agents working independently multiplied errors 17 times; a central coordinator held that to 4 times.
-- **On mixing strong and weak in one team** *[summary]*: teams with a central coordinator and mixed strengths scored 12.6 points below teams made only of the strong model, and strong workers mattered more than a strong coordinator.
+- **On mixing strong and weak in one team** *[summary]*: teams with a central coordinator and mixed strengths scored 12.6 points below teams made only of the strong model, and strong workers mattered more than a strong coordinator. Two later vendor results on large builds point the other way, with the lead's strength deciding the outcome: see area 9 of the [second survey](reports/Multi%20model%20methods%20further%20areas.md).
 
 ## 5. Several attempts and a selector
 
