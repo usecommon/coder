@@ -120,6 +120,21 @@ Raw per-task results and per-request usage are in [`data/`](data/). Three script
 | `breakdown.py` | The same by language and by part of the bill (input, output, reasoning), an interval for the cost difference, and how cost is spread over task-runs |
 | `trace_stats.py` | Where the output tokens go: tool calls per task-run, tokens before and after the first version of a solution, what happens after the first clean check, and waste. `extract` makes compact per-step data from saved transcripts; `report` needs only that data |
 
+## The improvement loop's own tools (18 November 2026)
+
+What happens between rounds is partly automatic now. None of these calls a model except the canary, and none changes Galley by itself: they measure, and a person decides.
+
+| Tool | What it does | When |
+|---|---|---|
+| `mine.ts <round>` | Groups tool errors, malformed tool calls, commands the sandbox lacks and harness failures (split by agent); replays the trouble signals; splits Galley's cost by phase; marks what is new since the previous round. Writes `mine.md` and `mine.json` | `round.sh` runs it after every round |
+| `profiles.ts <rounds> --write` | Galley's own pass rate and cost per model and effort, by language, into `galley/src/provider/measured.json`, which `galley models` shows | `round.sh` refreshes it after every round; committing the change is a person's call |
+| `verdict.ts judge <rule> <rounds>` | Judges rounds against a rule in `rules/`: lead, sign test, cost ratio with a resampled interval. Says when the rule was committed after the rounds began, so a rule cannot be written to fit a result | After the rounds a rule was written for; `--write` saves the verdict and adds a line to the improvement log |
+| `canary.sh` | Runs 30 tasks with a long history (24 Galley nearly always passes, 6 it always fails) and flags a change that fails more of the first kind than history explains | Before a full round of a change. About $0.20 on DeepSeek |
+| `calibrate.ts <rounds>` | Replays the trouble signals at other thresholds and reads the check records, and proposes a setting only when the data support it | Now and then |
+| `signals.ts <rounds>` | How often each trouble signal fires on failing and on passing runs, and within one task | Now and then |
+
+All read the files a round keeps (`results.jsonl`, `proxy.jsonl`, Galley's session files) through `sessions.ts`, which prices each request by its own model and leaves out interrupted attempts. Typecheck with `galley/node_modules/.bin/tsc -p bench`.
+
 ## Running the Claude Sonnet 5.5 comparison (new session)
 
 The API key must be available as the environment variable `BENCH_ANTHROPIC_API_KEY`: add it in the cloud environment's settings and start a new session. Only `proxy.ts` uses it: the agents send a placeholder, and the proxy puts the real key on the request. Neither agent ever sees it or your other credentials.

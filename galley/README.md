@@ -138,6 +138,8 @@ When a turn that changed anything ends, Galley runs the check command in the san
 - **The model is told not to edit tests or special-case their inputs, and that it may say a test is wrong instead.** In one study, giving the model that way out cut gaming of tests from 54% to 9%.
 - **A reviewer reads the check's output beside the diff,** so its review rests on something that ran.
 - **In `--steps` mode only the last step is checked.** Halfway through a plan, failing tests are expected.
+- **Every check run is recorded in the session file,** so that how many rounds turns need can be measured (`bench/calibrate.ts`).
+- **`"lessons": true` keeps what a project teaches,** only when the project's check proves it. When a check that failed comes to pass, Galley asks the helper model for one sentence: what caused the failure and what fixed it, as advice about the project. At the start of a later session it reads back at most one such note: the one that shares the most with the request, if any does, and never one about files that are gone. The note is marked as possibly out of date. Off by default and not measured: memory written and read by the same model added 2 to 6 points in published work, one retrieved note did better than several, and notes nothing had checked did harm.
 - **Why:** running code is the one feedback that does not rest on a model's opinion. Given human-written tests as the target, one agent solved 94.3% of SWE-bench Verified; writing its own, 68.0%. Feeding back the output of tests the agent could not see raised Galley's own pass rate by 24 to 49 points on a second attempt ([galley-against-the-field.md](../research/galley-against-the-field.md)). With the project's own visible tests the gain is what the model fails to do unprompted, which is not measured.
 
 ## Using it
@@ -181,6 +183,7 @@ galley serve --port 4096              # HTTP + SSE server (see below)
   "compactAt": 120000,
   "check": "npm test",       // optional: run when a turn that changed files ends; failures go back to the model
   "checkRounds": 3,
+  "lessons": false,          // keep one-line notes when a failing check comes to pass, and read the most related one back
   "providers": { "mylab": { "baseURL": "http://gpu-box:8000/v1", "apiKeyEnv": "MYLAB_KEY" } },
   "mcp": { "github": { "command": "github-mcp-server", "args": ["stdio"] } },
   "pricing": { "mylab/coder-32b": { "input": 0, "output": 0 } }
@@ -188,6 +191,8 @@ galley serve --port 4096              # HTTP + SSE server (see below)
 ```
 
 The user-wide config is `~/.config/galley/config.json`; `GALLEY_MODEL` overrides the model. Compound shell commands (`a && b | c`) are judged by their strictest part. Project instructions come from `AGENTS.md` (or `CLAUDE.md`).
+
+**Near-miss tool calls are mended, not refused,** where the intent is certain: a `description` argument to `bash` is ignored, a `path` to `bash` that names a folder in the workspace runs the command there, and an `edit` without a path goes to the one file that contains the text to replace. The model is told what was assumed. In the kept benchmark runs 39 calls were refused for such slips.
 
 ## Server API
 
