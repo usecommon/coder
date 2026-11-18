@@ -12,7 +12,10 @@ export type SessionRecord =
   | { type: "message"; message: Message }
   | { type: "usage"; model: string; usage: Usage; costUsd: number }
   | { type: "compaction"; summary: string; keep: number }
-  | { type: "status"; status: "running" | "done" | "error"; detail?: string; at: string };
+  | { type: "status"; status: "running" | "done" | "error"; detail?: string; at: string }
+  /** A signal that the turn was going badly, recorded whether or not anything acted on it, so that how often each
+   *  kind fires on runs that pass and on runs that fail can be measured later (no published study measures them). */
+  | { type: "signal"; kind: string; detail: string; step: number; model: string; acted: "advice" | "handover" | "none"; at: string };
 
 export function dataDir(): string {
   return process.env.GALLEY_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "galley");
@@ -144,6 +147,15 @@ export class Session {
   setTitle(title: string) {
     this.title = title;
     this.write({ ...this.meta, title });
+  }
+
+  addSignal(s: { kind: string; detail: string; step: number; model: string; acted: "advice" | "handover" | "none" }) {
+    this.write({ type: "signal", ...s, at: new Date().toISOString() });
+  }
+
+  /** The trouble signals recorded in this session, in order. */
+  signals(): Extract<SessionRecord, { type: "signal" }>[] {
+    return this.records().filter((r): r is Extract<SessionRecord, { type: "signal" }> => r.type === "signal");
   }
 
   setStatus(status: "running" | "done" | "error", detail?: string) {

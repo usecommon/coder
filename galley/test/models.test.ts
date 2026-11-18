@@ -781,3 +781,18 @@ describe("the check command", () => {
     expect(parseArgs(["run", "--check", "npm test", "fix it"]).flags.check).toBe("npm test");
   });
 });
+
+describe("trouble signals are recorded", () => {
+  test("every signal goes into the session file, with what was done about it", async () => {
+    const alone = setup([stuck, stuck, stuck, { text: "Gave up." }]);
+    await alone.agent.send("read the file");
+    expect(alone.agent.session.signals().map((r) => [r.kind, r.step, r.model, r.acted])).toEqual([["same-call", 2, "mock/test", "none"]]);
+
+    second("adv6", [{ text: "Try present.txt." }]);
+    const helped = setup([stuck, stuck, stuck, { text: "Done." }], { advisor: { model: "adv6/strong" } });
+    await helped.agent.send("read the file");
+    expect(helped.agent.session.signals().map((r) => r.acted)).toEqual(["advice"]);
+    // Read back from disk the same way.
+    expect(Session.load(helped.ws, helped.agent.session.id).signals()).toHaveLength(1);
+  });
+});

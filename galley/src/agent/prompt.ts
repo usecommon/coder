@@ -70,10 +70,16 @@ export function fileTree(workspace: string, maxEntries = 60): string {
 /** What the model needs to know about where it is. Sent once, at the start of a session's first message. */
 export const environmentNote = (workspace: string) => `<environment>\nWorking directory: ${workspace} (${process.platform})\nFiles:\n${fileTree(workspace)}\n</environment>`;
 
+/** What `galley init` asks for. A model-written context file that describes the repository gave no gain in success
+ *  for over 20% more cost; what agents used were instructions about non-standard tools and practices
+ *  (research/reports, area 7). So: only what an agent could not find out quickly by looking. */
 export const INIT_PROMPT =
-  "Analyze this repository and write AGENTS.md at the root: a short guide for coding agents covering the project's purpose, " +
-  "layout, how to build, test and lint (exact commands), code style conventions, and anything surprising. Keep it under 60 lines. " +
-  "If AGENTS.md exists, improve it instead of replacing useful content.";
+  "Write AGENTS.md at the root of this repository: instructions for coding agents that work here. Include only what an agent " +
+  "could not find out quickly by looking: the exact commands to build, test, lint and run one test; tools or versions the project " +
+  "requires that are not the obvious default; conventions that differ from common practice; and traps (generated files not to edit, " +
+  "steps that must run in order, tests that need a service). Do not describe the purpose or layout of the project, or list its " +
+  "files: agents read those themselves. Check each command before writing it down. Keep it short, under 30 lines. If AGENTS.md " +
+  "exists, keep what is still true and remove what an agent could see for itself.";
 
 /** Sent once at the end of a turn that changed files, before the agent reports back. */
 export const REVIEW_PROMPT =

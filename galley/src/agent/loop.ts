@@ -297,7 +297,10 @@ export class Agent {
         const up = cfg.escalateModel;
         const canAsk = !!adv && adv.onStuck !== false && this.consults < maxConsults(adv);
         const canHandOver = !!up && up !== ref && !handedOver;
-        if (canAsk && (stuckConsults === 0 || !canHandOver)) {
+        const asking = canAsk && (stuckConsults === 0 || !canHandOver);
+        const handing = !asking && canHandOver && !weakerWarning(ref, up!, profiles(cfg.models));
+        this.session.addSignal({ kind: sig.kind, detail: sig.detail, step, model: ref, acted: asking ? "advice" : handing ? "handover" : "none" });
+        if (asking) {
           stuckConsults++;
           const advice = await this.consult(stuckQuestion(sig.detail), `because ${sig.detail}`, signal);
           if (advice) {

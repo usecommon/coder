@@ -81,6 +81,8 @@ One model does the work. Others can help in five ways, all off unless you config
 - four calls in a row were refused (bad arguments, text to replace not found);
 - two thirds of the step limit are used and the work is not finished.
 
+These signals are recorded in the session file each time one fires. Replayed over 5,874 earlier benchmark runs on small tasks, they fired on 1.2% of failing runs and 0.5% of passing ones: on small tasks they are almost silent, and within one task no better than chance. Whether they carry information on long tasks is not yet measured ([`bench/signals.ts`](../bench/signals.ts), [improvement log](../bench/IMPROVEMENT_LOG.md)).
+
 **What Galley knows about models.** `galley models` (or `/models`) prints, for each model it has a profile of, the share of hard terminal tasks it solved on the Terminal-Bench 4.1 board, what a run cost there, and its prices. It then suggests roles for the models your keys can reach:
 
 ```text

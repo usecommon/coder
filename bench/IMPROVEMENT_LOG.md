@@ -543,3 +543,21 @@ The second survey of multi-model methods ([research/reports/Multi model methods 
 - **Takeover from the files.** `escalateModel` now starts the stronger model from one message: the request, why it was brought in, and the changes so far as a diff. It does not see the attempt. `"escalateContext": "transcript"` keeps the old behaviour. The next turn returns to the session's own model and reads the whole session.
 - **Tests:** seven new, on the offline model; the suite is 136 pass. One ran the check through the real bubblewrap sandbox.
 - **Why neither is measured here:** the Exercism benchmark hides its tests, so a project check has nothing to run, and the takeover signals rarely fire on small tasks. Both need hard tasks with visible tests (Terminal-Bench or DeepSWE), which needs a container runtime and an adapter. No model was called.
+
+## How often Galley's trouble signals fire, replayed over past rounds (18 November)
+
+No published study measures triggers like Galley's four (research/reports, area 2), so I replayed the watcher over the session files kept from earlier rounds: `bun bench/signals.ts <rounds-dir>`. Only the first attempt of each task-run and only the main agent are replayed; the result is the graded first attempt. Nothing was run and no model was called. Galley now also writes a `signal` record into the session file each time one fires, with what was done about it, so later rounds can be measured directly.
+
+| Signal | Fires on failing runs | Fires on passing runs | Of the runs it fires on, share that failed | Within one task (AUC, 0.5 = chance) |
+|---|---|---|---|---|
+| The same check failing 3 times | 3 of 2,104 (0.1%) | 5 of 3,770 (0.1%) | 37.5% | 0.500 |
+| The same call, same result, 3 times | 0 | 0 | | 0.500 |
+| 4 refused calls in a row | 0 | 0 | | 0.500 |
+| Two thirds of the step limit used | 22 (1.0%) | 12 (0.3%) | 64.7% | 0.501 |
+| Any of them | 25 (1.2%) | 17 (0.5%) | 59.5% | 0.501 |
+
+5,874 task-runs from 60 rounds (Exercism-style tasks, several models and settings, early leaky rounds included); 235 tasks had both a failing and a passing run, giving 9,621 pairs.
+
+- **On small tasks the signals are silent.** They fire on about one failing run in eighty. Galley's failures here are runs that end confidently with a wrong answer (a convention the hidden tests expect), which no signal of trouble can see.
+- **So the advisor-on-trouble and the takeover do nothing on this benchmark,** as the earlier notes predicted. Whether the signals carry information on long tasks is still unknown; that needs hard tasks.
+- **Where they fire, failure is somewhat more likely** (60% against 36% of all runs), but within one task the difference is nil on these numbers.
