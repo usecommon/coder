@@ -813,3 +813,87 @@ describe("measured profiles", () => {
     expect(report).toContain("not comparable");
   });
 });
+
+describe("near-miss tool calls are mended", () => {
+  test("bash: a description is dropped and a path inside the workspace is where the command runs", async () => {
+    const call: MockReply = { toolCalls: [{ name: "bash", input: { command: "pwd", path: "sub", description: "where am I" } }] };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
+    mkdirSync(join(ws, "sub"));
+    await agent.send("where?");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.isError).toBeFalsy();
+    expect(res.content).toContain("ran the command in sub");
+    expect(res.content).toContain("the description argument is not used");
+    expect(res.content).toContain(join(ws, "sub"));
+  });
+
+  test("bash: a path outside the workspace is not mended", async () => {
+    const call: MockReply = { toolCalls: [{ name: "bash", input: { command: "pwd", path: "/etc" } }] };
+    const { mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
+    await agent.send("where?");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.isError).toBe(true);
+    expect(res.content).toContain("input.path is not a known parameter");
+  });
+
+  test("edit: without a path, the one file that contains the text is used; with two, the call is refused", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "return a - b", new_string: "return a + b" } }] };
+    const one = setup([call, { text: "Done." }]);
+    mkdirSync(join(one.ws, "src"));
+    writeFileSync(join(one.ws, "src", "add.py"), "def add(a, b):\n    return a - b\n");
+    writeFileSync(join(one.ws, "README.md"), "nothing here\n");
+    await one.agent.send("fix add");
+    expect(readFileSync(join(one.ws, "src", "add.py"), "utf8")).toContain("return a + b");
+    const two = setup([call, { text: "Done." }]);
+    writeFileSync(join(two.ws, "a.py"), "return a - b\n");
+    writeFileSync(join(two.ws, "b.py"), "return a - b\n");
+    await two.agent.send("fix add");
+    const res = (two.mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).toContain("input.path is required");
+  });
+});
+
+describe("check records and verified lessons", () => {
+  const writeBroken: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+  const writeFixed: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+  const check = "grep -q right out.txt";
+
+  test("each check run is recorded in the session", async () => {
+    const { agent } = setup([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }], { check, sandbox: "off" });
+    await agent.send("write out.txt");
+    const recs = agent.session.records().filter((r) => r.type === "check") as { passed: boolean; round: number }[];
+    expect(recs.map((r) => [r.passed, r.round])).toEqual([[false, 1], [true, 2]]);
+  });
+
+  test("a check that comes to pass leaves one note, and a later related session reads it", async () => {
+    const note = "out.txt must contain the word right; the check greps for it.";
+    const { ws, mock, agent, notices } = setup([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }, { text: note }], { check, sandbox: "off", lessons: true });
+    await agent.send("write out.txt");
+    expect(mock.requests).toHaveLength(5);
+    expect(lastUser(mock.requests[4]!)).toContain("<check_failure>");
+    expect(notices().some((n) => n.startsWith("Kept a note for this project"))).toBe(true);
+    const later = new Agent({ cfg: testConfig({ check, sandbox: "off", lessons: true }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once" });
+    mock.requests.length = 0;
+    const replies = [{ text: "ok" }, { text: "ok" }];
+    registerProvider(new MockProvider(replies));
+    const m2 = new MockProvider([{ text: "ok" }]);
+    registerProvider(m2);
+    await later.send("change what out.txt contains");
+    expect(lastUser(m2.requests[0]!)).toContain("<project_note>");
+    expect(lastUser(m2.requests[0]!)).toContain(note);
+    // An unrelated request gets no note.
+    const m3 = new MockProvider([{ text: "ok" }]);
+    registerProvider(m3);
+    await new Agent({ cfg: testConfig({ check, sandbox: "off", lessons: true }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once" }).send("rename the project");
+    expect(lastUser(m3.requests[0]!)).not.toContain("<project_note>");
+  });
+
+  test("no note is kept when lessons are off, or when the model has nothing general to say", async () => {
+    const off = setup([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }], { check, sandbox: "off" });
+    await off.agent.send("write out.txt");
+    expect(off.mock.requests).toHaveLength(4);
+    const none = setup([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }, { text: "NONE" }], { check, sandbox: "off", lessons: true });
+    await none.agent.send("write out.txt");
+    expect(none.notices().some((n) => n.startsWith("Kept a note"))).toBe(false);
+  });
+});

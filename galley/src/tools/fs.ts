@@ -257,8 +257,44 @@ export function locate(hay: string, needle: string): { index: number; length: nu
   return hits.length ? { ...hits[0]!, count: hits.length } : undefined;
 }
 
+/** Files under the workspace that contain `text`, skipping folders of dependencies and builds. Stops at `limit`. */
+function filesContaining(root: string, text: string, limit = 2): string[] {
+  const skip = new Set([".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__", ".gradle", "vendor"]);
+  const out: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 12 || out.length >= limit) return;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (out.length >= limit) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!skip.has(e.name)) walk(p, depth + 1);
+      } else if (e.isFile()) {
+        try {
+          if (statSync(p).size <= 1_000_000 && readFileSync(p, "utf8").includes(text)) out.push(p);
+        } catch {}
+      }
+    }
+  };
+  walk(root, 0);
+  return out;
+}
+
 export const editTool: Tool = {
   readOnly: false,
+  // A call without a path is mended when exactly one file in the workspace contains the text to replace.
+  repair(input, ctx) {
+    if (input.path !== undefined || typeof input.old_string !== "string" || input.old_string.length < 8) return undefined;
+    const hits = filesContaining(ctx.workspace, input.old_string);
+    if (hits.length !== 1) return undefined;
+    const path = relative(ctx.workspace, hits[0]!);
+    return { input: { ...input, path }, note: `no path was given; ${path} is the only file containing old_string` };
+  },
   spec: {
     name: "edit",
     description: "Replace exact text in a file. old_string must match uniquely (include surrounding lines) unless replace_all is true.",

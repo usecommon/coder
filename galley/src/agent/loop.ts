@@ -1,6 +1,6 @@
 // The agent loop: call the model, run the tools it asks for, feed results back, repeat until it stops.
 import { mkdirSync, realpathSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import type { AdvisorConfig, Config, Effort } from "../config.ts";
 import type { AgentEvent, AgentEventInput, Message, StopReason, ToolCall, ToolResult, Usage } from "../core/types.ts";
 import { addUsage, emptyUsage } from "../core/types.ts";
@@ -18,6 +18,7 @@ import { ToolError, truncate, type Tool, type ToolContext } from "../tools/types
 import { UndoLog } from "../tools/undo.ts";
 import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, freshStartMessage, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
+import { LESSON_REQUEST, lessonNote, pickLesson, saveLesson } from "./lessons.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
 
@@ -175,7 +176,10 @@ export class Agent {
     // The system prompt names no project, so a session's first message says where the agent is.
     const first = this.session.messages.length === 0;
     const turnStart = this.session.messages.length;
-    this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${text}` : text });
+    // A lesson from earlier work in this project, if one is related to the request and its check proved it.
+    const lesson = first && cfg.lessons && cfg.check && !this.o.subagent ? pickLesson(this.workspace, text) : undefined;
+    if (lesson) this.emit({ type: "notice", level: "info", text: `Read a note from earlier work in this project: ${lesson.text.slice(0, 120)}` });
+    this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${lesson ? `${lessonNote(lesson)}\n\n` : ""}${text}` : text });
     if (!this.session.title) this.session.setTitle(text.split("\n")[0]!.slice(0, 80));
 
     let turnUsage = emptyUsage();
@@ -193,6 +197,7 @@ export class Agent {
     let acted = false;
     let checkFails = 0;
     let checkReport: string | undefined;
+    let lastFailure: string | undefined;
     const failed = new Set<string>();
     const maxSteps = this.o.maxSteps ?? cfg.maxSteps;
     const watch = new Watch(maxSteps);
@@ -250,9 +255,13 @@ export class Agent {
               break;
             }
             checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
-            if (r.exitCode === 0 && !r.timedOut) this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
+            const passed = r.exitCode === 0 && !r.timedOut;
+            this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1 });
+            if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
+            if (passed) this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
             else if (checkFails < checkRounds) {
               checkFails++;
+              lastFailure = r.output;
               this.emit({ type: "notice", level: "warn", text: `Check failed (${checkFails} of ${checkRounds}): ${cfg.check}` });
               this.session.addMessage({ role: "user", content: checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds) });
               continue;
@@ -512,6 +521,25 @@ export class Agent {
     // Roll the helper's cost into the parent session's totals.
     this.session.addUsage(model, r.usage, r.costUsd);
     return r.text || `(the helper finished without an answer; stop reason: ${r.stopReason})`;
+  }
+
+  /** Write one lesson after a failing check came to pass: one short request to the helper model. */
+  private async learn(check: string, failure: string, signal?: AbortSignal) {
+    const model = this.o.cfg.smallModel ?? this.model;
+    try {
+      const { provider: pid, model: m } = splitModel(model);
+      const files = changes(this.workspace, this.undo.snapshots(), 12_000);
+      const content = `<check_failure>\n$ ${check}\n${failure.slice(-4000) || "(no output; it exited with an error)"}\n</check_failure>\n\n<files_changed>\n${files}\n</files_changed>\n\n${LESSON_REQUEST}`;
+      const res = await this.withRetry(() => getProvider(pid, this.o.cfg).chat({ model: m, system: "You write short, precise notes for coding agents.", messages: [{ role: "user", content }], tools: [], maxTokens: 2000, effort: "low", signal }), signal);
+      this.session.addUsage(model, res.usage, this.price(model, res.usage));
+      const text = res.text.trim().replace(/\s+/g, " ");
+      if (!text || /^NONE\.?$/i.test(text)) return;
+      const changed = this.undo.snapshots().map((s) => relative(this.workspace, s.path)).filter((p) => p && !p.startsWith(".."));
+      saveLesson(this.workspace, { text: text.slice(0, 300), check, files: changed, at: new Date().toISOString() });
+      this.emit({ type: "notice", level: "info", text: `Kept a note for this project: ${text.slice(0, 120)}` });
+    } catch (err) {
+      if (!signal?.aborted) this.emit({ type: "notice", level: "warn", text: `Could not write a note for this project: ${(err as Error).message.slice(0, 120)}` });
+    }
   }
 
   /** Run the check command in the sandbox, as the bash tool would but without asking: the user configured it. */

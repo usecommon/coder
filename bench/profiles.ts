@@ -11,7 +11,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { costByRun, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
 
-const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try/i;
+// Canary rounds are left out too: their tasks were picked for being stable, which would bias the figures.
+const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|canary/i;
 const NEUTRAL_KEYS = new Set(["effort", "providers", "model", "smallModel", "maxSteps"]);
 
 export interface Measured {

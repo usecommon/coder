@@ -23,6 +23,11 @@ export interface Tool {
   /** True when the tool never changes anything (safe in plan mode and for sub-agents). */
   readOnly: boolean;
   run(input: Record<string, unknown>, ctx: ToolContext): Promise<string>;
+  /** Mend a near-miss call before its arguments are checked: an extra argument that does no harm, or one left out
+   *  that can be found with certainty. Returns the mended input and a note that is shown to the model with the
+   *  result, or undefined to leave the call as it is. Anthropic's guidance for its newest models is to accept
+   *  near-miss calls; Galley's kept runs had 39 calls refused for such slips. */
+  repair?(input: Record<string, unknown>, ctx: ToolContext): { input: Record<string, unknown>; note: string } | undefined;
 }
 
 /** An error the model should see and can recover from. */

@@ -1,5 +1,5 @@
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { exec } from "../safety/sandbox.ts";
 import { projectDir } from "../session/store.ts";
 import { ToolError, truncate, type Tool } from "./types.ts";
@@ -25,6 +25,24 @@ export const bashTool: Tool = {
       required: ["command"],
       additionalProperties: false,
     },
+  },
+  // Models used to other harnesses send a `description` (harmless, dropped) or a `path` to run in (honoured when
+  // it is a folder inside the workspace, by running there).
+  repair(input, ctx) {
+    const { description, path, ...rest } = input;
+    const notes: string[] = [];
+    let command = rest.command;
+    if (description !== undefined) notes.push("the description argument is not used and was ignored");
+    if (path !== undefined) {
+      const dir = typeof path === "string" ? resolve(ctx.workspace, path) : "";
+      const rel = dir ? relative(ctx.workspace, dir) : "..";
+      if (typeof command !== "string" || rel.startsWith("..") || isAbsolute(rel) || !existsSync(dir) || !statSync(dir).isDirectory()) return undefined;
+      if (rel) {
+        command = `cd '${rel.replaceAll("'", "'\\''")}' && ${command}`;
+        notes.push(`bash has no path argument; ran the command in ${rel}`);
+      } else notes.push("bash has no path argument; the command runs in the workspace");
+    }
+    return notes.length ? { input: { ...rest, command }, note: notes.join("; ") } : undefined;
   },
   async run(input, ctx) {
     const command = String(input.command);

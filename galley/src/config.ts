@@ -67,6 +67,9 @@ export interface Config {
   check?: string;
   /** How many failed checks a turn feeds back before it ends anyway (default 3). */
   checkRounds?: number;
+  /** Keep one-line lessons per project when a failing check comes to pass, and read the most related one back at
+   *  the start of a session (default false; see src/agent/lessons.ts). Needs `check`. */
+  lessons?: boolean;
   /** Work on a task in small steps: a plan first, then one turn for each step. With `advisor.review` on, each step
    *  is checked by the advisor before the next one starts. */
   steps?: boolean;
