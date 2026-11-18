@@ -2,7 +2,7 @@
 // models that can be reached.
 import type { Config } from "../config.ts";
 import { PRESETS } from "../provider/index.ts";
-import { BOARD, describeModel, profiles, rereadCost, suggestRoles, weakerWarning } from "../provider/models.ts";
+import { BOARD, OWN, describeModel, profiles, rereadCost, suggestRoles, weakerWarning } from "../provider/models.ts";
 import { DEFAULT_PRICES, type Price } from "../provider/pricing.ts";
 import { fmtUsd } from "./render.ts";
 
@@ -52,6 +52,7 @@ export function modelsReport(cfg: Config, env: NodeJS.ProcessEnv = process.env):
     `(${BOARD.url}, read ${BOARD.read}), mostly inside the model vendor's own harness. Prices are per million tokens. Nothing finer`,
     "is recorded (which model for debugging, which for front-end work): no public source measures it. Correct or add entries",
     'under "models" in galley.json.',
+    ...ownLines(all),
     "",
     "For the keys that are set:",
     ...suggestRoles(reachable(cfg, env), all).lines.map((l) => `  ${l}`),
@@ -67,5 +68,18 @@ export function switchNotes(cfg: Config, from: string, to: string, contextTokens
   if (reread !== undefined && from !== to) out.push(`It reads the session afresh on its next request, with nothing cached: about ${fmtUsd(reread)}.`);
   const weaker = from !== to ? weakerWarning(from, to, all) : undefined;
   if (weaker) out.push(`Note: ${weaker}`);
+  return out;
+}
+
+/** Galley's own measurements, when there are any: small tasks with hidden tests, first attempts. */
+function ownLines(all: ReturnType<typeof profiles>): string[] {
+  const rows = Object.entries(all).flatMap(([ref, p]) => (p.own ?? []).map((m) => ({ ref, m })));
+  if (!rows.length) return [];
+  const out = ["", `Measured in Galley's own benchmark (${OWN.generated}): small tasks with hidden tests, first attempt, Galley at its defaults.`];
+  for (const { ref, m } of rows) {
+    const langs = Object.entries(m.byLanguage).sort((a, b) => b[1][1] - a[1][1]).slice(0, 4).map(([l, [k, n]]) => `${l} ${Math.round((100 * k) / n)}%`).join(", ");
+    out.push(`  ${ref}, effort ${m.effort}: ${((100 * m.solved) / m.tasks).toFixed(1)}% of ${m.tasks} (${m.ci[0]} to ${m.ci[1]}), ${fmtUsd(m.costPerTask)} a task; ${langs}`);
+  }
+  out.push("  Rows measured on different task sets are not comparable with each other, and none with the hard-task column.");
   return out;
 }

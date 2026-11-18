@@ -1,0 +1,166 @@
+{
+ "about": "Written by bench/profiles.ts from Galley's own benchmark rounds: Galley at its defaults (apart from model and effort), first attempts, small Exercism-style tasks with hidden tests, cost at list price. Not comparable with the hard-task board figures in models.ts.",
+ "generated": "2026-11-18",
+ "models": {
+  "anthropic/claude-sonnet-5-5": [
+   {
+    "effort": "high",
+    "tasks": 309,
+    "solved": 267,
+    "ci": [
+     82.1,
+     89.8
+    ],
+    "costPerTask": 0.02726,
+    "byLanguage": {
+     "python": [
+      87,
+      102
+     ],
+     "go": [
+      101,
+      117
+     ],
+     "rust": [
+      79,
+      90
+     ]
+    },
+    "rounds": 3,
+    "from": "2026-11-12",
+    "to": "2026-11-12"
+   },
+   {
+    "effort": "medium",
+    "tasks": 206,
+    "solved": 176,
+    "ci": [
+     80,
+     89.6
+    ],
+    "costPerTask": 0.02287,
+    "byLanguage": {
+     "python": [
+      57,
+      68
+     ],
+     "go": [
+      66,
+      78
+     ],
+     "rust": [
+      53,
+      60
+     ]
+    },
+    "rounds": 2,
+    "from": "2026-11-12",
+    "to": "2026-11-12"
+   }
+  ],
+  "deepseek/deepseek-flash": [
+   {
+    "effort": "default",
+    "tasks": 920,
+    "solved": 629,
+    "ci": [
+     65.3,
+     71.3
+    ],
+    "costPerTask": 0.00995,
+    "byLanguage": {
+     "python": [
+      188,
+      344
+     ],
+     "go": [
+      241,
+      336
+     ],
+     "rust": [
+      200,
+      240
+     ]
+    },
+    "rounds": 15,
+    "from": "unknown",
+    "to": "unknown"
+   },
+   {
+    "effort": "high",
+    "tasks": 3728,
+    "solved": 2229,
+    "ci": [
+     58.2,
+     61.4
+    ],
+    "costPerTask": 0.00583,
+    "byLanguage": {
+     "python": [
+      192,
+      342
+     ],
+     "go": [
+      280,
+      390
+     ],
+     "rust": [
+      217,
+      300
+     ],
+     "javascript": [
+      177,
+      384
+     ],
+     "java": [
+      147,
+      376
+     ],
+     "cpp": [
+      141,
+      208
+     ],
+     "c": [
+      132,
+      172
+     ],
+     "csharp": [
+      265,
+      328
+     ],
+     "elixir": [
+      201,
+      304
+     ],
+     "php": [
+      156,
+      244
+     ],
+     "typescript": [
+      136,
+      232
+     ],
+     "ruby": [
+      106,
+      248
+     ],
+     "bash": [
+      21,
+      53
+     ],
+     "lua": [
+      24,
+      67
+     ],
+     "tcl": [
+      34,
+      80
+     ]
+    },
+    "rounds": 21,
+    "from": "2026-11-12",
+    "to": "2026-11-14"
+   }
+  ]
+ }
+}

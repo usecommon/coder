@@ -53,6 +53,9 @@ fi
 if [ -s "$OUT/results.jsonl" ]; then
   bun mine.ts "$OUT" > /dev/null && sed -n '/^## Compared/,$p' "$OUT/mine.md"
   echo "Round miner: $OUT/mine.md"
+  # Galley's own measurements per model and effort, from every kept round; galley models shows them.
+  # This rewrites galley/src/provider/measured.json; git shows the change, and committing it is a person's call.
+  bun profiles.ts "$WORK/rounds" --write > /dev/null && echo "Model profiles: galley/src/provider/measured.json"
 fi
 # Did any agent get at hidden tests anyway? Expect no flagged task-runs.
 python3 -I audit_leaks.py scan --polyglot "$POLYGLOT" --out "$OUT/leak-audit.json" "$NAME=$OUT" | tee "$OUT/leak-audit.txt"

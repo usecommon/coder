@@ -4,6 +4,7 @@
 // Terminal-Bench 4.1 tasks solved, as published on the benchmark's own board. Nothing finer ("good at debugging",
 // "good at front-end work") is recorded, because no public source measures it reliably
 // (research/model-switching.md, section 3). Add or correct entries under `models` in galley.json.
+import measured from "./measured.json";
 import type { Price } from "./pricing.ts";
 
 export interface AgenticScore {
@@ -20,9 +21,25 @@ export interface AgenticScore {
   date: string;
 }
 
+/** A model measured in Galley's own benchmark rounds (bench/profiles.ts writes measured.json). Small tasks with
+ *  hidden tests, first attempts: not comparable with the hard-task board, nor rows measured on different tasks. */
+export interface OwnMeasure {
+  effort: string;
+  tasks: number;
+  solved: number;
+  ci: [number, number];
+  costPerTask: number;
+  byLanguage: Record<string, [number, number]>;
+  rounds: number;
+  from: string;
+  to: string;
+}
+
 export interface ModelProfile {
   name: string;
   agentic?: AgenticScore;
+  /** Galley's own measurements of this model, one per effort level. */
+  own?: OwnMeasure[];
   /** Reasoning-effort levels the API accepts, lowest first. */
   efforts?: string[];
   note?: string;
@@ -66,8 +83,11 @@ export const PROFILES: Record<string, ModelProfile> = {
 export type Profiles = Record<string, ModelProfile>;
 
 /** The built-in profiles with the user's additions and corrections laid over them. */
+export const OWN = measured as unknown as { about: string; generated: string; models: Record<string, OwnMeasure[]> };
+
 export function profiles(extra: Record<string, Partial<ModelProfile>> = {}): Profiles {
   const out: Profiles = { ...PROFILES };
+  for (const [ref, own] of Object.entries(OWN.models)) out[ref] = { ...(out[ref] ?? { name: ref }), own };
   for (const [ref, p] of Object.entries(extra)) out[ref] = { ...(out[ref] ?? { name: ref }), ...p };
   return out;
 }

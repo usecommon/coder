@@ -796,3 +796,20 @@ describe("trouble signals are recorded", () => {
     expect(Session.load(helped.ws, helped.agent.session.id).signals()).toHaveLength(1);
   });
 });
+
+describe("measured profiles", () => {
+  test("Galley's own measurements are merged into the profiles and listed apart from the board", () => {
+    const all = profiles();
+    const own = all[FLASH]!.own;
+    expect(own?.length).toBeGreaterThan(0);
+    for (const m of own!) {
+      expect(m.solved).toBeLessThanOrEqual(m.tasks);
+      expect(m.ci[0]).toBeLessThanOrEqual((100 * m.solved) / m.tasks);
+    }
+    // The board figure is untouched.
+    expect(all[FLASH]!.agentic!.score).toBeCloseTo(38.48, 2);
+    const report = modelsReport(testConfig(), {});
+    expect(report).toContain("Measured in Galley's own benchmark");
+    expect(report).toContain("not comparable");
+  });
+});
