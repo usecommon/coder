@@ -1,0 +1,228 @@
+// The round miner: after a round, read every Galley session it kept and report what went wrong in the harness,
+// so that bugs show up after the first round instead of whenever someone reads transcripts. It groups tool errors,
+// malformed tool calls, commands the sandbox lacks and harness failures; replays the trouble signals; splits cost
+// by phase; and flags what is new since the previous round. Read-only: nothing is run, no model is called.
+//
+//   bun bench/mine.ts <round-dir> [--previous <round-dir>]
+//
+// Writes mine.md (for people) and mine.json (for the next round's comparison) into the round folder.
+// Without --previous it compares with the most recent other round beside it that has a mine.json.
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { replayRuns, signalTable } from "./signals.ts";
+import { costByRun, firstAttempt, messagesOf, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+
+export interface Cluster {
+  key: string;
+  count: number;
+  /** Times, by agent variant: a round often runs an old and a new version side by side. */
+  byAgent: Record<string, number>;
+  runs: number;
+  failedRuns: number;
+  example: string;
+}
+
+export interface Mined {
+  round: string;
+  agents: Record<string, { runs: number; passed: number; timedOut: number; agentFailed: number; memoryKills: number; costUsd: number; medianMinutes: number }>;
+  toolErrors: Cluster[];
+  malformed: Cluster[];
+  missingCommands: Cluster[];
+  harnessErrors: Cluster[];
+  phases: { main: number; otherModels: number; helpers: number; runs: number };
+  steps: { medianPass: number; medianFail: number; atLimit: number };
+  recordedSignals: Record<string, number>;
+  checks: { runs: number; failed: number; passedAfterFailing: number };
+}
+
+/** A tool result reduced to its kind: the first line, with paths, numbers and quoted text taken out. */
+export const normalize = (s: string) =>
+  s
+    .split("\n")[0]!
+    .replace(/(?:\.{0,2}\/)?(?:[\w.@-]+\/)+[\w.@-]*/g, "<path>")
+    .replace(/\d+/g, "N")
+    .replace(/"[^"]*"|'[^']*'|`[^`]*`/g, "…")
+    .slice(0, 110);
+
+const median = (xs: number[]) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.floor(s.length / 2)]! : 0;
+};
+
+type Tally = Map<string, { count: number; byAgent: Record<string, number>; runs: Set<string>; failed: Set<string>; example: string }>;
+
+function tally(map: Tally, key: string, run: TaskRun) {
+  const e = map.get(key) ?? { count: 0, byAgent: {}, runs: new Set<string>(), failed: new Set<string>(), example: run.task };
+  e.count++;
+  e.byAgent[run.agent] = (e.byAgent[run.agent] ?? 0) + 1;
+  e.runs.add(runKey(run));
+  if (!run.pass) e.failed.add(runKey(run));
+  map.set(key, e);
+}
+
+const clusters = (map: Tally): Cluster[] =>
+  [...map].map(([key, e]) => ({ key, count: e.count, byAgent: e.byAgent, runs: e.runs.size, failedRuns: e.failed.size, example: e.example })).sort((a, b) => b.count - a.count);
+
+export function mine(round: string): Mined {
+  const runs = taskRuns(round, { sessions: true });
+  const cost = costByRun(round);
+  const agents: Mined["agents"] = {};
+  for (const r of runs) {
+    const a = (agents[r.agent] ??= { runs: 0, passed: 0, timedOut: 0, agentFailed: 0, memoryKills: 0, costUsd: 0, medianMinutes: 0 });
+    a.runs++;
+    if (r.pass) a.passed++;
+    if (r.agentTimedOut) a.timedOut++;
+    if (r.agentExit !== 0 && r.agentExit !== undefined) a.agentFailed++;
+    a.memoryKills += r.memoryKills ?? 0;
+    a.costUsd += cost.get(runKey(r)) ?? 0;
+  }
+  for (const [name, a] of Object.entries(agents)) a.medianMinutes = median(runs.filter((r) => r.agent === name).map((r) => (r.agentMs ?? 0) / 60_000));
+
+  const toolErrors: Tally = new Map();
+  const malformed: Tally = new Map();
+  const missing: Tally = new Map();
+  const harness: Tally = new Map();
+  const phases = { main: 0, otherModels: 0, helpers: 0, runs: 0 };
+  const stepsPass: number[] = [];
+  const stepsFail: number[] = [];
+  let atLimit = 0;
+  const recordedSignals: Record<string, number> = {};
+  const checks = { runs: 0, failed: 0, passedAfterFailing: 0 };
+
+  for (const r of runs) {
+    if (!r.main) continue;
+    phases.runs++;
+    const meta = r.main[0] as { model?: string };
+    for (const rec of r.main) {
+      if (rec.type === "usage") {
+        const u = rec as Extract<SessionRecord, { type: "usage" }>;
+        if (u.model === meta.model) phases.main += u.costUsd;
+        else phases.otherModels += u.costUsd;
+      } else if (rec.type === "status" && rec.status === "error") tally(harness, `session ended in error: ${normalize(String(rec.detail ?? ""))}`, r);
+      else if (rec.type === "signal") recordedSignals[String(rec.kind)] = (recordedSignals[String(rec.kind)] ?? 0) + 1;
+    }
+    const checkRecs = r.main.filter((x) => x.type === "check") as Extract<SessionRecord, { type: "check" }>[];
+    if (checkRecs.length) {
+      checks.runs++;
+      if (checkRecs.some((c) => !c.passed)) checks.failed++;
+      if (checkRecs.some((c) => !c.passed) && checkRecs.at(-1)!.passed) checks.passedAfterFailing++;
+    }
+    // Helpers are counted wherever their usage was written. In Galley a helper's cost is also added to the main
+    // session under the helper's model; to avoid counting it twice, helpers are taken from their own files only
+    // when they used the main model.
+    for (const h of r.helpers) for (const rec of h) if (rec.type === "usage") phases.helpers += (rec as Extract<SessionRecord, { type: "usage" }>).costUsd;
+
+    const ms = firstAttempt(messagesOf(r.main));
+    let steps = 0;
+    for (let i = 0; i < ms.length; i++) {
+      const m = ms[i]!;
+      if (m.role === "assistant" && m.toolCalls.length) steps++;
+      if (m.role !== "tool") continue;
+      const prevMsg = ms[i - 1];
+      const calls = prevMsg?.role === "assistant" ? prevMsg.toolCalls : [];
+      for (const t of m.results) {
+        const content = String(t.content);
+        if (t.isError) {
+          if (content.startsWith("Invalid arguments")) {
+            const call = calls.find((c) => c.id === t.callId);
+            tally(malformed, `${t.name} called with {${Object.keys(call?.input ?? {}).sort().join(", ")}}: ${normalize(content)}`, r);
+          } else tally(toolErrors, `${t.name}: ${normalize(content)}`, r);
+        } else if (t.name === "bash") {
+          const nf = /(?:^|\n)(?:bash: (?:line \d+: )?)?([\w.+-]+): (?:command )?not found/.exec(content);
+          if (nf && /\[exit code 127\]\s*$/.test(content)) tally(missing, nf[1]!, r);
+        }
+      }
+    }
+    (r.pass ? stepsPass : stepsFail).push(steps);
+    const max = typeof r.config?.maxSteps === "number" ? (r.config.maxSteps as number) : 60;
+    if (steps >= max) atLimit++;
+  }
+  // Galley adds each helper's cost to its parent's session too, under the helper's model: take that out of
+  // "other models" so the phases add up to the session's total.
+  phases.otherModels = Math.max(0, phases.otherModels - phases.helpers);
+  return {
+    round: basename(round),
+    agents,
+    toolErrors: clusters(toolErrors),
+    malformed: clusters(malformed),
+    missingCommands: clusters(missing),
+    harnessErrors: clusters(harness),
+    phases,
+    steps: { medianPass: median(stepsPass), medianFail: median(stepsFail), atLimit },
+    recordedSignals,
+    checks,
+  };
+}
+
+/** The most recent other round beside this one that has been mined. */
+function previousRound(round: string): string | undefined {
+  const parent = dirname(round);
+  const mtime = (d: string) => statSync(join(d, "results.jsonl")).mtimeMs;
+  const own = mtime(round);
+  return readdirSync(parent)
+    .map((d) => join(parent, d))
+    .filter((d) => d !== round && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
+    .sort((a, b) => mtime(b) - mtime(a))[0];
+}
+
+export function render(m: Mined, prev: Mined | undefined, signals: string[]): string {
+  const out: string[] = [`# What went wrong in round ${m.round}`, ""];
+  out.push("*Written by `bench/mine.ts` from the round's kept session files. Read-only: nothing was run again.*", "");
+  out.push("| Agent | Task-runs | Passed | Timed out | Agent failed | Memory kills | Cost (list price) | Median minutes |", "|---|---|---|---|---|---|---|---|");
+  for (const [a, s] of Object.entries(m.agents)) out.push(`| ${a} | ${s.runs} | ${s.passed} (${pct(s.passed, s.runs)}) | ${s.timedOut} | ${s.agentFailed} | ${s.memoryKills} | $${s.costUsd.toFixed(2)} | ${s.medianMinutes.toFixed(1)} |`);
+  const seen = (list: Cluster[] | undefined) => new Set((list ?? []).map((c) => c.key));
+  const section = (title: string, list: Cluster[], before: Set<string> | undefined, note: string) => {
+    out.push("", `## ${title}`, "", note, "");
+    if (!list.length) {
+      out.push("None.");
+      return;
+    }
+    out.push("| | Times | Task-runs | Of them failed | Example task |", "|---|---|---|---|---|");
+    const agents = Object.keys(m.agents).length;
+    for (const c of list.slice(0, 15)) {
+      const split = agents > 1 ? ` (${Object.entries(c.byAgent).map(([a, n]) => `${a} ${n}`).join(", ")})` : "";
+      out.push(`| ${before && !before.has(c.key) ? "**new** " : ""}\`${c.key.replaceAll("|", "\\|")}\` | ${c.count}${split} | ${c.runs} | ${c.failedRuns} | ${c.example} |`);
+    }
+    if (list.length > 15) out.push(`| … ${list.length - 15} more kinds | | | | |`);
+  };
+  section("Tool errors", m.toolErrors, prev && seen(prev.toolErrors), "Calls Galley refused or that failed, grouped by message. A kind that is new since the previous round is marked.");
+  section("Malformed tool calls", m.malformed, prev && seen(prev.malformed), "Calls whose arguments did not fit the tool, with the argument names the model used.");
+  section("Commands the sandbox lacks", m.missingCommands, prev && seen(prev.missingCommands), "Commands that failed with \"not found\" (exit code 127): tools the model expected to have.");
+  section("Harness failures", m.harnessErrors, prev && seen(prev.harnessErrors), "Sessions that ended in an error.");
+  out.push("", "## Where Galley's money went", "");
+  const total = m.phases.main + m.phases.otherModels + m.phases.helpers;
+  out.push(`Over ${m.phases.runs} sessions, by Galley's own pricing: main model ${pct(m.phases.main, total)}, helpers ${pct(m.phases.helpers, total)}, other models (advisor, takeover, fallback) ${pct(m.phases.otherModels, total)}; $${total.toFixed(2)} in all.`);
+  out.push("", `Steps per first attempt: median ${m.steps.medianPass} when it passed, ${m.steps.medianFail} when it failed; ${m.steps.atLimit} ran into the step limit.`);
+  if (m.checks.runs) out.push("", `The check command ran in ${m.checks.runs} sessions: it failed at least once in ${m.checks.failed}, and passed in the end after failing in ${m.checks.passedAfterFailing}.`);
+  out.push("", "## Trouble signals", "", "Replayed over the first attempts (`bench/signals.ts`):", "", ...signals);
+  const rec = Object.entries(m.recordedSignals);
+  if (rec.length) out.push("", `Recorded in the sessions while running: ${rec.map(([k, n]) => `${k} ${n}`).join(", ")}.`);
+  if (prev) {
+    out.push("", "## Compared with the previous round", "", `Previous: ${prev.round}.`);
+    for (const [a, s] of Object.entries(m.agents)) {
+      const p = prev.agents[a];
+      if (p) out.push(`- ${a}: ${pct(s.passed, s.runs)} against ${pct(p.passed, p.runs)}; cost per task-run $${(s.costUsd / s.runs).toFixed(4)} against $${(p.costUsd / p.runs).toFixed(4)}.`);
+    }
+    const fresh = [...m.toolErrors, ...m.malformed, ...m.missingCommands, ...m.harnessErrors].filter((c) => !seen([...prev.toolErrors, ...prev.malformed, ...prev.missingCommands, ...prev.harnessErrors]).has(c.key));
+    out.push(`- ${fresh.length} kinds of error are new.${fresh.length ? " Most frequent: " + fresh.slice(0, 3).map((c) => `\`${c.key}\` (${c.count})`).join(", ") + "." : ""}`);
+  }
+  return out.join("\n") + "\n";
+}
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  const round = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--previous");
+  if (!round || !existsSync(join(round, "results.jsonl"))) {
+    console.error("usage: bun bench/mine.ts <round-dir> [--previous <round-dir>]");
+    process.exit(2);
+  }
+  const i = args.indexOf("--previous");
+  const prevDir = i >= 0 ? args[i + 1] : previousRound(round);
+  const prev = prevDir && existsSync(join(prevDir, "mine.json")) ? (JSON.parse(readFileSync(join(prevDir, "mine.json"), "utf8")) as Mined) : undefined;
+  const m = mine(round);
+  const signals = signalTable(replayRuns(taskRuns(round, { sessions: true })));
+  const md = render(m, prev, signals);
+  writeFileSync(join(round, "mine.json"), JSON.stringify(m, null, 1));
+  writeFileSync(join(round, "mine.md"), md);
+  console.log(md);
+}

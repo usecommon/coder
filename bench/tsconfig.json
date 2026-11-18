@@ -1,0 +1,5 @@
+{
+  "extends": "../galley/tsconfig.json",
+  "compilerOptions": { "typeRoots": ["../galley/node_modules/@types"] },
+  "include": ["sessions.ts", "signals.ts", "mine.ts", "verdict.ts", "profiles.ts", "canary.ts", "calibrate.ts"]
+}

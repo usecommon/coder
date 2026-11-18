@@ -7,74 +7,27 @@
 // Each argument is either one round (a folder with results.jsonl and runs/) or a folder of rounds. Only the first
 // attempt of each task-run is replayed, and only the main agent's session (not its helpers'). The result to compare
 // with is `pass`, which is the first attempt's in every round.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
 import { LIMITS, Watch } from "../galley/src/agent/signals.ts";
 import type { Message, ToolCall, ToolResult } from "../galley/src/core/types.ts";
+import { firstAttempt, messagesOf, pct, roundDirs, taskRuns, type TaskRun } from "./sessions.ts";
 
-interface Run {
-  round: string;
-  agent: string;
-  task: string;
-  pass: boolean;
+export interface Replayed {
   steps: number;
-  fired: Map<string, number>; // kind → step at which it first fired
+  /** Signal kind → the step at which it first fired. */
+  fired: Map<string, number>;
 }
 
-function rounds(dirs: string[]): string[] {
-  const out: string[] = [];
-  for (const d of dirs) {
-    if (existsSync(join(d, "results.jsonl"))) out.push(d);
-    else for (const sub of existsSync(d) ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
-  }
-  return out.sort();
-}
-
-/** The main agent's session file of one task-run: the one with no parent. */
-function sessionFile(run: string): string | undefined {
-  const root = join(run, "galley-data", "projects");
-  for (const project of existsSync(root) ? readdirSync(root) : []) {
-    const dir = join(root, project, "sessions");
-    for (const f of existsSync(dir) ? readdirSync(dir) : []) {
-      if (!f.endsWith(".jsonl")) continue;
-      const first = readFileSync(join(dir, f), "utf8").split("\n")[0];
-      try {
-        const meta = JSON.parse(first!);
-        if (meta.type === "meta" && !meta.parentId) return join(dir, f);
-      } catch {}
-    }
-  }
-  return undefined;
-}
-
-function maxSteps(run: string): number {
-  for (const p of [join(run, "config", "galley", "config.json"), join(run, "config", "config.json")]) {
-    try {
-      const n = JSON.parse(readFileSync(p, "utf8")).maxSteps;
-      if (typeof n === "number") return n;
-    } catch {}
-  }
-  return 60;
-}
-
-/** Replay the first attempt of a session through the watcher. The watcher is never re-armed: in these rounds
- *  nothing acted on a signal, so each kind fires at most once, as it would have. */
-function replay(file: string, limit: number): { steps: number; fired: Map<string, number> } {
-  const messages: Message[] = [];
-  for (const line of readFileSync(file, "utf8").split("\n")) {
-    if (!line) continue;
-    const r = JSON.parse(line);
-    if (r.type === "message") messages.push(r.message);
-  }
-  const watch = new Watch(limit);
+/** Replay the first attempt through the watcher. It is never re-armed: in these rounds nothing acted on a signal,
+ *  so each kind fires at most once, as it would have. */
+export function replay(messages: Message[], maxSteps: number): Replayed {
+  const watch = new Watch(maxSteps);
   const fired = new Map<string, number>();
+  const ms = firstAttempt(messages);
   let step = 0;
-  let users = 0;
-  for (let i = 0; i < messages.length; i++) {
-    const m = messages[i]!;
-    if (m.role === "user" && ++users > 1) break; // the second attempt, or a message from the harness
+  for (let i = 0; i < ms.length; i++) {
+    const m = ms[i]!;
     if (m.role !== "assistant" || !m.toolCalls.length) continue;
-    const next = messages[i + 1];
+    const next = ms[i + 1];
     if (next?.role !== "tool") continue;
     const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
     if (sig && !fired.has(sig.kind)) fired.set(sig.kind, step);
@@ -83,61 +36,53 @@ function replay(file: string, limit: number): { steps: number; fired: Map<string
   return { steps: step, fired };
 }
 
-function load(round: string): Run[] {
-  const out: Run[] = [];
-  for (const line of readFileSync(join(round, "results.jsonl"), "utf8").split("\n")) {
-    if (!line) continue;
-    const r = JSON.parse(line);
-    if (!String(r.agent).startsWith("galley") || typeof r.pass !== "boolean") continue;
-    const run = join(round, "runs", r.agent, r.lang, r.name);
-    const file = sessionFile(run);
-    if (!file) continue;
-    const { steps, fired } = replay(file, maxSteps(run));
-    out.push({ round: basename(round), agent: r.agent, task: `${r.lang}/${r.name}`, pass: r.pass, steps, fired });
-  }
-  return out;
-}
+export const maxStepsOf = (r: TaskRun) => (typeof r.config?.maxSteps === "number" ? (r.config.maxSteps as number) : 60);
 
-const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : "n/a");
+export const KINDS = ["same-check", "same-call", "tool-errors", "long-run", "any"];
 
-function report(runs: Run[]) {
+/** Markdown table: how often each signal fires on failing and passing runs, and how well it separates them within
+ *  one task. Pooled figures reward a signal for spotting hard tasks, which a harness cannot change. */
+export function signalTable(runs: (TaskRun & Replayed)[]): string[] {
   const failing = runs.filter((r) => !r.pass);
   const passing = runs.filter((r) => r.pass);
-  console.log(`${runs.length} task-runs replayed (${failing.length} failed, ${passing.length} passed) from ${new Set(runs.map((r) => r.round)).size} rounds.`);
-  console.log(`Limits: same check ${LIMITS.sameCheck}, same call ${LIMITS.sameCall}, tool errors ${LIMITS.toolErrors}, long run at ${LIMITS.longRun.toFixed(2)} of the step limit.\n`);
-
-  // Within one task: pairs of a failing and a passing run of the same task. A signal that tells them apart fires on
-  // the failing one and not on the passing one. Pooled figures reward a signal for spotting hard tasks, which a
-  // harness cannot change (research/reports, area 2).
-  const byTask = new Map<string, Run[]>();
+  const byTask = new Map<string, (TaskRun & Replayed)[]>();
   for (const r of runs) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r]);
-  const kinds = ["same-check", "same-call", "tool-errors", "long-run", "any"];
-  const has = (r: Run, k: string) => (k === "any" ? r.fired.size > 0 : r.fired.has(k));
-  console.log("| Signal | Fires on failing runs | Fires on passing runs | Of the runs it fires on, share that failed | Within one task: AUC (0.5 = chance) | Pairs |");
-  console.log("|---|---|---|---|---|---|");
-  for (const k of kinds) {
+  const has = (r: Replayed, k: string) => (k === "any" ? r.fired.size > 0 : r.fired.has(k));
+  const out = ["| Signal | Fires on failing runs | Fires on passing runs | Of the runs it fires on, share that failed | Within one task: AUC (0.5 = chance) | Pairs |", "|---|---|---|---|---|---|"];
+  for (const k of KINDS) {
     const f = failing.filter((r) => has(r, k)).length;
     const p = passing.filter((r) => has(r, k)).length;
     let score = 0;
     let pairs = 0;
-    for (const group of byTask.values()) {
-      const fs = group.filter((r) => !r.pass);
-      const ps = group.filter((r) => r.pass);
-      for (const a of fs)
-        for (const b of ps) {
+    for (const group of byTask.values())
+      for (const a of group.filter((r) => !r.pass))
+        for (const b of group.filter((r) => r.pass)) {
           pairs++;
           score += has(a, k) === has(b, k) ? 0.5 : has(a, k) ? 1 : 0;
         }
-    }
-    console.log(`| ${k} | ${f} of ${failing.length} (${pct(f, failing.length)}) | ${p} of ${passing.length} (${pct(p, passing.length)}) | ${pct(f, f + p)} | ${pairs ? (score / pairs).toFixed(3) : "n/a"} | ${pairs} |`);
+    out.push(`| ${k} | ${f} of ${failing.length} (${pct(f, failing.length)}) | ${p} of ${passing.length} (${pct(p, passing.length)}) | ${pct(f, f + p)} | ${pairs ? (score / pairs).toFixed(3) : "n/a"} | ${pairs} |`);
   }
-  const tasks = [...byTask.values()].filter((g) => g.some((r) => r.pass) && g.some((r) => !r.pass)).length;
-  console.log(`\n${tasks} tasks have both a failing and a passing run; each pair compares one of each.`);
+  return out;
 }
 
-const args = process.argv.slice(2);
-if (!args.length) {
-  console.error("usage: bun bench/signals.ts <rounds-dir> [<rounds-dir> …]");
-  process.exit(2);
+export function replayRuns(runs: TaskRun[]): (TaskRun & Replayed)[] {
+  return runs.filter((r) => r.agent.startsWith("galley") && r.main).map((r) => ({ ...r, ...replay(messagesOf(r.main), maxStepsOf(r)) }));
 }
-report(rounds(args).flatMap(load));
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  if (!args.length) {
+    console.error("usage: bun bench/signals.ts <rounds-dir> [<rounds-dir> …]");
+    process.exit(2);
+  }
+  const dirs = roundDirs(args);
+  const runs = replayRuns(dirs.flatMap((d) => taskRuns(d, { sessions: true })));
+  const failing = runs.filter((r) => !r.pass).length;
+  console.log(`${runs.length} task-runs replayed (${failing} failed, ${runs.length - failing} passed) from ${new Set(runs.map((r) => r.round)).size} rounds.`);
+  console.log(`Limits: same check ${LIMITS.sameCheck}, same call ${LIMITS.sameCall}, tool errors ${LIMITS.toolErrors}, long run at ${LIMITS.longRun.toFixed(2)} of the step limit.\n`);
+  console.log(signalTable(runs).join("\n"));
+  const byTask = new Map<string, boolean[]>();
+  for (const r of runs) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r.pass]);
+  const both = [...byTask.values()].filter((g) => g.includes(true) && g.includes(false)).length;
+  console.log(`\n${both} tasks have both a failing and a passing run; each pair compares one of each.`);
+}

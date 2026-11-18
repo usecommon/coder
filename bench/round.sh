@@ -48,5 +48,11 @@ if [ -s "$OUT/results.jsonl" ]; then
   bun report.ts "$OUT/results.jsonl" "$OUT/proxy.jsonl" --split="$SPLIT" --prices="$PRICES" ${EXCLUDE:+--exclude=$EXCLUDE} > "$OUT/report.md"
   cat "$OUT/report.md"
 fi
+# What went wrong in the harness: tool errors, malformed calls, missing commands, signals, cost by phase, and what is
+# new since the previous round. Read-only; written to mine.md and mine.json.
+if [ -s "$OUT/results.jsonl" ]; then
+  bun mine.ts "$OUT" > /dev/null && sed -n '/^## Compared/,$p' "$OUT/mine.md"
+  echo "Round miner: $OUT/mine.md"
+fi
 # Did any agent get at hidden tests anyway? Expect no flagged task-runs.
 python3 -I audit_leaks.py scan --polyglot "$POLYGLOT" --out "$OUT/leak-audit.json" "$NAME=$OUT" | tee "$OUT/leak-audit.txt"

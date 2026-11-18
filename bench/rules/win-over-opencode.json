@@ -1,0 +1,8 @@
+{
+  "id": "win-over-opencode",
+  "question": "Does Galley beat OpenCode on the same model: a lead of at least 5 points on the first attempt, significant by the sign test, at lower cost? This is the user's win rule, first written in research/beating-opencode.md; this file is a copy made on 18 November 2026.",
+  "baseline": "opencode",
+  "candidate": "galley",
+  "metric": "pass",
+  "decide": { "minLeadPoints": 5, "maxP": 0.05, "cost": "lower" }
+}
