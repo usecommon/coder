@@ -11,7 +11,7 @@
 // number that covers 90% of the turns that ended passing, once 30 such turns have needed at least one retry.
 // No model is called.
 import { LIMITS } from "../galley/src/agent/signals.ts";
-import { messagesOf, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 import { maxStepsOf, replay } from "./signals.ts";
 
 const MIN_FIRES = 30;
@@ -46,12 +46,15 @@ function signals(runs: TaskRun[]) {
   const proposals: string[] = [];
   for (const kind of Object.keys(GRID) as Kind[]) {
     const rows = GRID[kind].map((v) => {
-      (LIMITS as Record<Kind, number>)[kind] = v;
-      const fires = new Map(runs.map((r) => [r, replay(messagesOf(r.main), maxStepsOf(r)).fired.has(KIND_NAME[kind])]));
+      // Only the kind being swept can fire: the watcher reports one kind per step, so another kind reaching its limit
+      // on the same step would otherwise hide this one and make each kind's figures depend on the others' limits.
+      for (const k of Object.keys(GRID) as Kind[]) (LIMITS as Record<Kind, number>)[k] = k === kind ? v : Infinity;
+      const fires = new Map(runs.map((r) => [r, replay(r.main, maxStepsOf(r)).fired.has(KIND_NAME[kind])]));
       Object.assign(LIMITS, original);
       return { v, ...score(runs, fires) };
     });
     const current = rows.find((r) => Math.abs(r.v - original[kind]) < 1e-9)!;
+    if (!current) throw new Error(`the current ${kind} limit (${original[kind]}) is not on the grid`);
     for (const r of rows) console.log(`| ${KIND_NAME[kind]} | ${kind === "longRun" ? r.v.toFixed(2) : r.v} | ${r.failFires} | ${r.passFires} | ${r.auc.toFixed(3)} | ${r === current ? "yes" : ""} |`);
     const best = rows.filter((r) => r.failFires >= MIN_FIRES).sort((a, b) => b.auc - a.auc)[0];
     if (best && best !== current && best.auc - current.auc >= MIN_GAIN) proposals.push(`${KIND_NAME[kind]}: ${best.v} instead of ${original[kind]} (AUC ${best.auc.toFixed(3)} against ${current.auc.toFixed(3)}, fires on ${best.failFires} failing runs)`);
@@ -65,20 +68,23 @@ function checks(runs: TaskRun[]) {
   console.log("\n## Check rounds\n");
   const turns: { fails: number; endedPassing: boolean }[] = [];
   for (const r of runs) {
-    // A turn's checks: consecutive check records, until a passing one or the end of the session.
-    let fails = 0;
-    let open = false;
+    // The check records of one turn: by the turn number Galley writes, or, without it, a new turn wherever the
+    // round count starts again at 1. In a turn, the failures before its first pass; it ended passing if its last
+    // check passed.
+    const groups: Extract<SessionRecord, { type: "check" }>[][] = [];
+    let prev: Extract<SessionRecord, { type: "check" }> | undefined;
     for (const rec of r.main ?? []) {
       if (rec.type !== "check") continue;
       const c = rec as Extract<SessionRecord, { type: "check" }>;
-      open = true;
-      if (c.passed) {
-        turns.push({ fails, endedPassing: true });
-        fails = 0;
-        open = false;
-      } else fails++;
+      const newTurn = !prev || (c.turn !== undefined ? c.turn !== prev.turn : c.round === 1 && (prev.round > 1 || prev.passed));
+      if (newTurn) groups.push([]);
+      groups.at(-1)!.push(c);
+      prev = c;
     }
-    if (open) turns.push({ fails, endedPassing: false });
+    for (const g of groups) {
+      const firstPass = g.findIndex((c) => c.passed);
+      turns.push({ fails: firstPass < 0 ? g.length : firstPass, endedPassing: g.at(-1)!.passed });
+    }
   }
   if (!turns.length) {
     console.log("No check records yet: no kept round ran with `--check`.");
@@ -96,6 +102,7 @@ function checks(runs: TaskRun[]) {
   const sorted = retried.map((t) => t.fails).sort((a, b) => a - b);
   const k90 = sorted[Math.ceil(sorted.length * 0.9) - 1]!;
   console.log(`\nProposed checkRounds: ${k90} (covers 90% of the turns that passed after a failure).`);
+  console.log("This can only confirm or lower the current limit: a turn that needed more rounds than allowed ended failing and is not in these counts. Compare the number that ended failing.");
 }
 
 if (import.meta.main) {

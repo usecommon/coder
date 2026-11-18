@@ -9,5 +9,5 @@ ONLY=$(python3 -I -c 'import json,sys; c=json.load(open(sys.argv[1])); print(","
 MODEL_NAME=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["model"])' "$HERE/canary.json")
 case "$MODEL_NAME" in claude-*) MODEL=anthropic/$MODEL_NAME ;; *) MODEL=deepseek/$MODEL_NAME ;; esac
 WORK=${WORK:-/tmp/bench-work}
-ONLY=$ONLY MODEL=$MODEL CONCURRENCY=${CONCURRENCY:-6} bash "$HERE/round.sh" "$NAME" all galley
+CANARY=1 ONLY=$ONLY MODEL=$MODEL CONCURRENCY=${CONCURRENCY:-6} bash "$HERE/round.sh" "$NAME" all galley
 cd "$HERE" && bun canary.ts check "$WORK/rounds/$NAME"

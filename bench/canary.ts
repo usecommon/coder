@@ -16,10 +16,9 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { modelsByRun, roundDirs, runKey, taskRuns } from "./sessions.ts";
+import { isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns } from "./sessions.ts";
 
 const FILE = join(import.meta.dir, "canary.json");
-const NEUTRAL_KEYS = new Set(["effort", "providers", "model", "smallModel", "maxSteps"]);
 const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|canary/i;
 /** Tasks the round reports leave out of scoring: broken in the benchmark itself (report.ts). */
 const EXCLUDED = new Set(["rust/macros", "go/octal"]);
@@ -45,11 +44,11 @@ function select(args: string[]) {
   const langs = new Set(flag(args, "langs", "python,go,rust").split(","));
   const history = new Map<string, [number, number]>();
   for (const round of roundDirs(args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")))) {
-    if (SKIP_ROUNDS.test(round.split("/").pop()!)) continue;
+    if (SKIP_ROUNDS.test(round.split("/").pop()!) || isCanary(round)) continue;
     const models = modelsByRun(round);
     for (const r of taskRuns(round)) {
-      if (!r.agent.startsWith("galley") || !r.config || !langs.has(r.lang) || EXCLUDED.has(r.task)) continue;
-      if (Object.keys(r.config).some((k) => !NEUTRAL_KEYS.has(k)) || r.config.effort !== effort || models.get(runKey(r)) !== model) continue;
+      if (!isDefaultGalley(r) || !langs.has(r.lang) || EXCLUDED.has(r.task)) continue;
+      if (r.config!.effort !== effort || models.get(runKey(r)) !== model) continue;
       const h = history.get(r.task) ?? [0, 0];
       h[1]++;
       if (r.pass) h[0]++;

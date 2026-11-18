@@ -17,7 +17,9 @@ export type SessionRecord =
    *  kind fires on runs that pass and on runs that fail can be measured later (no published study measures them). */
   | { type: "signal"; kind: string; detail: string; step: number; model: string; acted: "advice" | "handover" | "none"; at: string }
   /** One run of the check command, so that how many rounds a turn needs can be measured (bench/calibrate.ts). */
-  | { type: "check"; command: string; exitCode: number | null; passed: boolean; round: number; at: string };
+  | { type: "check"; command: string; exitCode: number | null; passed: boolean; round: number; turn?: number; at: string }
+  /** The start of one `galley run`: a harness that runs a task twice in one session (a retry) shows as two. */
+  | { type: "run"; at: string };
 
 export function dataDir(): string {
   return process.env.GALLEY_DATA_DIR ?? join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "galley");
@@ -155,7 +157,11 @@ export class Session {
     this.write({ type: "signal", ...s, at: new Date().toISOString() });
   }
 
-  addCheck(c: { command: string; exitCode: number | null; passed: boolean; round: number }) {
+  addRun() {
+    this.write({ type: "run", at: new Date().toISOString() });
+  }
+
+  addCheck(c: { command: string; exitCode: number | null; passed: boolean; round: number; turn?: number }) {
     this.write({ type: "check", ...c, at: new Date().toISOString() });
   }
 

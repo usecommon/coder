@@ -8,8 +8,8 @@
 // attempt of each task-run is replayed, and only the main agent's session (not its helpers'). The result to compare
 // with is `pass`, which is the first attempt's in every round.
 import { LIMITS, Watch } from "../galley/src/agent/signals.ts";
-import type { Message, ToolCall, ToolResult } from "../galley/src/core/types.ts";
-import { firstAttempt, messagesOf, pct, roundDirs, taskRuns, type TaskRun } from "./sessions.ts";
+import type { ToolCall, ToolResult } from "../galley/src/core/types.ts";
+import { firstAttempt, pct, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Replayed {
   steps: number;
@@ -19,10 +19,10 @@ export interface Replayed {
 
 /** Replay the first attempt through the watcher. It is never re-armed: in these rounds nothing acted on a signal,
  *  so each kind fires at most once, as it would have. */
-export function replay(messages: Message[], maxSteps: number): Replayed {
+export function replay(recs: SessionRecord[] | undefined, maxSteps: number): Replayed {
   const watch = new Watch(maxSteps);
   const fired = new Map<string, number>();
-  const ms = firstAttempt(messages);
+  const ms = firstAttempt(recs);
   let step = 0;
   for (let i = 0; i < ms.length; i++) {
     const m = ms[i]!;
@@ -66,7 +66,7 @@ export function signalTable(runs: (TaskRun & Replayed)[]): string[] {
 }
 
 export function replayRuns(runs: TaskRun[]): (TaskRun & Replayed)[] {
-  return runs.filter((r) => r.agent.startsWith("galley") && r.main).map((r) => ({ ...r, ...replay(messagesOf(r.main), maxStepsOf(r)) }));
+  return runs.filter((r) => r.agent.startsWith("galley") && r.main).map((r) => ({ ...r, ...replay(r.main, maxStepsOf(r)) }));
 }
 
 if (import.meta.main) {

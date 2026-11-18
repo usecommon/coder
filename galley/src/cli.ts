@@ -154,6 +154,7 @@ async function main() {
     if (flags.detach) return detach(workspace, cfg, flags, task);
     // Sessions always belong to the original repository, even when the work happens in a worktree.
     const session = typeof flags["session-id"] === "string" ? Session.load(workspace, flags["session-id"]) : openSession(workspace, cfg, flags);
+    session.addRun();
     let worktree: string | undefined;
     if (flags.worktree) {
       worktree = makeWorktree(workspace, session.id);

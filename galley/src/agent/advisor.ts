@@ -66,7 +66,17 @@ export const freshStartMessage = (o: { from: string; why: string; request: strin
   `${o.environment}\n\n${o.earlier ? `Earlier in this session the user asked:\n\n${clip(o.earlier, 4000)}\n\nThe current request:\n\n` : ""}${o.request}\n\n` +
   `You are taking over this task from another model (${o.from}) because ${o.why}. You are not shown its attempt, only where the files stand. ` +
   "Work from the request and the files as they are now: keep what is right, change what is not." +
-  (o.files ? `\n\nWhat has been changed so far:\n\n<files_changed>\n${o.files}\n</files_changed>` : "\n\nNo file has been changed yet.");
+  (o.files
+    ? `\n\nWhat has been changed so far:\n\n<files_changed>\n${o.files}\n</files_changed>`
+    : "\n\nNo file was changed with the write or edit tools in this turn. Commands or earlier turns may still have changed files: look before you assume the code is as it was.");
+
+/** The first message of a session, without the parts that described the workspace at the time: for quoting it to a
+ *  model that takes over later, beside a fresh description. */
+export const withoutPreamble = (first: string) =>
+  first
+    .replace(/<environment>[\s\S]*?<\/environment>\s*/g, "")
+    .replace(/<project_note>[\s\S]*?<\/project_note>\s*/g, "")
+    .trim();
 
 export const handoverMessage = (from: string, why: string) =>
   `You are taking over this session from another model (${from}) because ${why}. Do not assume its approach was right: ` +

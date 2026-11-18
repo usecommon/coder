@@ -6,7 +6,7 @@
 // SWE-bench tasks, one retrieved experience did best and more did worse, memory that was not checked did harm, and a
 // model's self-written skills lowered results. So: one note, written only after something ran and passed, and read
 // back as a hint that may be out of date. Off unless `lessons` is set. Not measured in Galley.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectDir } from "../session/store.ts";
 
@@ -36,7 +36,12 @@ export function loadLessons(workspace: string): Lesson[] {
 export function saveLesson(workspace: string, lesson: Lesson): void {
   mkdirSync(projectDir(workspace), { recursive: true });
   const all = [...loadLessons(workspace), lesson];
-  if (all.length > MAX_LESSONS) writeFileSync(file(workspace), all.slice(-MAX_LESSONS).map((l) => JSON.stringify(l)).join("\n") + "\n");
+  if (all.length > MAX_LESSONS) {
+    // Rewritten whole through a temporary file, so a crash cannot leave it cut short.
+    const tmp = `${file(workspace)}.${process.pid}.tmp`;
+    writeFileSync(tmp, all.slice(-MAX_LESSONS).map((l) => JSON.stringify(l)).join("\n") + "\n");
+    renameSync(tmp, file(workspace));
+  }
   else appendFileSync(file(workspace), JSON.stringify(lesson) + "\n");
 }
 
@@ -62,8 +67,12 @@ export function pickLesson(workspace: string, request: string): Lesson | undefin
   return best?.l;
 }
 
+/** A lesson is text a model wrote from command output, read back into a later session's first message. Angle
+ *  brackets are taken out so it cannot close the note early and pass for the user's own words. */
+const plain = (s: string) => s.replace(/[<>]/g, "");
+
 export const lessonNote = (l: Lesson) =>
-  `<project_note>\nA note from earlier work in this project, kept because the project's check (\`${l.check}\`) passed after it. It may be out of date: trust the code over it.\n${l.text}\n</project_note>`;
+  `<project_note>\nA note from earlier work in this project, kept because the project's check (\`${l.check}\`) passed after it. It may be out of date: trust the code over it.\n${plain(l.text)}\n</project_note>`;
 
 export const LESSON_REQUEST =
   "The project's check failed earlier in this turn and now passes. In one sentence of at most 200 characters, write what a future agent " +

@@ -28,7 +28,8 @@ export interface OwnMeasure {
   tasks: number;
   solved: number;
   ci: [number, number];
-  costPerTask: number;
+  /** Null when the cost could not be priced. */
+  costPerTask: number | null;
   byLanguage: Record<string, [number, number]>;
   rounds: number;
   from: string;

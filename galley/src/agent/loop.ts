@@ -14,10 +14,11 @@ import { projectDir, Session } from "../session/store.ts";
 import { adviseTool } from "../tools/advise.ts";
 import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import { scratchDir } from "../tools/bash.ts";
-import { ToolError, truncate, type Tool, type ToolContext } from "../tools/types.ts";
+import { ToolError, type Tool, type ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
-import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, freshStartMessage, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
+import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, freshStartMessage, handoverMessage, withoutPreamble, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
+import { fingerprint, gitChanges } from "./workspace-state.ts";
 import { LESSON_REQUEST, lessonNote, pickLesson, saveLesson } from "./lessons.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
@@ -120,6 +121,15 @@ export class Agent {
   /** The model a turn starts on: the plan model in plan mode when one is set, otherwise the session's model. */
   /** While a model that took over without the transcript is working: where in the session its view starts. */
   private viewFrom?: number;
+  /** The size of the whole session when a model took over and began reading only its own part of it. */
+  private baseTokens = 0;
+  /** For the check command, across turns (the steps of a plan are turns, and only the last one is checked): whether a
+   *  file tool changed something since the last check, whether a command ran since, and what the files looked like
+   *  then. A command that changed nothing (ls, grep, a test run) is no reason to run the check. */
+  private unchecked = false;
+  private ranCommands = false;
+  private checkedPrint?: string;
+  private turns = 0;
 
   get turnModel(): string {
     return this.mode === "plan" && !this.o.subagent && this.o.cfg.planModel ? this.o.cfg.planModel : this.model;
@@ -163,8 +173,9 @@ export class Agent {
     // and the next turn starts from the session's own model again.
     let ref = this.turnModel;
     splitModel(ref);
-    this.viewFrom = undefined;
+    this.endView();
     this.undo.beginTurn();
+    if (!this.o.subagent) this.turns++;
     this.consults = 0;
     this.consultUsage = emptyUsage();
     this.consultCost = 0;
@@ -194,7 +205,7 @@ export class Agent {
     // last result, which a reviewing advisor reads beside the diff.
     const checking = !!cfg.check && o.check !== false && !this.o.subagent && this.mode !== "plan";
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
-    let acted = false;
+    if (checking && this.checkedPrint === undefined) this.checkedPrint = fingerprint(this.workspace) ?? "";
     let checkFails = 0;
     let checkReport: string | undefined;
     let lastFailure: string | undefined;
@@ -247,27 +258,42 @@ export class Agent {
         else {
           // The check: run the project's own test command and feed a failure back. Running code is the one feedback
           // that does not rest on a model's opinion (research/reports, areas 2 and 5).
-          if (checking && acted && !signal?.aborted) {
-            acted = false;
+          if (checking && !signal?.aborted && this.changedSinceCheck()) {
             const r = await this.runCheck(cfg.check!, signal);
+            this.unchecked = false;
+            this.ranCommands = false;
+            this.checkedPrint = fingerprint(this.workspace) ?? "";
             if (signal?.aborted) {
               stopReason = "other";
               break;
             }
-            checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
-            const passed = r.exitCode === 0 && !r.timedOut;
-            this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1 });
-            if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
-            if (passed) this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
-            else if (checkFails < checkRounds) {
-              checkFails++;
-              lastFailure = r.output;
-              this.emit({ type: "notice", level: "warn", text: `Check failed (${checkFails} of ${checkRounds}): ${cfg.check}` });
-              this.session.addMessage({ role: "user", content: checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds) });
-              continue;
-            } else {
-              this.emit({ type: "notice", level: "warn", text: `Check still failing after ${checkRounds} rounds: ${cfg.check}` });
-              break;
+            // A check the user declined to run is no failure to feed back.
+            if (r.skipped !== undefined) this.emit({ type: "notice", level: "warn", text: `The check was not run: ${r.skipped}` });
+            else {
+              checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
+              const passed = r.exitCode === 0 && !r.timedOut;
+              this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1, turn: this.turns });
+              if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
+              if (passed) {
+                this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
+                // A failure is learnt from once; a later failure in the same turn starts its own count.
+                checkFails = 0;
+                lastFailure = undefined;
+              } else if (step === maxSteps - 1) {
+                // No step is left to fix it in: say so, and do not leave a message the model never answers.
+                this.emit({ type: "notice", level: "warn", text: `Check failed and the step limit is reached: ${cfg.check}` });
+                stopReason = "other";
+                break;
+              } else if (checkFails < checkRounds) {
+                checkFails++;
+                lastFailure = r.output;
+                this.emit({ type: "notice", level: "warn", text: `Check failed (${checkFails} of ${checkRounds}): ${cfg.check}` });
+                this.session.addMessage({ role: "user", content: checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds) });
+                continue;
+              } else {
+                this.emit({ type: "notice", level: "warn", text: `Check still failing after ${checkRounds} rounds: ${cfg.check}` });
+                break;
+              }
             }
           }
           // Self-review: once per turn, if files changed, ask the model to check its work against the request.
@@ -296,7 +322,10 @@ export class Agent {
           ? res.toolCalls.map<ToolResult>((c) => ({ callId: c.id, name: c.name, isError: true, content: "Your output was cut off at the token limit, so this call was not run. Retry with a smaller change." }))
           : await this.runTools(res.toolCalls, signal);
       this.session.addMessage({ role: "tool", results });
-      if (res.toolCalls.some((c) => !this.tools.find((t) => t.spec.name === c.name)?.readOnly)) acted = true;
+      for (const c of res.toolCalls) {
+        if (c.name === "bash") this.ranCommands = true;
+        else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly) this.unchecked = true;
+      }
       if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });
 
       // When the tools show the turn going badly, bring in a second model: advice first, then a handover.
@@ -308,10 +337,13 @@ export class Agent {
         const canHandOver = !!up && up !== ref && !handedOver;
         const asking = canAsk && (stuckConsults === 0 || !canHandOver);
         const handing = !asking && canHandOver && !weakerWarning(ref, up!, profiles(cfg.models));
-        this.session.addSignal({ kind: sig.kind, detail: sig.detail, step, model: ref, acted: asking ? "advice" : handing ? "handover" : "none" });
+        // Recorded with what was actually done: advice that never arrived is no intervention.
+        const record = (acted: "advice" | "handover" | "none") => this.session.addSignal({ kind: sig.kind, detail: sig.detail, step, model: ref, acted });
+        if (!asking && !handing) record("none");
         if (asking) {
           stuckConsults++;
           const advice = await this.consult(stuckQuestion(sig.detail), `because ${sig.detail}`, signal);
+          record(advice ? "advice" : "none");
           if (advice) {
             this.session.addMessage({ role: "user", content: adviceMessage(adv!.model, sig.detail, advice) });
             watch.rearm();
@@ -322,6 +354,7 @@ export class Agent {
           const weaker = weakerWarning(ref, up!, profiles(cfg.models));
           if (weaker) this.emit({ type: "notice", level: "warn", text: `Not handing over to ${up}: ${weaker}` });
           else {
+            record("handover");
             const reread = rereadCost(up!, this.lastInputTokens, { ...DEFAULT_PRICES, ...cfg.pricing });
             if (cfg.escalateContext === "transcript") {
               this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}.${reread !== undefined ? ` It reads the session afresh: about ${usd(reread)}.` : ""}` });
@@ -329,11 +362,15 @@ export class Agent {
             } else {
               // The stronger model starts from the request and the files, not from the attempt that went wrong.
               this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}. It starts from the request and the files as they are now.` });
-              const earlier = turnStart > 0 ? this.session.messages.find((m) => m.role === "user")?.content : undefined;
+              const first = turnStart > 0 ? this.session.messages.find((m) => m.role === "user")?.content : undefined;
+              const earlier = typeof first === "string" ? withoutPreamble(first) : undefined;
+              // What changed: the file tools' own record, and git's, which also sees what commands and earlier turns did.
+              const files = [changes(this.workspace, this.undo.snapshots(), 20_000), gitChanges(this.workspace)].filter(Boolean).join("\n\n");
+              this.baseTokens = this.lastInputTokens;
               this.viewFrom = this.session.messages.length;
               this.session.addMessage({
                 role: "user",
-                content: freshStartMessage({ from: ref, why: sig.detail, request: text, earlier: typeof earlier === "string" ? earlier : undefined, files: changes(this.workspace, this.undo.snapshots()), environment: environmentNote(this.workspace) }),
+                content: freshStartMessage({ from: ref, why: sig.detail, request: text, earlier: earlier || undefined, files, environment: environmentNote(this.workspace) }),
               });
             }
             ref = up!;
@@ -372,7 +409,7 @@ export class Agent {
       break;
     }
 
-    this.viewFrom = undefined;
+    this.endView();
     turnUsage = addUsage(turnUsage, this.consultUsage);
     turnCost += this.consultCost;
     this.emit({ type: "turn_end", usage: turnUsage, costUsd: turnCost, stopReason });
@@ -531,7 +568,11 @@ export class Agent {
       const files = changes(this.workspace, this.undo.snapshots(), 12_000);
       const content = `<check_failure>\n$ ${check}\n${failure.slice(-4000) || "(no output; it exited with an error)"}\n</check_failure>\n\n<files_changed>\n${files}\n</files_changed>\n\n${LESSON_REQUEST}`;
       const res = await this.withRetry(() => getProvider(pid, this.o.cfg).chat({ model: m, system: "You write short, precise notes for coding agents.", messages: [{ role: "user", content }], tools: [], maxTokens: 2000, effort: "low", signal }), signal);
-      this.session.addUsage(model, res.usage, this.price(model, res.usage));
+      const cost = this.price(model, res.usage);
+      this.session.addUsage(model, res.usage, cost);
+      // Counted in the turn's cost, like the advisor's.
+      this.consultUsage = addUsage(this.consultUsage, res.usage);
+      this.consultCost += cost;
       const text = res.text.trim().replace(/\s+/g, " ");
       if (!text || /^NONE\.?$/i.test(text)) return;
       const changed = this.undo.snapshots().map((s) => relative(this.workspace, s.path)).filter((p) => p && !p.startsWith(".."));
@@ -542,8 +583,31 @@ export class Agent {
     }
   }
 
-  /** Run the check command in the sandbox, as the bash tool would but without asking: the user configured it. */
+  /** Back to the whole session after a takeover. The last request's size covered only the taken-over part, so the
+   *  rest is added back: otherwise the next turn sends the whole session without compacting it first. */
+  private endView() {
+    if (this.viewFrom !== undefined) this.lastInputTokens += this.baseTokens;
+    this.baseTokens = 0;
+    this.viewFrom = undefined;
+  }
+
+  /** Whether the files may have changed since the check last ran: a file tool wrote, or a command ran and the
+   *  workspace no longer looks as it did. When the workspace cannot be fingerprinted, any command counts. */
+  private changedSinceCheck(): boolean {
+    if (this.unchecked) return true;
+    if (!this.ranCommands) return false;
+    const now = fingerprint(this.workspace);
+    return now === undefined || now !== this.checkedPrint;
+  }
+
+  /** Run the check command in the sandbox, as the bash tool would. Without a sandbox it runs code the model may have
+   *  written with the user's own rights and network, so then it asks first, as the bash tool does. */
   private async runCheck(command: string, signal?: AbortSignal) {
+    const kind = this.o.cfg.sandbox === "off" ? "none" : this.sandbox;
+    if (kind === "none") {
+      const ok = await this.gate.check({ tool: "bash", subject: command, reason: "the check runs without a sandbox" }, "ask");
+      if (!ok.ok) return { output: "", exitCode: null, timedOut: false, skipped: ok.why };
+    }
     const cacheDir = join(projectDir(this.workspace), "cache");
     const tmpDir = scratchDir(this.workspace);
     mkdirSync(cacheDir, { recursive: true });
@@ -555,13 +619,16 @@ export class Agent {
       network: false,
       timeoutMs: 600_000,
       signal,
-      kind: this.o.cfg.sandbox === "off" ? "none" : this.sandbox,
+      kind,
       cacheDir,
       tmpDir,
     });
-    let output = truncate(r.output.trimEnd(), this.o.cfg.maxToolOutput);
+    // Keep the start and, above all, the end: test runners print their summary last.
+    const max = this.o.cfg.maxToolOutput;
+    const all = r.output.trimEnd();
+    let output = all.length > max ? `${all.slice(0, Math.floor(max / 3))}\n[… ${all.length - max} characters left out …]\n${all.slice(all.length - Math.ceil((2 * max) / 3))}` : all;
     if (r.timedOut) output += "\n[timed out after 600s]";
-    return { output, exitCode: r.exitCode, timedOut: r.timedOut };
+    return { output, exitCode: r.exitCode, timedOut: r.timedOut, skipped: undefined as string | undefined };
   }
 
   private async maybeCompact(signal?: AbortSignal) {

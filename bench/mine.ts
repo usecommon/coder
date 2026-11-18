@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { replayRuns, signalTable } from "./signals.ts";
-import { costByRun, firstAttempt, messagesOf, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { costByRun, firstAttempt, isCanary, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Cluster {
   key: string;
@@ -63,8 +63,7 @@ function tally(map: Tally, key: string, run: TaskRun) {
 const clusters = (map: Tally): Cluster[] =>
   [...map].map(([key, e]) => ({ key, count: e.count, byAgent: e.byAgent, runs: e.runs.size, failedRuns: e.failed.size, example: e.example })).sort((a, b) => b.count - a.count);
 
-export function mine(round: string): Mined {
-  const runs = taskRuns(round, { sessions: true });
+export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions: true })): Mined {
   const cost = costByRun(round);
   const agents: Mined["agents"] = {};
   for (const r of runs) {
@@ -107,12 +106,16 @@ export function mine(round: string): Mined {
       if (checkRecs.some((c) => !c.passed)) checks.failed++;
       if (checkRecs.some((c) => !c.passed) && checkRecs.at(-1)!.passed) checks.passedAfterFailing++;
     }
-    // Helpers are counted wherever their usage was written. In Galley a helper's cost is also added to the main
-    // session under the helper's model; to avoid counting it twice, helpers are taken from their own files only
-    // when they used the main model.
-    for (const h of r.helpers) for (const rec of h) if (rec.type === "usage") phases.helpers += (rec as Extract<SessionRecord, { type: "usage" }>).costUsd;
+    // Galley adds each helper's cost to its parent session too, under the helper's model (smallModel, or the main
+    // model when none is set). Count it once, as helpers: take it back out of the bucket the parent put it in.
+    for (const h of r.helpers) {
+      const c = h.filter((x) => x.type === "usage").reduce((s, x) => s + (x as Extract<SessionRecord, { type: "usage" }>).costUsd, 0);
+      phases.helpers += c;
+      if ((h[0] as { model?: string }).model === meta.model) phases.main -= c;
+      else phases.otherModels -= c;
+    }
 
-    const ms = firstAttempt(messagesOf(r.main));
+    const ms = firstAttempt(r.main);
     let steps = 0;
     for (let i = 0; i < ms.length; i++) {
       const m = ms[i]!;
@@ -137,9 +140,6 @@ export function mine(round: string): Mined {
     const max = typeof r.config?.maxSteps === "number" ? (r.config.maxSteps as number) : 60;
     if (steps >= max) atLimit++;
   }
-  // Galley adds each helper's cost to its parent's session too, under the helper's model: take that out of
-  // "other models" so the phases add up to the session's total.
-  phases.otherModels = Math.max(0, phases.otherModels - phases.helpers);
   return {
     round: basename(round),
     agents,
@@ -161,7 +161,7 @@ function previousRound(round: string): string | undefined {
   const own = mtime(round);
   return readdirSync(parent)
     .map((d) => join(parent, d))
-    .filter((d) => d !== round && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
+    .filter((d) => d !== round && !isCanary(d) && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
     .sort((a, b) => mtime(b) - mtime(a))[0];
 }
 
@@ -219,8 +219,9 @@ if (import.meta.main) {
   const i = args.indexOf("--previous");
   const prevDir = i >= 0 ? args[i + 1] : previousRound(round);
   const prev = prevDir && existsSync(join(prevDir, "mine.json")) ? (JSON.parse(readFileSync(join(prevDir, "mine.json"), "utf8")) as Mined) : undefined;
-  const m = mine(round);
-  const signals = signalTable(replayRuns(taskRuns(round, { sessions: true })));
+  const runs = taskRuns(round, { sessions: true });
+  const m = mine(round, runs);
+  const signals = signalTable(replayRuns(runs));
   const md = render(m, prev, signals);
   writeFileSync(join(round, "mine.json"), JSON.stringify(m, null, 1));
   writeFileSync(join(round, "mine.md"), md);

@@ -20,6 +20,9 @@ export interface Result {
   /** When the second attempt started, in rounds that give a failed first attempt one more. */
   startedAt2?: number;
   memoryKills?: number;
+  /** Galley only, in rounds from 19 November 2026 on: "default" or the cli.ts of another checkout, and extra flags. */
+  galley?: string;
+  galleyArgs?: string[];
 }
 
 /** One record of a Galley session file. Only the fields used here are typed. */
@@ -28,7 +31,8 @@ export type SessionRecord =
   | { type: "message"; message: Message }
   | { type: "usage"; model: string; costUsd: number; usage: { inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number } }
   | { type: "signal"; kind: string; step: number; acted: string }
-  | { type: "check"; exitCode: number | null; round: number; passed: boolean }
+  | { type: "check"; exitCode: number | null; round: number; passed: boolean; turn?: number }
+  | { type: "run"; at: string }
   | { type: string; [k: string]: unknown };
 
 export interface TaskRun extends Result {
@@ -105,16 +109,46 @@ export function taskRuns(round: string, o: { sessions?: boolean } = {}): TaskRun
 export const messagesOf = (recs: SessionRecord[] | undefined): Message[] =>
   (recs ?? []).filter((r): r is Extract<SessionRecord, { type: "message" }> => r.type === "message").map((r) => r.message);
 
-/** The messages of the first attempt: up to the second message from the user (the harness's retry, if any). */
-export function firstAttempt(messages: Message[]): Message[] {
-  let users = 0;
+/** Messages Galley adds to a session itself within one task: check failures, reviews, advice, takeovers, the
+ *  verifier's report, the steps of a plan. They are not the harness's second attempt. */
+const INJECTED = [/^The check `/, /^Before you finish, check your work/, /^A second model \(/, /^You are taking over/, /^<environment>/, /^An independent reviewer/, /^Step \d+ of \d+:/, /^Go ahead: do the task/];
+
+/** The messages of a session's first attempt. Sessions from 19 November 2026 on mark the start of each
+ *  `galley run` with a "run" record, and the first attempt ends at the second one. Older sessions have no marks;
+ *  there it ends at the first message from the user that Galley did not add itself. */
+export function firstAttempt(recs: SessionRecord[] | undefined): Message[] {
+  const all = recs ?? [];
   const out: Message[] = [];
-  for (const m of messages) {
-    if (m.role === "user" && ++users > 1) break;
+  if (all.some((r) => r.type === "run")) {
+    let runs = 0;
+    for (const r of all) {
+      if (r.type === "run" && ++runs > 1) break;
+      if (r.type === "message") out.push((r as Extract<SessionRecord, { type: "message" }>).message);
+    }
+    return out;
+  }
+  let users = 0;
+  for (const m of messagesOf(all)) {
+    if (m.role === "user" && !(typeof m.content === "string" && users > 0 && INJECTED.some((re) => re.test(m.content))) && ++users > 1) break;
     out.push(m);
   }
   return out;
 }
+
+/** Galley as it ships: the default checkout, no extra flags, and a config that sets only the model, the effort, the
+ *  step limit and where the provider is. Rounds before run.ts recorded checkout and flags count only the variant
+ *  named plain "galley". */
+const NEUTRAL_KEYS = new Set(["effort", "providers", "model", "smallModel", "maxSteps"]);
+export function isDefaultGalley(r: TaskRun): boolean {
+  if (!r.config || !r.agent.startsWith("galley")) return false;
+  if (r.galley === undefined ? r.agent !== "galley" : r.galley !== "default" || (r.galleyArgs ?? []).length > 0) return false;
+  if (Object.keys(r.config).some((k) => !NEUTRAL_KEYS.has(k))) return false;
+  const providers = (r.config.providers ?? {}) as Record<string, Record<string, unknown>>;
+  return Object.values(providers).every((p) => Object.keys(p).every((k) => k === "baseURL"));
+}
+
+/** A canary round: picked tasks, not a sample. Marked by canary.sh, or named so. */
+export const isCanary = (round: string) => /canary/i.test(basename(round)) || existsSync(join(round, "CANARY"));
 
 /** The model of a run's requests, from the proxy log (tag "<agent>__<lang>__<name>"). */
 export function modelsByRun(round: string): Map<string, string> {
@@ -126,6 +160,7 @@ export function modelsByRun(round: string): Map<string, string> {
 /** List prices, USD per million tokens, for pricing proxy records: uncached input, cache read, output. */
 export const PRICES: Record<string, { miss: number; hit: number; write: number; out: number }> = {
   "deepseek-flash": { miss: 0.15, hit: 0.003, write: 0.15, out: 0.6 },
+  "deepseek-v4-flash": { miss: 0.15, hit: 0.003, write: 0.15, out: 0.6 },
   "deepseek-v4-pro": { miss: 0.66, hit: 0.022, write: 0.66, out: 1.98 },
   "claude-sonnet-5-5": { miss: 2, hit: 0.1, write: 2.5, out: 10 },
   "claude-opus-5-5": { miss: 4, hit: 0.2, write: 5, out: 20 },
@@ -137,7 +172,10 @@ export const PRICES: Record<string, { miss: number; hit: number; write: number; 
 export function callCost(c: any): number | undefined {
   const p = PRICES[c.req?.model];
   const u = c.usage;
-  if (!p || !u) return undefined;
+  if (!p) return undefined;
+  // A request whose usage never reached the proxy (a stream cut short) is counted as nothing, as the round reports
+  // count it: the model is known, only its token counts are missing.
+  if (!u) return 0;
   if (u.prompt_tokens !== undefined) {
     const hit = u.prompt_cache_hit_tokens ?? u.prompt_tokens_details?.cached_tokens ?? 0;
     const miss = u.prompt_cache_miss_tokens ?? u.prompt_tokens - hit;
@@ -149,7 +187,8 @@ export function callCost(c: any): number | undefined {
 
 /** Cost per task-run (key "<agent>__<lang>__<name>") from the proxy log. Requests from an interrupted earlier try
  *  of a task-run (before its recorded start) are left out, as the round reports leave them out. With `firstOnly`,
- *  so are those of a second attempt. */
+ *  so are those of a second attempt. A run with a request whose model has no price here is NaN: unknown, not free.
+ *  A run with no request at all has no entry. */
 export function costByRun(round: string, o: { firstOnly?: boolean } = {}): Map<string, number> {
   const out = new Map<string, number>();
   const runs = new Map(results(round).map((r) => [runKey(r), r]));
@@ -160,7 +199,7 @@ export function costByRun(round: string, o: { firstOnly?: boolean } = {}): Map<s
     if (c.t !== undefined && r.startedAt && c.t < r.startedAt - 2000) continue;
     if (o.firstOnly && c.t !== undefined && r.startedAt2 && c.t >= r.startedAt2 - 2000) continue;
     const cost = callCost(c);
-    if (cost !== undefined) out.set(c.tag, (out.get(c.tag) ?? 0) + cost);
+    out.set(c.tag, (out.get(c.tag) ?? 0) + (cost ?? NaN));
   }
   return out;
 }

@@ -4,126 +4,126 @@
  "effort": "high",
  "stable": {
   "go/two-bucket": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/say": [
-   10,
-   10
+   5,
+   5
   ],
   "go/ledger": [
-   10,
-   10
+   5,
+   5
   ],
   "python/connect": [
-   10,
-   10
+   5,
+   5
   ],
   "python/two-bucket": [
-   10,
-   10
+   5,
+   5
   ],
   "go/wordy": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/book-store": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/xorcism": [
-   10,
-   10
-  ],
-  "python/transpose": [
-   9,
-   10
+   5,
+   5
   ],
   "go/bottle-song": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/luhn-from": [
-   9,
-   10
+   5,
+   5
   ],
   "go/robot-simulator": [
-   10,
-   10
+   5,
+   5
   ],
   "go/variable-length-quantity": [
-   10,
-   10
+   5,
+   5
   ],
   "go/sublist": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/nucleotide-codons": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/ocr-numbers": [
-   10,
-   10
+   5,
+   5
   ],
   "go/tree-building": [
-   9,
-   10
+   5,
+   5
   ],
   "go/book-store": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/robot-name": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/wordy": [
-   10,
-   10
-  ],
-  "go/say": [
-   9,
-   10
+   5,
+   5
   ],
   "python/pig-latin": [
-   10,
-   10
+   5,
+   5
   ],
   "go/alphametics": [
-   10,
-   10
+   5,
+   5
   ],
   "rust/two-bucket": [
-   10,
-   10
+   5,
+   5
+  ],
+  "rust/variable-length-quantity": [
+   5,
+   5
+  ],
+  "rust/pig-latin": [
+   5,
+   5
   ]
  },
  "hard": {
   "go/trinary": [
    0,
-   10
+   5
+  ],
+  "go/matrix": [
+   0,
+   5
+  ],
+  "go/palindrome-products": [
+   0,
+   5
   ],
   "python/book-store": [
    0,
-   10
+   5
   ],
   "go/hexadecimal": [
    0,
-   10
+   5
   ],
   "python/phone-number": [
    0,
-   10
-  ],
-  "python/pov": [
-   0,
-   10
-  ],
-  "go/beer-song": [
-   0,
-   10
+   5
   ]
  }
 }

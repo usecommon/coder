@@ -28,6 +28,8 @@ esac
 KEY=${UPSTREAM_KEY-$DEFAULT_KEY}
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$WORK/rounds/$NAME; mkdir -p "$OUT"
+# A canary round is marked, so that the model profiles and the round miner's comparisons leave it out.
+[ -n "${CANARY:-}" ] && touch "$OUT/CANARY"
 # The socket gets a folder of its own: it is the one host folder mounted in the agents' sandboxes.
 SOCKDIR=$(mktemp -d "$WORK/sock.XXXXXX"); SOCK=$SOCKDIR/p.sock
 

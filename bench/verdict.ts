@@ -77,7 +77,7 @@ function registration(file: string, startedAt: number | undefined): { ok: boolea
   const last = Number(lastT) * 1000;
   const when = (t: number) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
   if (dirty) return { ok: false, detail: `the rule file has changes that are not committed` };
-  if (startedAt === undefined) return { ok: false, detail: "the rounds record no start time" };
+  if (startedAt === undefined) return { ok: false, detail: "some task-runs of the rounds record no start time, so it cannot be shown that the rule came first" };
   if (first > startedAt) return { ok: false, detail: `committed at ${when(first)} UTC (${firstH}), after the rounds started (${when(startedAt)} UTC)` };
   if (last > startedAt) return { ok: false, detail: `committed before the rounds (${firstH}) but changed at ${when(last)} UTC (${lastH}), after they started` };
   return { ok: true, detail: `committed at ${when(first)} UTC (${firstH}), before the rounds started (${when(startedAt)} UTC)` };
@@ -97,14 +97,19 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   type Pair = { round: string; base: boolean; cand: boolean; baseCost: number; candCost: number };
   const pairs: Pair[] = [];
   let startedAt: number | undefined;
+  // A run with no start time makes the start of the rounds unknown, and with it whether the rule came first.
+  let unknownStart = false;
   for (const round of rounds) {
     const runs = taskRuns(round);
-    for (const r of runs) if (r.startedAt && (startedAt === undefined || r.startedAt < startedAt)) startedAt = r.startedAt;
+    for (const r of runs) {
+      if (!r.startedAt) unknownStart = true;
+      else if (startedAt === undefined || r.startedAt < startedAt) startedAt = r.startedAt;
+    }
     const cost = costByRun(round, { firstOnly: metric === "pass" });
     const base = new Map(runs.filter((r) => r.agent === rule.baseline).map((r) => [r.task, r]));
     for (const c of runs.filter((r) => r.agent === rule.candidate)) {
       const b = base.get(c.task);
-      if (b) pairs.push({ round: basename(round), base: passed(b), cand: passed(c), baseCost: cost.get(runKey(b)) ?? 0, candCost: cost.get(runKey(c)) ?? 0 });
+      if (b) pairs.push({ round: basename(round), base: passed(b), cand: passed(c), baseCost: cost.get(runKey(b)) ?? NaN, candCost: cost.get(runKey(c)) ?? NaN });
     }
   }
   const n = pairs.length;
@@ -114,18 +119,23 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const onlyBase = pairs.filter((p) => p.base && !p.cand).length;
   const lead = n ? (100 * (candPassed - basePassed)) / n : 0;
   const p = signTest(onlyCand, onlyCand + onlyBase);
+  // Cost is compared over the pairs whose cost is known on both sides: a model with no price, or a run with no
+  // request on record, is unknown, not free. How many were left out is shown, and any makes the cost conditions fail.
+  const priced = pairs.filter((p) => Number.isFinite(p.baseCost) && Number.isFinite(p.candCost));
+  const unpriced = pairs.length - priced.length;
   const sum = (xs: Pair[], k: "baseCost" | "candCost") => xs.reduce((s, x) => s + x[k], 0);
-  const baseCost = sum(pairs, "baseCost");
-  const candCost = sum(pairs, "candCost");
+  const baseCost = sum(priced, "baseCost");
+  const candCost = sum(priced, "candCost");
   const ratio = baseCost ? candCost / baseCost : NaN;
   // A 95% interval for the cost ratio: resample task-runs with replacement, 2,000 times.
   const draws: number[] = [];
   const rand = rng(12345);
-  for (let i = 0; i < 2000 && n; i++) {
+  const np = priced.length;
+  for (let i = 0; i < 2000 && np; i++) {
     let bc = 0;
     let cc = 0;
-    for (let j = 0; j < n; j++) {
-      const x = pairs[Math.floor(rand() * n)]!;
+    for (let j = 0; j < np; j++) {
+      const x = priced[Math.floor(rand() * np)]!;
       bc += x.baseCost;
       cc += x.candCost;
     }
@@ -135,18 +145,20 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const interval: [number, number] = draws.length ? [draws[Math.floor(draws.length * 0.025)]!, draws[Math.floor(draws.length * 0.975)]!] : [NaN, NaN];
   const perRound = [...new Set(pairs.map((x) => x.round))].map((round) => {
     const xs = pairs.filter((x) => x.round === round);
-    const b = sum(xs, "baseCost");
-    return { round, pairs: xs.length, lead: (100 * (xs.filter((x) => x.cand).length - xs.filter((x) => x.base).length)) / xs.length, costRatio: b ? sum(xs, "candCost") / b : NaN };
+    const known = xs.filter((x) => Number.isFinite(x.baseCost) && Number.isFinite(x.candCost));
+    const b = sum(known, "baseCost");
+    return { round, pairs: xs.length, lead: (100 * (xs.filter((x) => x.cand).length - xs.filter((x) => x.base).length)) / xs.length, costRatio: b ? sum(known, "candCost") / b : NaN };
   });
 
   const conditions: Condition[] = [];
   const d = rule.decide;
-  if (d.minLeadPoints !== undefined) conditions.push({ what: `${rule.candidate} at least ${d.minLeadPoints} points ${d.minLeadPoints >= 0 ? "ahead of" : "behind at worst"} ${rule.baseline}`, met: n > 0 && lead >= d.minLeadPoints, detail: `${lead >= 0 ? "+" : ""}${lead.toFixed(1)} points` });
+  if (d.minLeadPoints !== undefined) conditions.push({ what: d.minLeadPoints >= 0 ? `${rule.candidate} at least ${d.minLeadPoints} points ahead of ${rule.baseline}` : `${rule.candidate} at most ${-d.minLeadPoints} points behind ${rule.baseline}`, met: n > 0 && lead >= d.minLeadPoints, detail: `${lead >= 0 ? "+" : ""}${lead.toFixed(1)} points` });
   if (d.maxP !== undefined) conditions.push({ what: `the difference is significant (sign test p < ${d.maxP}) and in the candidate's favour`, met: p < d.maxP && onlyCand > onlyBase, detail: `p = ${p.toFixed(3)}; ${onlyCand} task-runs only the candidate passed, ${onlyBase} only the baseline` });
-  if (d.cost === "lower") conditions.push({ what: "it costs less", met: ratio < 1, detail: `${((ratio - 1) * 100).toFixed(0)}% (${pct(candCost, baseCost, 0)} of the baseline's cost)` });
-  else if (d.cost === "lowerSure") conditions.push({ what: "it costs less, with the whole 95% interval below", met: interval[1] < 1, detail: `ratio ${ratio.toFixed(2)}, interval ${interval[0].toFixed(2)} to ${interval[1].toFixed(2)}` });
-  else if (d.cost && typeof d.cost === "object") conditions.push({ what: `it costs at most ${d.cost.maxRatio} times the baseline`, met: ratio <= d.cost.maxRatio, detail: `ratio ${ratio.toFixed(2)}` });
-  const reg = registration(ruleFile, startedAt);
+  const unknownCost = unpriced ? `; cost unknown for ${unpriced} of ${pairs.length} pairs (a model with no price, or no request on record)` : "";
+  if (d.cost === "lower") conditions.push({ what: "it costs less", met: !unpriced && ratio < 1, detail: `${((ratio - 1) * 100).toFixed(0)}% (${pct(candCost, baseCost, 0)} of the baseline's cost)${unknownCost}` });
+  else if (d.cost === "lowerSure") conditions.push({ what: "it costs less, with the whole 95% interval below", met: !unpriced && interval[1] < 1, detail: `ratio ${ratio.toFixed(2)}, interval ${interval[0].toFixed(2)} to ${interval[1].toFixed(2)}${unknownCost}` });
+  else if (d.cost && typeof d.cost === "object") conditions.push({ what: `it costs at most ${d.cost.maxRatio} times the baseline`, met: !unpriced && ratio <= d.cost.maxRatio, detail: `ratio ${ratio.toFixed(2)}${unknownCost}` });
+  const reg = registration(ruleFile, unknownStart ? undefined : startedAt);
   return {
     rule,
     rounds: rounds.map((r) => basename(r)),

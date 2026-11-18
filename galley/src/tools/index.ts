@@ -9,11 +9,12 @@ export const BUILTIN_TOOLS: Tool[] = [readTool, listTool, globTool, grepTool, ed
 /** Run one tool call. Every failure becomes an error result the model can read. */
 export async function runTool(tools: Tool[], call: ToolCall, ctx: ToolContext): Promise<ToolResult> {
   const tool = tools.find((t) => t.spec.name === call.name);
-  const fail = (content: string): ToolResult => ({ callId: call.id, name: call.name, content, isError: true });
+  let note = "";
+  // A mended call that then fails says what was assumed, so the model can see why.
+  const fail = (content: string): ToolResult => ({ callId: call.id, name: call.name, content: note + content, isError: true });
   if (!tool) return fail(`Unknown tool "${call.name}". Available: ${tools.map((t) => t.spec.name).join(", ")}`);
   if (!call.input) return fail(`Invalid JSON arguments: ${call.rawInput.slice(0, 500)}`);
   let input = call.input;
-  let note = "";
   if (tool.repair && validateInput(tool.spec.parameters, input)) {
     const mended = tool.repair(input, ctx);
     if (mended && !validateInput(tool.spec.parameters, mended.input)) ({ input, note } = { input: mended.input, note: `(${mended.note})\n` });

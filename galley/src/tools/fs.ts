@@ -257,32 +257,50 @@ export function locate(hay: string, needle: string): { index: number; length: nu
   return hits.length ? { ...hits[0]!, count: hits.length } : undefined;
 }
 
-/** Files under the workspace that contain `text`, skipping folders of dependencies and builds. Stops at `limit`. */
-function filesContaining(root: string, text: string, limit = 2): string[] {
-  const skip = new Set([".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__", ".gradle", "vendor"]);
-  const out: string[] = [];
-  const walk = (dir: string, depth: number) => {
-    if (depth > 12 || out.length >= limit) return;
+/** The files under `root` that contain `text`: undefined unless the answer is certain and cheap. In a git repository
+ *  the candidates are its tracked and untracked files, minus ignored ones; elsewhere a walk that gives up when it
+ *  would have to skip a folder, go deeper than 12 levels, or read more than 5,000 files or 50 MB. */
+function filesContaining(root: string, text: string): string[] | undefined {
+  const MAX_FILES = 5000;
+  const MAX_BYTES = 50 * 1024 * 1024;
+  let files = 0;
+  let bytes = 0;
+  const hits: string[] = [];
+  const check = (p: string): boolean => {
+    if (++files > MAX_FILES) return false;
+    try {
+      const st = statSync(p);
+      if (!st.isFile() || st.size > 1_000_000) return true;
+      bytes += st.size;
+      if (bytes > MAX_BYTES) return false;
+      const body = readFileSync(p, "utf8");
+      if (!body.slice(0, 8000).includes("\0") && body.includes(text)) hits.push(p);
+    } catch {}
+    return true;
+  };
+  const ls = spawnSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 20_000 });
+  if (ls.status === 0) {
+    for (const f of ls.stdout.split("\0")) if (f && !check(join(root, f))) return undefined;
+    return hits;
+  }
+  const walk = (dir: string, depth: number): boolean => {
+    if (depth > 12) return false;
     let entries: import("node:fs").Dirent[];
     try {
       entries = readdirSync(dir, { withFileTypes: true });
     } catch {
-      return;
+      return false;
     }
     for (const e of entries) {
-      if (out.length >= limit) return;
       const p = join(dir, e.name);
+      if (e.isSymbolicLink()) return false;
       if (e.isDirectory()) {
-        if (!skip.has(e.name)) walk(p, depth + 1);
-      } else if (e.isFile()) {
-        try {
-          if (statSync(p).size <= 1_000_000 && readFileSync(p, "utf8").includes(text)) out.push(p);
-        } catch {}
-      }
+        if (!walk(p, depth + 1)) return false;
+      } else if (e.isFile() && !check(p)) return false;
     }
+    return true;
   };
-  walk(root, 0);
-  return out;
+  return walk(root, 0) ? hits : undefined;
 }
 
 export const editTool: Tool = {
@@ -291,7 +309,10 @@ export const editTool: Tool = {
   repair(input, ctx) {
     if (input.path !== undefined || typeof input.old_string !== "string" || input.old_string.length < 8) return undefined;
     const hits = filesContaining(ctx.workspace, input.old_string);
-    if (hits.length !== 1) return undefined;
+    if (hits?.length !== 1) return undefined;
+    // The scratch folder is a place edit can write to as well: a match there makes the workspace's match uncertain.
+    const scratch = scratchRoot(ctx);
+    if (scratch && scratch !== ctx.workspace && !scratch.startsWith(`${ctx.workspace}/`) && filesContaining(scratch, input.old_string)?.length !== 0) return undefined;
     const path = relative(ctx.workspace, hits[0]!);
     return { input: { ...input, path }, note: `no path was given; ${path} is the only file containing old_string` };
   },

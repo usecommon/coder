@@ -81,7 +81,7 @@ One model does the work. Others can help in five ways, all off unless you config
 - four calls in a row were refused (bad arguments, text to replace not found);
 - two thirds of the step limit are used and the work is not finished.
 
-These signals are recorded in the session file each time one fires. Replayed over 5,874 earlier benchmark runs on small tasks, they fired on 1.2% of failing runs and 0.5% of passing ones: on small tasks they are almost silent, and within one task no better than chance. Whether they carry information on long tasks is not yet measured ([`bench/signals.ts`](../bench/signals.ts), [improvement log](../bench/IMPROVEMENT_LOG.md)).
+These signals are recorded in the session file each time one fires. Replayed over 5,904 earlier benchmark runs on small tasks, they fired on 1.2% of failing runs and 0.4% of passing ones: on small tasks they are almost silent, and within one task no better than chance. Whether they carry information on long tasks is not yet measured ([`bench/signals.ts`](../bench/signals.ts), [improvement log](../bench/IMPROVEMENT_LOG.md)).
 
 **What Galley knows about models.** `galley models` (or `/models`) prints, for each model it has a profile of, the share of hard terminal tasks it solved on the Terminal-Bench 4.1 board, what a run cost there, and its prices. It then suggests roles for the models your keys can reach:
 
@@ -133,11 +133,10 @@ The choices in this mode follow published research: a reviewer stronger than the
 galley run "fix the date parser" --check "npm test"
 ```
 
-When a turn that changed anything ends, Galley runs the check command in the sandbox (network off). If it fails, its output goes back to the model, which fixes the cause and stops again; the check then runs again. After three failed checks (`checkRounds`) the turn ends with a warning.
+When a turn that changed files ends (through the file tools, or a command that left the workspace different), Galley runs the check command in the sandbox with the network off; without a sandbox it asks first, as `bash` does. If the check fails, its output goes back to the model, which fixes the cause and stops again, and the check runs again. Up to three failures (`checkRounds`) are fed back; if it still fails after that, or no step is left, the turn ends with a warning. The steps of a `--steps` plan are checked together after the last one.
 
 - **The model is told not to edit tests or special-case their inputs, and that it may say a test is wrong instead.** In one study, giving the model that way out cut gaming of tests from 54% to 9%.
 - **A reviewer reads the check's output beside the diff,** so its review rests on something that ran.
-- **In `--steps` mode only the last step is checked.** Halfway through a plan, failing tests are expected.
 - **Every check run is recorded in the session file,** so that how many rounds turns need can be measured (`bench/calibrate.ts`).
 - **`"lessons": true` keeps what a project teaches,** only when the project's check proves it. When a check that failed comes to pass, Galley asks the helper model for one sentence: what caused the failure and what fixed it, as advice about the project. At the start of a later session it reads back at most one such note: the one that shares the most with the request, if any does, and never one about files that are gone. The note is marked as possibly out of date. Off by default and not measured: memory written and read by the same model added 2 to 6 points in published work, one retrieved note did better than several, and notes nothing had checked did harm.
 - **Why:** running code is the one feedback that does not rest on a model's opinion. Given human-written tests as the target, one agent solved 94.3% of SWE-bench Verified; writing its own, 68.0%. Feeding back the output of tests the agent could not see raised Galley's own pass rate by 24 to 49 points on a second attempt ([galley-against-the-field.md](../research/galley-against-the-field.md)). With the project's own visible tests the gain is what the model fails to do unprompted, which is not measured.

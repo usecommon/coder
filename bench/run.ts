@@ -848,6 +848,9 @@ await pool(jobs, CONC, async ({ agent, t }) => {
   const r = {
     agent, lang: t.lang, name: t.name, pass, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started,
     memoryKills: a.memoryKills + g.memoryKills + (second ? second.a.memoryKills + second.g.memoryKills : 0),
+    // How Galley was run, beyond its config file: which checkout and which extra flags. The measured profiles and
+    // the canary count only runs of the default checkout with no extra flags.
+    ...(agent.startsWith("galley") || VARIANTS[agent]?.galley ? { galley: galleyOf(agent) === GALLEY ? "default" : galleyOf(agent), galleyArgs: [...GALLEY_ARGS, ...(VARIANTS[agent]?.args ?? [])] } : {}),
     // With two attempts allowed: `pass` stays the first attempt's result, `pass2` is the result after both.
     ...(ATTEMPTS >= 2 ? { attempts: second ? 2 : 1, pass2, ...(second ? { startedAt2: second.started, agentMs2: second.a.ms, agentTimedOut2: second.a.timedOut, gradeExit2: second.g.code } : {}) } : {}),
   };
