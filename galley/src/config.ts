@@ -58,6 +58,15 @@ export interface Config {
   /** Takes over for the rest of a turn that stays in trouble (after the advisor's advice, when there is an advisor).
    *  Ignored when the model profiles say it is not stronger than the model in use. */
   escalateModel?: string;
+  /** What the model that takes over reads. "edits" (default): the request and the files as they now stand, not the
+   *  other model's attempt. "transcript": the whole session. Measured on SWE-bench Verified, the first recovered 64 to
+   *  84% of the stronger model's advantage and the second 36 to 47%, at a higher price (research/reports, area 1). */
+  escalateContext?: "edits" | "transcript";
+  /** A command that checks the work, e.g. "npm test" or "pytest -q". When a turn that changed files ends, it is run
+   *  in the sandbox; if it fails, its output goes back to the model, up to `checkRounds` times a turn. */
+  check?: string;
+  /** How many failed checks a turn feeds back before it ends anyway (default 3). */
+  checkRounds?: number;
   /** Work on a task in small steps: a plan first, then one turn for each step. With `advisor.review` on, each step
    *  is checked by the advisor before the next one starts. */
   steps?: boolean;

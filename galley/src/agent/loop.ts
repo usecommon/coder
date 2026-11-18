@@ -1,5 +1,6 @@
 // The agent loop: call the model, run the tools it asks for, feed results back, repeat until it stops.
-import { realpathSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import type { AdvisorConfig, Config, Effort } from "../config.ts";
 import type { AgentEvent, AgentEventInput, Message, StopReason, ToolCall, ToolResult, Usage } from "../core/types.ts";
 import { addUsage, emptyUsage } from "../core/types.ts";
@@ -8,13 +9,14 @@ import { profiles, rereadCost, weakerWarning } from "../provider/models.ts";
 import type { ChatResponse } from "../provider/types.ts";
 import { costUsd, DEFAULT_PRICES } from "../provider/pricing.ts";
 import { PermissionGate, type Approver, type Mode } from "../safety/permission.ts";
-import { detectSandbox, type SandboxKind } from "../safety/sandbox.ts";
-import { Session } from "../session/store.ts";
+import { detectSandbox, exec, type SandboxKind } from "../safety/sandbox.ts";
+import { projectDir, Session } from "../session/store.ts";
 import { adviseTool } from "../tools/advise.ts";
 import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
-import { ToolError, type Tool, type ToolContext } from "../tools/types.ts";
+import { scratchDir } from "../tools/bash.ts";
+import { ToolError, truncate, type Tool, type ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
-import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
+import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, freshStartMessage, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
@@ -44,7 +46,16 @@ export interface SendOptions {
   /** How the advisor's review at the end of this turn is put: its question, and whether it reads the whole session
    *  or only this turn (one step of a plan). Used when `advisor.review` is on. */
   review?: { question: string; scope: "turn" | "session" };
+  /** Run the configured check command when this turn ends (default true). Off for the steps of a plan but the last. */
+  check?: boolean;
 }
+
+/** What the model reads when a check fails. Telling it that it may report a wrong test, instead of bending the code
+ *  or the test to pass, cut gaming of tests from 54% to 9% in one study (research/reports, area 5). */
+export const checkFailedMessage = (command: string, exitCode: number | null, output: string, round: number, rounds: number) =>
+  `The check \`${command}\` failed (${exitCode === null ? "no exit code" : `exit code ${exitCode}`}; check ${round} of ${rounds} this turn):\n\n${output}\n\n` +
+  "Find the cause and fix it, then give a brief final summary; the check runs again when you stop. " +
+  "Do not edit or delete tests, or special-case their inputs, to make them pass. If you are sure a test is wrong or the request cannot be met, stop and say so instead.";
 
 export interface TurnResult {
   text: string;
@@ -106,6 +117,9 @@ export class Agent {
   }
 
   /** The model a turn starts on: the plan model in plan mode when one is set, otherwise the session's model. */
+  /** While a model that took over without the transcript is working: where in the session its view starts. */
+  private viewFrom?: number;
+
   get turnModel(): string {
     return this.mode === "plan" && !this.o.subagent && this.o.cfg.planModel ? this.o.cfg.planModel : this.model;
   }
@@ -148,6 +162,7 @@ export class Agent {
     // and the next turn starts from the session's own model again.
     let ref = this.turnModel;
     splitModel(ref);
+    this.viewFrom = undefined;
     this.undo.beginTurn();
     this.consults = 0;
     this.consultUsage = emptyUsage();
@@ -171,6 +186,13 @@ export class Agent {
     let advisorReviewed = false;
     let stuckConsults = 0;
     let handedOver = false;
+    // The check command: whether the model changed anything since the last check, how many checks failed, and the
+    // last result, which a reviewing advisor reads beside the diff.
+    const checking = !!cfg.check && o.check !== false && !this.o.subagent && this.mode !== "plan";
+    const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
+    let acted = false;
+    let checkFails = 0;
+    let checkReport: string | undefined;
     const failed = new Set<string>();
     const maxSteps = this.o.maxSteps ?? cfg.maxSteps;
     const watch = new Watch(maxSteps);
@@ -217,20 +239,45 @@ export class Agent {
       }
       if (!res.toolCalls.length) {
         if (res.stopReason === "max_tokens") this.emit({ type: "notice", level: "warn", text: "The reply hit the output token limit." });
-        // Self-review: once per turn, if files changed, ask the model to check its work against the request.
-        else if (cfg.review && !reviewed && this.undo.changedThisTurn() > 0) {
-          reviewed = true;
-          this.session.addMessage({ role: "user", content: REVIEW_PROMPT });
-          continue;
-        }
-        // The advisor's review: once per turn, a second model checks the change against the request.
-        else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < maxConsults(cfg.advisor) && !signal?.aborted) {
-          advisorReviewed = true;
-          const scoped = o.review?.scope === "turn";
-          const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, changes(this.workspace, this.undo.snapshots()), scoped ? turnStart : undefined);
-          if (report && !reviewPassed(report)) {
-            this.session.addMessage({ role: "user", content: reviewMessage(cfg.advisor.model, report) });
+        else {
+          // The check: run the project's own test command and feed a failure back. Running code is the one feedback
+          // that does not rest on a model's opinion (research/reports, areas 2 and 5).
+          if (checking && acted && !signal?.aborted) {
+            acted = false;
+            const r = await this.runCheck(cfg.check!, signal);
+            if (signal?.aborted) {
+              stopReason = "other";
+              break;
+            }
+            checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
+            if (r.exitCode === 0 && !r.timedOut) this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
+            else if (checkFails < checkRounds) {
+              checkFails++;
+              this.emit({ type: "notice", level: "warn", text: `Check failed (${checkFails} of ${checkRounds}): ${cfg.check}` });
+              this.session.addMessage({ role: "user", content: checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds) });
+              continue;
+            } else {
+              this.emit({ type: "notice", level: "warn", text: `Check still failing after ${checkRounds} rounds: ${cfg.check}` });
+              break;
+            }
+          }
+          // Self-review: once per turn, if files changed, ask the model to check its work against the request.
+          if (cfg.review && !reviewed && this.undo.changedThisTurn() > 0) {
+            reviewed = true;
+            this.session.addMessage({ role: "user", content: REVIEW_PROMPT });
             continue;
+          }
+          // The advisor's review: once per turn, a second model checks the change against the request.
+          else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < maxConsults(cfg.advisor) && !signal?.aborted) {
+            advisorReviewed = true;
+            const scoped = o.review?.scope === "turn";
+            const diff = changes(this.workspace, this.undo.snapshots());
+            const files = checkReport ? `${diff}\n\nThe project's check, run after this change:\n${checkReport}` : diff;
+            const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, files, scoped ? turnStart : undefined);
+            if (report && !reviewPassed(report)) {
+              this.session.addMessage({ role: "user", content: reviewMessage(cfg.advisor.model, report) });
+              continue;
+            }
           }
         }
         break;
@@ -240,6 +287,7 @@ export class Agent {
           ? res.toolCalls.map<ToolResult>((c) => ({ callId: c.id, name: c.name, isError: true, content: "Your output was cut off at the token limit, so this call was not run. Retry with a smaller change." }))
           : await this.runTools(res.toolCalls, signal);
       this.session.addMessage({ role: "tool", results });
+      if (res.toolCalls.some((c) => !this.tools.find((t) => t.spec.name === c.name)?.readOnly)) acted = true;
       if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });
 
       // When the tools show the turn going badly, bring in a second model: advice first, then a handover.
@@ -263,8 +311,19 @@ export class Agent {
           if (weaker) this.emit({ type: "notice", level: "warn", text: `Not handing over to ${up}: ${weaker}` });
           else {
             const reread = rereadCost(up!, this.lastInputTokens, { ...DEFAULT_PRICES, ...cfg.pricing });
-            this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}.${reread !== undefined ? ` It reads the session afresh: about ${usd(reread)}.` : ""}` });
-            this.session.addMessage({ role: "user", content: handoverMessage(ref, sig.detail) });
+            if (cfg.escalateContext === "transcript") {
+              this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}.${reread !== undefined ? ` It reads the session afresh: about ${usd(reread)}.` : ""}` });
+              this.session.addMessage({ role: "user", content: handoverMessage(ref, sig.detail) });
+            } else {
+              // The stronger model starts from the request and the files, not from the attempt that went wrong.
+              this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}. It starts from the request and the files as they are now.` });
+              const earlier = turnStart > 0 ? this.session.messages.find((m) => m.role === "user")?.content : undefined;
+              this.viewFrom = this.session.messages.length;
+              this.session.addMessage({
+                role: "user",
+                content: freshStartMessage({ from: ref, why: sig.detail, request: text, earlier: typeof earlier === "string" ? earlier : undefined, files: changes(this.workspace, this.undo.snapshots()), environment: environmentNote(this.workspace) }),
+              });
+            }
             ref = up!;
             watch.rearm();
           }
@@ -301,6 +360,7 @@ export class Agent {
       break;
     }
 
+    this.viewFrom = undefined;
     turnUsage = addUsage(turnUsage, this.consultUsage);
     turnCost += this.consultCost;
     this.emit({ type: "turn_end", usage: turnUsage, costUsd: turnCost, stopReason });
@@ -343,7 +403,7 @@ export class Agent {
     return this.withRetry(
       () =>
         provider.chat(
-          { model, system, messages: this.session.messages, tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: this.effort ?? cfg.effort, signal },
+          { model, system, messages: this.viewFrom === undefined ? this.session.messages : this.session.messages.slice(this.viewFrom), tools: this.tools.map((t) => t.spec), maxTokens: cfg.maxTokens, effort: this.effort ?? cfg.effort, signal },
           {
             onText: (t) => this.emit({ type: "text", text: t }),
             onReasoning: (t) => this.emit({ type: "reasoning", text: t }),
@@ -451,8 +511,31 @@ export class Agent {
     return r.text || `(the helper finished without an answer; stop reason: ${r.stopReason})`;
   }
 
+  /** Run the check command in the sandbox, as the bash tool would but without asking: the user configured it. */
+  private async runCheck(command: string, signal?: AbortSignal) {
+    const cacheDir = join(projectDir(this.workspace), "cache");
+    const tmpDir = scratchDir(this.workspace);
+    mkdirSync(cacheDir, { recursive: true });
+    mkdirSync(tmpDir, { recursive: true });
+    const r = await exec(command, {
+      cwd: this.workspace,
+      workspace: this.workspace,
+      readOnly: false,
+      network: false,
+      timeoutMs: 600_000,
+      signal,
+      kind: this.o.cfg.sandbox === "off" ? "none" : this.sandbox,
+      cacheDir,
+      tmpDir,
+    });
+    let output = truncate(r.output.trimEnd(), this.o.cfg.maxToolOutput);
+    if (r.timedOut) output += "\n[timed out after 600s]";
+    return { output, exitCode: r.exitCode, timedOut: r.timedOut };
+  }
+
   private async maybeCompact(signal?: AbortSignal) {
-    if (this.lastInputTokens < this.o.cfg.compactAt) return;
+    // A model that took over reads only its own part of the session; compaction would move where that part starts.
+    if (this.lastInputTokens < this.o.cfg.compactAt || this.viewFrom !== undefined) return;
     const msgs = this.session.messages;
     const cut = compactionCut(msgs);
     if (cut < 0) return;

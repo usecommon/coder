@@ -58,8 +58,9 @@ export async function runSteps(agent: Agent, task: string, signal?: AbortSignal)
   last = await planning(planRequest(task));
   let usage = last.usage;
   let costUsd = last.costUsd;
-  const run = async (text: string, review?: { question: string; scope: "turn" }) => {
-    last = await agent.send(text, signal, { review });
+  // The check command runs after the last step only: halfway through a plan, failing tests are expected.
+  const run = async (text: string, review?: { question: string; scope: "turn" }, check = true) => {
+    last = await agent.send(text, signal, { review, check });
     usage = addUsage(usage, last.usage);
     costUsd += last.costUsd;
     return last.stopReason === "end_turn";
@@ -95,7 +96,7 @@ export async function runSteps(agent: Agent, task: string, signal?: AbortSignal)
   for (; done < steps.length; done++) {
     if (signal?.aborted) break;
     // A step that ends in an error, a refusal or its step limit leaves the work in a state the next step cannot build on.
-    if (!(await run(stepRequest(done + 1, steps.length, steps[done]!), { question: stepQuestion(done + 1, steps), scope: "turn" }))) break;
+    if (!(await run(stepRequest(done + 1, steps.length, steps[done]!), { question: stepQuestion(done + 1, steps), scope: "turn" }, done === steps.length - 1))) break;
   }
   if (done < steps.length && !signal?.aborted) agent.note(`Stopped in step ${done + 1} of ${steps.length}: it did not finish.`, "warn");
   return result(steps, done);

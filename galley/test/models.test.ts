@@ -290,7 +290,7 @@ describe("a second model in the session", () => {
 
   test("a stronger model takes over a turn that goes badly, and the next turn starts on the session's model", async () => {
     const strong = second("up1", [{ text: "Found it: the file is present.txt." }]);
-    const { mock, agent, notices } = setup([stuck, stuck, stuck, { text: "Second turn." }], { escalateModel: "up1/strong" });
+    const { mock, agent, notices } = setup([stuck, stuck, stuck, { text: "Second turn." }], { escalateModel: "up1/strong", escalateContext: "transcript" });
     const r = await agent.send("read the file");
     expect(mock.requests).toHaveLength(3);
     expect(strong.requests).toHaveLength(1);
@@ -301,6 +301,32 @@ describe("a second model in the session", () => {
     const r2 = await agent.send("and now?");
     expect(r2.text).toBe("Second turn.");
     expect(strong.requests).toHaveLength(1);
+  });
+
+  test("by default the model that takes over starts from the request and the files, not the transcript", async () => {
+    const strong = second("up5", [{ toolCalls: [{ name: "write", input: { path: "b.txt", content: "two" } }] }, { text: "Done from the files." }]);
+    const writeA: MockReply = { toolCalls: [{ name: "write", input: { path: "a.txt", content: "one" } }] };
+    const { ws, mock, agent, notices } = setup([writeA, stuck, stuck, stuck, { text: "Next turn on my own." }], { escalateModel: "up5/strong" });
+    const r = await agent.send("make a.txt and b.txt");
+    expect(r.text).toBe("Done from the files.");
+    expect(mock.requests).toHaveLength(4);
+    // Its first request is one message: the request, why it was brought in, and the change so far. No attempt.
+    const first = strong.requests[0]!;
+    expect(first.messages).toHaveLength(1);
+    const msg = lastUser(first);
+    expect(msg).toContain("<environment>");
+    expect(msg).toContain("make a.txt and b.txt");
+    expect(msg).toContain("You are not shown its attempt");
+    expect(msg).toContain("a.txt (new file)");
+    expect(msg).not.toContain("missing.txt");
+    // It then reads its own work as usual.
+    expect(strong.requests[1]!.messages.map((m) => m.role)).toEqual(["user", "assistant", "tool"]);
+    expect(readFileSync(join(ws, "b.txt"), "utf8")).toBe("two");
+    expect(notices().some((n) => n.includes("It starts from the request and the files as they are now."))).toBe(true);
+    // The next turn is the session's own model again, and it reads the whole session.
+    await agent.send("anything else?");
+    expect(mock.requests).toHaveLength(5);
+    expect(mock.requests[4]!.messages.length).toBeGreaterThan(10);
   });
 
   test("no handover to a model the profiles say is not stronger", async () => {
@@ -691,5 +717,67 @@ describe("a task done in small steps", () => {
     const { cmd, positional, flags } = parseArgs(["run", "do it", "-m", "deepseek/deepseek-flash", "--reviewer", "anthropic/claude-sonnet-5-5", "--steps"]);
     expect([cmd, positional]).toEqual(["run", ["do it"]]);
     expect(flags).toEqual({ model: "deepseek/deepseek-flash", reviewer: "anthropic/claude-sonnet-5-5", steps: true });
+  });
+});
+
+describe("the check command", () => {
+  const writeBroken: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+  const writeFixed: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+  const check = "grep -q right out.txt";
+
+  test("a failing check goes back to the model, and a passing one ends the turn", async () => {
+    const { mock, agent, notices } = setup([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }], { check, sandbox: "off" });
+    const r = await agent.send("write out.txt");
+    expect(r.text).toBe("Fixed.");
+    expect(mock.requests).toHaveLength(4);
+    const fed = lastUser(mock.requests[2]!);
+    expect(fed).toContain(`The check \`${check}\` failed (exit code 1; check 1 of 3 this turn)`);
+    expect(fed).toContain("Do not edit or delete tests");
+    expect(notices()).toContain(`Check failed (1 of 3): ${check}`);
+    expect(notices()).toContain(`Check passed: ${check}`);
+  });
+
+  test("it is not run when the model changed nothing, and it gives up after its rounds", async () => {
+    const { mock, agent, notices } = setup([{ text: "Nothing to do." }], { check, sandbox: "off" });
+    await agent.send("look around");
+    expect(notices().some((n) => n.startsWith("Check"))).toBe(false);
+    expect(mock.requests).toHaveLength(1);
+    const again = setup((_req, n) => (n % 2 === 0 ? writeBroken : { text: "Done." }), { check, checkRounds: 2, sandbox: "off" });
+    await again.agent.send("write out.txt");
+    // Two failures fed back, a third check that fails ends the turn.
+    expect(again.mock.requests).toHaveLength(6);
+    expect(again.notices()).toContain(`Check still failing after 2 rounds: ${check}`);
+  });
+
+  test("a model that stops without changing anything after a failure is not checked again", async () => {
+    const { mock, notices, agent } = setup([writeBroken, { text: "Done." }, { text: "The test is wrong: it wants 'right'." }], { check, sandbox: "off" });
+    const r = await agent.send("write out.txt");
+    expect(r.text).toBe("The test is wrong: it wants 'right'.");
+    expect(mock.requests).toHaveLength(3);
+    expect(notices().filter((n) => n.startsWith("Check failed"))).toHaveLength(1);
+  });
+
+  test("a reviewing advisor reads the check's output beside the diff", async () => {
+    const adv = second("advc", [{ text: "OK" }]);
+    const { agent } = setup([writeFixed, { text: "Done." }], { check, sandbox: "off", advisor: { model: "advc/strong", review: true } });
+    await agent.send("write out.txt");
+    expect(adv.requests).toHaveLength(1);
+    const read = lastUser(adv.requests[0]!);
+    expect(read).toContain("out.txt (new file)");
+    expect(read).toContain(`The project's check, run after this change:\n$ ${check}`);
+    expect(read).toContain("[exit code 0]");
+  });
+
+  test("the steps of a plan are checked only at the end", async () => {
+    const plan: MockReply = { text: "1. Write the file.\n2. Check it." };
+    const { mock, agent, notices } = setup([plan, writeBroken, { text: "Step 1 done." }, writeFixed, { text: "Step 2 done." }], { check, sandbox: "off" });
+    const r = await runSteps(agent, "write out.txt");
+    expect(r.done).toBe(2);
+    expect(mock.requests).toHaveLength(5);
+    expect(notices().filter((n) => n.startsWith("Check"))).toEqual([`Check passed: ${check}`]);
+  });
+
+  test("--check sets the command", () => {
+    expect(parseArgs(["run", "--check", "npm test", "fix it"]).flags.check).toBe("npm test");
   });
 });

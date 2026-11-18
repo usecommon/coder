@@ -59,6 +59,15 @@ export const reviewMessage = (advisor: string, report: string) =>
   `A second model (${advisor}) reviewed your change against the request and reported:\n\n${report}\n\n` +
   "Check each point yourself: it has not run the code and can be wrong. Fix what is really wrong, re-run your checks, and give a brief final summary.";
 
+/** What a stronger model reads when it takes over without the transcript: the request, where the work stands
+ *  (the files as they are now) and why it was brought in. A model that inherits the whole transcript was measured to
+ *  recover less than half of what it adds on its own; given only the edits, 64 to 84% (research/reports, area 1). */
+export const freshStartMessage = (o: { from: string; why: string; request: string; earlier?: string; files: string; environment: string }) =>
+  `${o.environment}\n\n${o.earlier ? `Earlier in this session the user asked:\n\n${clip(o.earlier, 4000)}\n\nThe current request:\n\n` : ""}${o.request}\n\n` +
+  `You are taking over this task from another model (${o.from}) because ${o.why}. You are not shown its attempt, only where the files stand. ` +
+  "Work from the request and the files as they are now: keep what is right, change what is not." +
+  (o.files ? `\n\nWhat has been changed so far:\n\n<files_changed>\n${o.files}\n</files_changed>` : "\n\nNo file has been changed yet.");
+
 export const handoverMessage = (from: string, why: string) =>
   `You are taking over this session from another model (${from}) because ${why}. Do not assume its approach was right: ` +
   "re-read the request and the latest results, decide for yourself what is wrong, and continue from the files as they are now.";

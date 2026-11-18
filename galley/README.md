@@ -71,7 +71,7 @@ One model does the work. Others can help in five ways, all off unless you config
 | `smallModel` | Helpers (`task`) and compaction run on a cheaper model | Always, for those jobs |
 | `planModel` | Plan mode uses this model; build mode uses `model` | While in `/plan` |
 | `advisor` | A second model reads the session and gives short advice. It runs nothing, and the main model keeps its context and its cached prompt | When Galley sees the turn going badly, when the main model asks through the `advise` tool, and, with `"review": true`, once before a turn that changed files ends |
-| `escalateModel` | A stronger model takes over the rest of the turn; the next turn starts on `model` again | When the trouble comes back after the advisor's advice, or at the first sign of it if there is no advisor |
+| `escalateModel` | A stronger model takes over the rest of the turn; the next turn starts on `model` again. It starts from the request and the files as they now stand, not from the other model's attempt (`"escalateContext": "transcript"` hands it the whole session instead) | When the trouble comes back after the advisor's advice, or at the first sign of it if there is no advisor |
 | `fallbackModels` | Another model serves the rest of the turn | When the provider keeps failing (dropped connections, time-outs, rate limits, server errors) after three tries |
 
 **How Galley knows a turn is going badly.** It does not ask the model. It reads what the tools returned:
@@ -90,6 +90,7 @@ For the keys that are set:
   avoid        deepseek/deepseek-v4-pro  (weaker and dearer: 6.7% against 38.5% for deepseek/deepseek-flash)
 ```
 
+- **The model that takes over does not read the attempt that went wrong.** In a controlled study on SWE-bench Verified, a stronger model that inherited the transcript recovered 36 to 47% of what it adds on its own, at a higher price; given only the request and the edits, 64 to 84% ([the second survey](../research/reports/Multi%20model%20methods%20further%20areas.md), area 1). Not yet measured in Galley.
 - **Galley will not hand a turn to a model its profiles say is not stronger.** A second try by the same model does about as much, for less.
 - **Nothing finer is recorded** (which model for debugging, which for front-end work), because no public source measures it. Add or correct profiles under `"models"` in `galley.json`.
 - **A switch has a price, and Galley states it.** The new model reads the whole session with nothing cached. `/model` shows the amount before you switch. A change of `/effort` costs the same re-read: each effort level has a cache of its own (measured on DeepSeek).
@@ -124,6 +125,19 @@ The choices in this mode follow published research: a reviewer stronger than the
 
 **Status: tested, not yet measured.** The mechanics are covered by tests and by a few real runs. Whether they raise the pass rate on real tasks, and at what cost, has not been measured. The evidence from other harnesses says to expect a small gain where the second model is clearly stronger and the signals fire, and a loss of money where it is not: see [`research/model-switching.md`](../research/model-switching.md). On small tasks one consult of a strong model can cost more than the whole task on a cheap one.
 
+## Checking the work: `--check`
+
+```bash
+galley run "fix the date parser" --check "npm test"
+```
+
+When a turn that changed anything ends, Galley runs the check command in the sandbox (network off). If it fails, its output goes back to the model, which fixes the cause and stops again; the check then runs again. After three failed checks (`checkRounds`) the turn ends with a warning.
+
+- **The model is told not to edit tests or special-case their inputs, and that it may say a test is wrong instead.** In one study, giving the model that way out cut gaming of tests from 54% to 9%.
+- **A reviewer reads the check's output beside the diff,** so its review rests on something that ran.
+- **In `--steps` mode only the last step is checked.** Halfway through a plan, failing tests are expected.
+- **Why:** running code is the one feedback that does not rest on a model's opinion. Given human-written tests as the target, one agent solved 94.3% of SWE-bench Verified; writing its own, 68.0%. Feeding back the output of tests the agent could not see raised Galley's own pass rate by 24 to 49 points on a second attempt ([galley-against-the-field.md](../research/galley-against-the-field.md)). With the project's own visible tests the gain is what the model fails to do unprompted, which is not measured.
+
 ## Using it
 
 **Interactive commands:** `/plan`, `/build`, `/undo`, `/model <ref>`, `/models`, `/effort <level>`, `/advisor <ref|off>`, `/steps <task>`, `/cost`, `/sessions`, `/init`, `/exit`. Ctrl-C cancels a running turn.
@@ -134,6 +148,7 @@ The choices in this mode follow published research: a reviewer stronger than the
 galley run "task" [--plan] [--yes] [--json] [--worktree] [--detach]
 galley run "task" -m deepseek/deepseek-flash --advisor anthropic/claude-opus-5-5 [--escalate <model>] [--effort high]
 galley run "task" -m deepseek/deepseek-flash --reviewer anthropic/claude-sonnet-5-5 --steps   # a worker and a reviewer, step by step
+galley run "task" --check "pytest -q"   # run the project's tests when the model stops; failures go back to it
 galley models                         # what is known about each model, and roles for the keys you have
 galley -s <session-id> [--fork]       # resume, or branch off a session
 galley sessions                       # id, cost, status, title
@@ -162,6 +177,8 @@ galley serve --port 4096              # HTTP + SSE server (see below)
   "network": "ask",          // approval policy for commands that request network access
   "sandbox": "auto",         // "off" runs commands unsandboxed (each one then asks)
   "compactAt": 120000,
+  "check": "npm test",       // optional: run when a turn that changed files ends; failures go back to the model
+  "checkRounds": 3,
   "providers": { "mylab": { "baseURL": "http://gpu-box:8000/v1", "apiKeyEnv": "MYLAB_KEY" } },
   "mcp": { "github": { "command": "github-mcp-server", "args": ["stdio"] } },
   "pricing": { "mylab/coder-32b": { "input": 0, "output": 0 } }

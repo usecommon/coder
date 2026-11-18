@@ -40,6 +40,8 @@ Options:
   --steps                          plan first, then work in small steps (each one checked when there is a reviewer)
   --observe <n>                    the advisor or reviewer also looks in on the work every n steps
   --escalate <provider/model>      a stronger model that takes over a turn that stays in trouble
+  --check <command>                run this check (e.g. "npm test") when a turn that changed files ends;
+                                   a failure goes back to the model, up to 3 times a turn
   --effort <level>                 reasoning effort: low, medium, high, xhigh or max
   --plan                           start in read-only plan mode
   -s, --session <id>               resume a session      --fork   continue it as a new session
@@ -111,6 +113,10 @@ async function main() {
     cfg.advisor = { ...cfg.advisor, every: n };
   }
   if (typeof flags.escalate === "string") cfg.escalateModel = flags.escalate;
+  if (typeof flags.check === "string") {
+    if (!flags.check.trim()) throw new Error("--check takes a command, e.g. --check \"npm test\"");
+    cfg.check = flags.check;
+  }
   if (typeof flags.effort === "string") {
     if (!EFFORTS.includes(flags.effort as Effort)) throw new Error(`--effort is one of: ${EFFORTS.join(", ")}`);
     cfg.effort = flags.effort as Effort;
@@ -209,7 +215,7 @@ function detach(workspace: string, cfg: Config, flags: Args["flags"], task: stri
   const self = /\.(ts|js|mjs)$/.test(script) && !script.startsWith("/$bunfs") ? [script] : [];
   const args = [...self, "run", task, "--cwd", workspace];
   if (session) args.push("--session-id", session.id);
-  for (const f of ["model", "advisor", "reviewer", "observe", "escalate", "effort"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
+  for (const f of ["model", "advisor", "reviewer", "observe", "escalate", "effort", "check"]) if (typeof flags[f] === "string") args.push(`--${f}`, String(flags[f]));
   for (const f of ["yes", "plan", "worktree", "no-sandbox", "verify", "steps"]) if (flags[f]) args.push(`--${f}`);
   const child = spawn(process.execPath, args, { detached: true, stdio: ["ignore", fd, fd], cwd: workspace });
   child.unref();

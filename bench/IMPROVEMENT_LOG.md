@@ -534,3 +534,12 @@ Two changes to the worker-and-reviewer mode follow from it:
 | **`--observe <n>`: the reviewer looks in on the work every n steps,** later after a look that found nothing, as soon again after one that found something | Guidance during the run is where the gains were measured, and an adapting interval did best |
 
 Tests: 129 pass. Smoke run `smoke-obs1` (two used-up Lua tasks, DeepSeek in both roles): two plan reviews, one of which found a fault that the worker then fixed in its plan; five looks, none with a finding; five step reviews. Spend: $0.013. Not measured on a benchmark.
+
+## Two changes from the second survey (18 November, built, not measured)
+
+The second survey of multi-model methods ([research/reports/Multi model methods further areas.md](../research/reports/Multi%20model%20methods%20further%20areas.md)) found that what holds up rests on a check that runs code, and that a stronger model taking over a failing run does better without its transcript. Two changes follow. Both are general agent features, nothing specific to this benchmark.
+
+- **`--check <command>` (config `check`, `checkRounds`).** When a turn that used a tool able to change files ends, the command runs in the sandbox with the network off. A failure goes back to the model, up to three times a turn, with an instruction not to edit tests or special-case their inputs, and permission to say a test is wrong. A reviewing advisor reads the output beside the diff. In `--steps` mode only the last step is checked.
+- **Takeover from the files.** `escalateModel` now starts the stronger model from one message: the request, why it was brought in, and the changes so far as a diff. It does not see the attempt. `"escalateContext": "transcript"` keeps the old behaviour. The next turn returns to the session's own model and reads the whole session.
+- **Tests:** seven new, on the offline model; the suite is 136 pass. One ran the check through the real bubblewrap sandbox.
+- **Why neither is measured here:** the Exercism benchmark hides its tests, so a project check has nothing to run, and the takeover signals rarely fire on small tasks. Both need hard tasks with visible tests (Terminal-Bench or DeepSWE), which needs a container runtime and an adapter. No model was called.
