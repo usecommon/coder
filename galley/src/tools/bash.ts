@@ -41,7 +41,9 @@ export const bashTool: Tool = {
         // "./" keeps CDPATH out of it, and "--" a folder whose name starts with a dash.
         // On a line of its own, so that a background "&" later in the command does not leave the folder behind.
         command = `cd -- './${rel.replaceAll("'", "'\\''")}' || exit 1\n${command}`;
-        notes.push(`bash has no path argument; ran the command in ${rel}`);
+        // Not mended into a command the rules would refuse where the plain one was allowed.
+        if (!ctx.gate.allows({ tool: "bash", subject: String(command) }) && ctx.gate.allows({ tool: "bash", subject: String(rest.command) })) return undefined;
+        notes.push(`bash has no path argument; the command runs in ${rel}`);
       } else notes.push("bash has no path argument; the command runs in the workspace");
     }
     return notes.length ? { input: { ...rest, command }, note: notes.join("; ") } : undefined;

@@ -270,6 +270,7 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
   const MAX_FILES = 5000;
   const MAX_BYTES = 50 * 1024 * 1024;
   const want = loose(text);
+  const realRoot = realpathSync(root);
   let files = 0;
   let bytes = 0;
   const hits: string[] = [];
@@ -278,6 +279,11 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
     try {
       const st = lstatSync(p);
       if (st.isDirectory()) return walk(p, 0);
+      // A link to a file under the same root: that file is searched where it lies.
+      if (st.isSymbolicLink()) {
+        const target = realpathSync(p);
+        return target.startsWith(`${realRoot}/`) && statSync(target).isFile();
+      }
       if (!st.isFile() || st.size > 1_000_000) return false;
       // A file the model may not read is not searched for it: that makes the answer uncertain.
       if (!mayRead(p)) return false;
@@ -310,11 +316,18 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
   if (listed) {
     // A folder in git's own list is a nested repository or submodule: not searched, so uncertain. Ignored folders
     // are searched, within the same limits.
+    for (const f of listed.ignored) if (!check(join(root, f.replace(/\/$/, "")))) return undefined;
     for (const f of listed.listed) {
       const p = join(root, f);
-      if (lstatSync(p, { throwIfNoEntry: false })?.isDirectory() || !check(p)) return undefined;
+      let st;
+      try {
+        st = lstatSync(p, { throwIfNoEntry: false });
+      } catch {
+        return undefined; // a path git lists that cannot be looked at (a folder replaced by a file, no access)
+      }
+      if (!st) continue; // deleted since it was committed: nothing to search
+      if (st.isDirectory() || !check(p)) return undefined;
     }
-    for (const f of listed.ignored) if (!check(join(root, f.replace(/\/$/, "")))) return undefined;
     return hits;
   }
   return walk(root, 0) ? hits : undefined;
@@ -325,6 +338,8 @@ export const editTool: Tool = {
   // A call without a path is mended when exactly one file in the workspace contains the text to replace.
   repair(input, ctx) {
     if (input.path !== undefined || typeof input.old_string !== "string" || input.old_string.length < 8) return undefined;
+    // Under Seatbelt the scratch folder is the shared system /tmp: no scan of it can be certain, so none is made.
+    if (ctx.sandbox === "seatbelt") return undefined;
     const mayRead = (p: string) => ctx.gate.allows({ tool: "read", subject: displayPath(ctx.workspace, p) });
     const hits = filesContaining(ctx.workspace, input.old_string, mayRead);
     if (hits?.length !== 1) return undefined;

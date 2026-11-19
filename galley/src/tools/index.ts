@@ -16,7 +16,12 @@ export async function runTool(tools: Tool[], call: ToolCall, ctx: ToolContext): 
   if (!call.input) return fail(`Invalid JSON arguments: ${call.rawInput.slice(0, 500)}`);
   let input = call.input;
   if (tool.repair && validateInput(tool.spec.parameters, input)) {
-    const mended = tool.repair(input, ctx);
+    let mended: ReturnType<NonNullable<Tool["repair"]>>;
+    try {
+      mended = tool.repair(input, ctx);
+    } catch {
+      mended = undefined; // a repair that fails leaves the call as it was
+    }
     if (mended && !validateInput(tool.spec.parameters, mended.input)) ({ input, note } = { input: mended.input, note: `(${mended.note})\n` });
   }
   const invalid = validateInput(tool.spec.parameters, input);

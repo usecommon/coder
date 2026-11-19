@@ -30,7 +30,8 @@ export function replay(recs: SessionRecord[] | undefined, maxSteps: number): Rep
     const m = ms[i]!;
     if (m.role !== "assistant") continue;
     const next = ms[i + 1];
-    if (m.toolCalls.length && next?.role === "tool") {
+    // Live, the watcher is not consulted on the last step allowed.
+    if (m.toolCalls.length && next?.role === "tool" && step < maxSteps - 1) {
       const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
       if (sig && !fired.has(sig.kind)) fired.set(sig.kind, step);
     }

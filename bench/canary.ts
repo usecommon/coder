@@ -59,6 +59,10 @@ function select(args: string[]) {
   const enough = [...history].filter(([, [, n]]) => n >= 4);
   const stable = byHash(enough.filter(([, [k, n]]) => k / n >= 0.9)).slice(0, 24);
   const hard = byHash(enough.filter(([, [k]]) => k === 0)).slice(0, 6);
+  if (!stable.length) {
+    console.error("No stable task qualifies (check the rounds path, --model, --effort and --langs); canary.json left unchanged.");
+    process.exit(1);
+  }
   const c: Canary = { selected: new Date().toISOString().slice(0, 10), model, effort, stable: Object.fromEntries(stable), hard: Object.fromEntries(hard) };
   writeFileSync(FILE, JSON.stringify(c, null, 1) + "\n");
   console.log(`${history.size} tasks with history; ${enough.length} with four runs or more. Chose ${stable.length} stable and ${hard.length} hard tasks.`);
@@ -100,7 +104,10 @@ function check(round: string) {
   const missing = Object.keys({ ...c.stable, ...c.hard }).filter((t) => !got.has(t));
   if (missing.length) console.log(`Not run (or not at ${c.model}, effort ${c.effort}): ${missing.join(", ")}.`);
   const missingStable = Object.keys(c.stable).filter((t) => !got.has(t));
-  if (pValue < 0.05) {
+  if (!Object.keys(c.stable).length) {
+    console.log("INCONCLUSIVE: canary.json lists no stable task. Run canary.ts select first.");
+    process.exitCode = 1;
+  } else if (pValue < 0.05) {
     console.log("REGRESSION: more stable tasks failed than history explains. Look before running a full round.");
     process.exitCode = 1;
   } else if (missingStable.length) {

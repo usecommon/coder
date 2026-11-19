@@ -111,7 +111,9 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     // Every helper's own usage counts as helpers. Sessions written before the parent's roll-up was marked still
     // hold an unmarked copy of it: take it out of the parent's bucket, but never more than the parent recorded on
     // that model, since a helper cut off mid-run never got its roll-up written.
-    const marked = r.main.some((x) => x.type === "usage" && (x as { helper?: string }).helper);
+    // Sessions that record each `galley run` also mark every roll-up: an unmarked helper cost there is one that
+    // never reached the parent (the run was cut off while the helper worked), so nothing is subtracted.
+    const marked = r.main.some((x) => (x.type === "usage" && (x as { helper?: string }).helper) || x.type === "run");
     const parentOn = new Map<string, number>();
     for (const x of r.main) if (x.type === "usage") parentOn.set((x as { model: string }).model, (parentOn.get((x as { model: string }).model) ?? 0) + (x as { costUsd: number }).costUsd);
     for (const h of r.helpers) {

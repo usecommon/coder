@@ -24,7 +24,7 @@
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { costByRun, pct, roundDirs, runKey, signTest, taskRuns } from "./sessions.ts";
+import { BROKEN_TASKS, costByRun, pct, roundDirs, runKey, signTest, taskRuns } from "./sessions.ts";
 
 export interface Rule {
   id: string;
@@ -103,6 +103,8 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   let startedAt: number | undefined;
   // A run with no start time makes the start of the rounds unknown, and with it whether the rule came first.
   let unknownStart = false;
+  let missingCand = 0;
+  let missingBase = 0;
   for (const round of rounds) {
     const runs = taskRuns(round);
     for (const r of runs) {
@@ -110,8 +112,15 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
       else if (startedAt === undefined || r.startedAt < startedAt) startedAt = r.startedAt;
     }
     const cost = costByRun(round, { firstOnly: metric === "pass" });
-    const base = new Map(runs.filter((r) => r.agent === rule.baseline).map((r) => [r.task, r]));
-    for (const c of runs.filter((r) => r.agent === rule.candidate)) {
+    // The tasks the benchmark itself has broken are left out, as the round reports leave them out.
+    const scored = runs.filter((r) => !BROKEN_TASKS.has(r.task));
+    const base = new Map(scored.filter((r) => r.agent === rule.baseline).map((r) => [r.task, r]));
+    const cands = scored.filter((r) => r.agent === rule.candidate);
+    const candTasks = new Set(cands.map((r) => r.task));
+    // A task-run with no result on one side (no model answer, a crash) is not a pair: it is counted and reported.
+    missingCand += [...base.keys()].filter((t) => !candTasks.has(t)).length;
+    missingBase += cands.filter((r) => !base.has(r.task)).length;
+    for (const c of cands) {
       const b = base.get(c.task);
       if (b) pairs.push({ round: basename(round), base: passed(b), cand: passed(c), baseCost: cost.get(runKey(b)) ?? NaN, candCost: cost.get(runKey(c)) ?? NaN });
     }
@@ -163,6 +172,8 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   else if (d.cost === "lowerSure") conditions.push({ what: "it costs less, with the whole 95% interval below", met: !unpriced && interval[1] < 1, detail: `ratio ${ratio.toFixed(2)}, interval ${interval[0].toFixed(2)} to ${interval[1].toFixed(2)}${unknownCost}` });
   else if (d.cost && typeof d.cost === "object") conditions.push({ what: `it costs at most ${d.cost.maxRatio} times the baseline`, met: !unpriced && ratio <= d.cost.maxRatio, detail: `ratio ${ratio.toFixed(2)}${unknownCost}` });
   let reg = registration(ruleFile, unknownStart ? undefined : startedAt);
+  if (missingCand || missingBase)
+    conditions.push({ what: "every task-run has a result on both sides", met: false, detail: `${missingCand} of the candidate's and ${missingBase} of the baseline's have no result (no model answer or a crash); run them again` });
   const named = rule.rounds ?? [];
   const judged = rounds.map((r) => basename(r));
   if (reg.ok && !named.length) reg = { ok: false, detail: `${reg.detail}; but the rule names no rounds, so the rounds judged could have been picked after the fact` };

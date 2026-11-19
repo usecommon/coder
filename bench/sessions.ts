@@ -154,8 +154,17 @@ export const BROKEN_TASKS = new Set(["rust/macros", "go/octal"]);
  *  (rounds "fresh-1" to "fresh-4" are one series, run with one version of the harness). Comparing a
  *  failing with a passing run is fair only within one such group; across them a signal is rewarded for telling a weak
  *  model from a strong one. */
+const modelsCache = new Map<string, Map<string, string>>();
+/** The model of one task-run: its config's, or the one its requests named in the proxy log. */
+export function modelOf(r: TaskRun): string {
+  if (typeof r.config?.model === "string") return r.config.model;
+  let m = modelsCache.get(r.roundDir);
+  if (!m) modelsCache.set(r.roundDir, (m = modelsByRun(r.roundDir)));
+  return m.get(runKey(r)) ?? "";
+}
+
 export const conditionKey = (r: TaskRun, model?: string) =>
-  [r.task, r.agent, model ?? (r.config?.model as string | undefined) ?? "", (r.config?.effort as string | undefined) ?? "", (r.config?.maxSteps as number | undefined) ?? 60, r.round.replace(/-\d+$/, "")].join("|");
+  [r.task, r.agent, model ?? modelOf(r), (r.config?.effort as string | undefined) ?? "", (r.config?.maxSteps as number | undefined) ?? 60, r.round.replace(/-\d+$/, "")].join("|");
 
 /** A canary round: picked tasks, not a sample. Marked by canary.sh, or named so. */
 export const isCanary = (round: string) => /canary/i.test(basename(round)) || existsSync(join(round, "CANARY"));

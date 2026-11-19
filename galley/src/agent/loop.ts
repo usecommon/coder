@@ -99,7 +99,8 @@ export class Agent {
   constructor(private o: AgentOptions) {
     this.workspace = realpathSync(o.workspace);
     // Before any model turn: which git repository the workspace is in, if any (see workspace-state.ts).
-    recordGit(this.workspace);
+    // Galley's folder for the project holds the sandbox's /tmp and caches, which commands can write.
+    recordGit(this.workspace, [projectDir(this.workspace)]);
     this.model = o.model ?? o.cfg.model;
     this.effort = o.effort;
     this.gate = new PermissionGate(o.cfg.permission, o.approver, o.mode ?? "build");
@@ -283,7 +284,11 @@ export class Agent {
             this.ranCommands = false;
             this.checkedPrint = fingerprint(this.workspace) ?? "";
             // A check the user declined to run is no failure to feed back.
-            if (r.skipped !== undefined) this.emit({ type: "notice", level: "warn", text: `The check was not run: ${r.skipped}` });
+            if (r.skipped !== undefined) {
+              // The last report is of earlier files: a reviewer must not read it as this change's.
+              checkReport = undefined;
+              this.emit({ type: "notice", level: "warn", text: `The check was not run: ${r.skipped}` });
+            }
             else {
               checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
               const passed = r.exitCode === 0 && !r.timedOut;

@@ -651,3 +651,28 @@ Also fixed from the unverified ones: a background `&` in a mended `bash` command
 Figures after the fixes: profiles without the broken tasks, Claude Sonnet 5.5 87.5% of 303 and DeepSeek V4.1 Flash 69.0% of 901 (default effort) and 61.0% of 2,718 (high); the signal replay, with pairs only within one condition (658 pairs instead of 9,684), still finds every signal at chance within a task (AUC 0.498 to 0.503); the verdict on the fourth confirmation is unchanged. Tests: 171 pass.
 
 **Three rounds compared.** Findings fell from 60 to 39 to 32, and every defect a skeptic checked held in all three. The first round found errors in the measuring scripts; the second and third each found a way for a model to run code on the host through git, one closed and one opened by the fixes of the round before. Fixes that add host-side commands deserve the most scrutiny.
+
+## Fourth council review (19 November)
+
+Fresh agents again, with the security lens now naming every program Galley starts on the host. 25 findings, 19 distinct defects (after 60, 39 and 32). Of the 14 checked by an agent told to refute them, **12 held and 2 were refuted** for the first time: a test that could miss a regression no code path produces, and a check that is skipped on purpose and already tested. Two reviewers hit the account's usage limit midway; the run was resumed hours later with the eight finished reviews taken from cache.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Git on the host, a third time.** The trust check read only the shared config file, once: a filter in the per-worktree config passed it, and a git folder placed elsewhere in the workspace could be given a filter after the check. Both ran a program on the host. Reproduced | high | Fixed as a class, not an instance: system and user-wide config are not read; worktree attributes are ignored; the repository's own config, shared and per-worktree, is checked for anything that runs a program before every call, not once; a git folder anywhere the sandbox can write, other than the read-only `.git`, is refused. Four tests, each failing with its protection taken out |
+| An edit repair could throw out of the tool runner and end the turn (a listed path whose folder became a file) | medium | A repair that fails is no repair; the path is treated as uncertain |
+| The condition key never held the model, so runs of different models were still paired | medium | The model comes from the proxy log when the config does not name it |
+| The verdict scored the benchmark's broken tasks | medium | Left out, as the reports leave them out |
+| A commit made through the shell left the fingerprint unchanged, so the check did not run | medium | The commit is part of the fingerprint |
+| In a takeover, a long list of untracked files could crowd the diff out | medium | Untracked folders as one line, the list held to a quarter of the space |
+| The verdict dropped task-runs with no counterpart without a word | medium | Counted, reported, and the rule is not met until they are run again |
+| An empty canary selection ran a full round and then reported no regression | medium | Refused at selection, in the runner and in the check |
+| Under macOS the edit repair scanned the shared system `/tmp` and almost never mended | low | It does not try there |
+| A filter defined in system or user config (git-lfs) could run for an attribute the model wrote | low | Covered by the class fix |
+| After a declined check, the reviewer read the previous check's output as this change's | low | Cleared |
+| The edit repair read the whole tree and then gave up on any link in an ignored folder | low | Ignored folders first; a link to a file inside the workspace is not a reason to give up |
+
+Also fixed from the unverified ones: a mended `bash` call is not turned into a command the rules refuse when the plain one was allowed, and its note no longer says it ran; the miner does not subtract a cut-off helper's cost in sessions of the new format; the replay does not read signals on the last step allowed, as the live loop does not; the stale-turn test checks that compaction happened; the submodule test has room for its many processes. Not fixed: the replay keeps counting steps across the verifier's second pass, where the live loop starts again at zero (it affects only runs with the verifier on).
+
+Figures: unchanged (the verdict on the fourth confirmation, the signals at chance within a condition, the profiles). Tests: 177 pass.
+
+**Four rounds compared.** 60, 39, 32, 25 findings; 14, 14, 14 and 12 confirmed of those checked. Each of the last three rounds found a way to run a program on the host through git, each in code the previous round's fix had added or left narrow. This time the fix closes the mechanism (no program-running config is trusted from any source the model could reach) rather than the path reported.

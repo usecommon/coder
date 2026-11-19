@@ -6,6 +6,7 @@ set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 NAME=${1:-canary-$(date -u +%Y%m%d-%H%M)}
 ONLY=$(python3 -I -c 'import json,sys; c=json.load(open(sys.argv[1])); print(",".join([*c["stable"], *c["hard"]]))' "$HERE/canary.json")
+[ -n "$ONLY" ] || { echo "canary.json lists no tasks: run canary.ts select first"; exit 1; }
 MODEL_NAME=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["model"])' "$HERE/canary.json")
 case "$MODEL_NAME" in claude-*) MODEL=anthropic/$MODEL_NAME ;; *) MODEL=deepseek/$MODEL_NAME ;; esac
 EFFORT=$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["effort"])' "$HERE/canary.json")

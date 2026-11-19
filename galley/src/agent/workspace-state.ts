@@ -9,36 +9,74 @@
 // would run, is not used at all.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
 interface GitContext {
   gitDir: string;
+  commonDir: string;
   top: string;
 }
 
 const recorded = new Map<string, GitContext | null>();
 // Submodules are not entered: a submodule's .git is inside the workspace, where the model can write its config.
-const HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.untrackedCache=false", "-c", "diff.ignoreSubmodules=all", "-c", "submodule.recurse=false", "-c", "status.submoduleSummary=false"];
-/** Local config keys that make git run a program: such a repository is not trusted. */
-const RUNS_PROGRAMS = /^(filter\.|diff\.[^.]+\.(textconv|command)|merge\.[^.]+\.driver|core\.(fsmonitor|hookspath|pager|sshcommand|askpass|editor)|include(if)?\.)/i;
+// Attributes are read from the empty tree, so a .gitattributes the model writes names no filter or diff driver.
+const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+const HARDEN = [
+  `--attr-source=${EMPTY_TREE}`,
+  ...["core.fsmonitor=false", "core.hooksPath=/dev/null", "diff.external=", "core.untrackedCache=false", "diff.ignoreSubmodules=all", "submodule.recurse=false", "status.submoduleSummary=false", "core.attributesFile=/dev/null"].flatMap((c) => ["-c", c]),
+];
+/** System and user-wide config are not read: a filter defined there (git-lfs) would run for an attribute the model
+ *  wrote. Only the repository's own config is read, and only after it was checked. */
+const ENV = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
+/** Config keys that make git run a program: a repository that sets one is not trusted. */
+const RUNS_PROGRAMS = /^(filter\.|diff\.[^.]+\.(textconv|command)|merge\.[^.]+\.driver|core\.(fsmonitor|hookspath|pager|sshcommand|askpass|editor|gitproxy)|include(if)?\.|credential\.|uploadpack\.|receive\.)/i;
 
-/** Record the workspace's repository, if it has one. Call once per workspace, before the model can write to it. */
-export function recordGit(ws: string): void {
-  if (recorded.has(ws)) return;
-  const r = spawnSync("git", ["-C", ws, ...HARDEN, "rev-parse", "--absolute-git-dir", "--show-toplevel"], { encoding: "utf8", timeout: 20_000 });
-  const [gitDir, top] = r.status === 0 ? r.stdout.trim().split("\n") : [];
-  if (!gitDir || !top) return void recorded.set(ws, null);
-  const local = spawnSync("git", [...HARDEN, `--git-dir=${gitDir}`, "config", "--local", "--name-only", "--list"], { encoding: "utf8", timeout: 20_000 });
-  const keys = local.status === 0 ? local.stdout.split("\n").filter(Boolean) : [""];
-  recorded.set(ws, keys.some((k) => RUNS_PROGRAMS.test(k)) ? null : { gitDir, top });
+const spawnGit = (args: string[]) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 30_000, env: ENV });
+
+/** Whether the repository's own config (both the shared and the per-worktree file) sets nothing that runs a program. */
+function configIsSafe(gitDir: string): boolean {
+  const r = spawnGit([...HARDEN, `--git-dir=${gitDir}`, "config", "--name-only", "--list", "--show-scope"]);
+  if (r.status !== 0) return false;
+  return r.stdout
+    .split("\n")
+    .filter(Boolean)
+    .every((line) => {
+      const [scope, key = ""] = line.split("\t");
+      return scope === "command" || !RUNS_PROGRAMS.test(key);
+    });
 }
 
-/** Run git on the recorded repository. Undefined when there is none, or the workspace was never recorded. */
+const inside = (dir: string, root: string) => dir === root || dir.startsWith(`${root}/`);
+
+/** Record the workspace's repository, if it has one. Call once per workspace, before the model can write to it. The
+ *  repository is refused when its git folder is somewhere the sandbox can write (inside the workspace, apart from
+ *  <workspace>/.git, which the sandbox mounts read-only, or in Galley's own folder for the project), or when its
+ *  config would run a program. */
+export function recordGit(ws: string, writable: string[] = []): void {
+  if (recorded.has(ws)) return;
+  const r = spawnGit(["-C", ws, ...HARDEN, "rev-parse", "--absolute-git-dir", "--git-common-dir", "--show-toplevel"]);
+  const [gitDirRaw, commonRaw, top] = r.status === 0 ? r.stdout.trim().split("\n") : [];
+  if (!gitDirRaw || !commonRaw || !top) return void recorded.set(ws, null);
+  let gitDir: string;
+  let commonDir: string;
+  try {
+    gitDir = realpathSync(gitDirRaw);
+    commonDir = realpathSync(isAbsolute(commonRaw) ? commonRaw : join(ws, commonRaw));
+  } catch {
+    return void recorded.set(ws, null);
+  }
+  const dotGit = join(ws, ".git");
+  const exposed = [gitDir, commonDir].some((d) => (inside(d, ws) && !inside(d, dotGit)) || writable.some((w) => inside(d, w)));
+  recorded.set(ws, exposed || !configIsSafe(gitDir) ? null : { gitDir, commonDir, top });
+}
+
+/** Run git on the recorded repository. Undefined when there is none, the workspace was never recorded, or its config
+ *  has since come to set something that runs a program (checked again before every call). */
 export function git(ws: string, args: string[]) {
   const ctx = recorded.get(ws);
-  if (!ctx) return undefined;
-  const r = spawnSync("git", ["-C", ws, ...HARDEN, `--git-dir=${ctx.gitDir}`, `--work-tree=${ctx.top}`, ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 30_000 });
+  if (!ctx || !configIsSafe(ctx.gitDir)) return undefined;
+  const r = spawnGit(["-C", ws, ...HARDEN, `--git-dir=${ctx.gitDir}`, `--work-tree=${ctx.top}`, ...args]);
   return r.status === 0 ? { stdout: r.stdout, top: ctx.top } : undefined;
 }
 
@@ -61,7 +99,9 @@ export function fingerprint(ws: string): string | undefined {
     const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", "."]);
     const d = diff(ws, ["--binary"]);
     if (!status || !d) return undefined;
-    h.update(status.stdout).update(d.stdout);
+    // The commit too: changes committed through the shell leave a clean tree but are changes all the same.
+    const head = git(ws, ["rev-parse", "-q", "--verify", "HEAD"]);
+    h.update(status.stdout).update(d.stdout).update(head?.stdout ?? "no-head");
     // Untracked files are not in the diff: their size and time stand in. Status gives paths from the repository's
     // top, which may be above the workspace.
     for (const entry of status.stdout.split("\0"))
@@ -100,10 +140,12 @@ export function fingerprint(ws: string): string | undefined {
 /** What git says has changed in the workspace, clipped: for a model that takes over and cannot see the attempt.
  *  Empty when the workspace is not a recorded repository. */
 export function gitChanges(ws: string, maxChars = 20_000): string {
-  const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "--", "."])?.stdout.trim();
+  // Untracked folders as one line each, and the list held to a quarter of the space, so the diff is not crowded out.
+  const status = git(ws, ["status", "--porcelain=v1", "--ignore-submodules=all", "--", "."])?.stdout.trim();
   if (!status) return "";
-  const text = `$ git status --porcelain\n${status}\n\n$ git diff HEAD\n${diff(ws)?.stdout.trim() ?? ""}`;
-  return text.length > maxChars ? `${text.slice(0, maxChars)}\n[… ${text.length - maxChars} more characters]` : text;
+  const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}\n[… ${t.length - n} more characters]` : t);
+  const list = clip(status, Math.floor(maxChars / 4));
+  return `$ git status --porcelain\n${list}\n\n$ git diff HEAD\n${clip(diff(ws)?.stdout.trim() ?? "", maxChars - list.length)}`;
 }
 
 /** The workspace's files as git sees them: tracked and untracked ones that are not ignored, and separately the

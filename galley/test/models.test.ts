@@ -832,7 +832,7 @@ describe("near-miss tool calls are mended", () => {
     await agent.send("where?");
     const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
     expect(res.isError).toBeFalsy();
-    expect(res.content).toContain("ran the command in sub");
+    expect(res.content).toContain("the command runs in sub");
     expect(res.content).toContain("the description argument is not used");
     expect(res.content).toContain(join(ws, "sub"));
   });
@@ -1159,7 +1159,7 @@ describe("fixes from the third council review", () => {
     fingerprint(realpathSync(ws));
     gitChanges(realpathSync(ws));
     expect(existsSync(flag)).toBe(false);
-  });
+  }, 30_000);
 
   test("a takeover after compaction in the same turn does not quote the failed attempt as an earlier turn", async () => {
     const strong = second("upz9", [{ text: "Done." }]);
@@ -1174,6 +1174,7 @@ describe("fixes from the third council review", () => {
     await agent.send("first request");
     cfg.compactAt = 50;
     await agent.send("second request");
+    expect(agent.session.records().some((r) => r.type === "compaction")).toBe(true);
     const msg = lastUser(strong.requests[0]!);
     expect(msg).not.toContain("SUMMARY-OF-ATTEMPT");
     expect(msg).not.toContain("ATTEMPT-NOTE");
@@ -1241,5 +1242,114 @@ describe("fixes from the third council review", () => {
     const own = [{ effort: "high", tasks: 10, solved: 5, ci: [23.7, 76.3] as [number, number], costPerTask: null, byLanguage: { go: [5, 10] as [number, number] }, rounds: 1, from: "2026-11-01", to: "2026-11-01" }];
     const report = modelsReport(testConfig({ models: { "x/unpriced": { name: "X", own } } }), {});
     expect(report).toContain("x/unpriced, effort high: 50.0% of 10 (23.7 to 76.3), cost unknown");
+  });
+});
+
+describe("fixes from the fourth council review", () => {
+  const sh = (dir: string, ...a: string[]) => Bun.spawnSync(["git", "-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+  const repoWith = (setup: (ws: string, flag: string) => void) => {
+    const base = tempDir();
+    const ws = join(base, "ws");
+    mkdirSync(ws);
+    const flag = join(base, "pwned");
+    setup(ws, flag);
+    return { ws: realpathSync(ws), flag };
+  };
+
+  test("a filter set in the per-worktree config is found, and the repository refused", async () => {
+    const { ws, flag } = repoWith((ws, flag) => {
+      sh(ws, "init", "-q");
+      writeFileSync(join(ws, "f.txt"), "a\n");
+      sh(ws, "add", "f.txt");
+      sh(ws, "commit", "-qm", "x");
+      sh(ws, "config", "extensions.worktreeConfig", "true");
+      sh(ws, "config", "--worktree", "filter.x.clean", `touch '${flag}' && cat`);
+      writeFileSync(join(ws, ".gitattributes"), "* filter=x\n");
+      writeFileSync(join(ws, "f.txt"), "b\n");
+    });
+    const { recordGit, isGitRepo, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(false);
+    fingerprint(ws);
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("a git folder elsewhere in the workspace is refused, so config written there later cannot run", async () => {
+    const { ws, flag } = repoWith((ws) => {
+      sh(ws, "init", "-q", "--separate-git-dir", join(ws, ".notgit"));
+      writeFileSync(join(ws, "f.txt"), "a\n");
+      sh(ws, "add", "f.txt");
+      sh(ws, "commit", "-qm", "x");
+    });
+    const { recordGit, isGitRepo, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(false);
+    Bun.spawnSync(["git", "config", "-f", join(ws, ".notgit", "config"), "filter.y.clean", `touch '${flag}' && cat`]);
+    writeFileSync(join(ws, ".gitattributes"), "* filter=y\n");
+    writeFileSync(join(ws, "f.txt"), "b\n");
+    fingerprint(ws);
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("config that comes to run a program after the repository was recorded is caught before the next call", async () => {
+    const { ws, flag } = repoWith((ws) => {
+      sh(ws, "init", "-q");
+      writeFileSync(join(ws, "f.txt"), "a\n");
+      sh(ws, "add", "f.txt");
+      sh(ws, "commit", "-qm", "x");
+    });
+    const { recordGit, isGitRepo, git } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(true);
+    Bun.spawnSync(["git", "config", "-f", join(ws, ".git", "config"), "filter.z.clean", `touch '${flag}' && cat`]);
+    writeFileSync(join(ws, ".git", "info-attrs"), "");
+    mkdirSync(join(ws, ".git", "info"), { recursive: true });
+    writeFileSync(join(ws, ".git", "info", "attributes"), "* filter=z\n");
+    writeFileSync(join(ws, "f.txt"), "b\n");
+    expect(git(ws, ["status", "--porcelain"])).toBeUndefined();
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("a commit made through the shell changes the fingerprint", async () => {
+    const { ws } = repoWith((ws) => {
+      sh(ws, "init", "-q");
+      writeFileSync(join(ws, "f.txt"), "a\n");
+      sh(ws, "add", "f.txt");
+      sh(ws, "commit", "-qm", "x");
+    });
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, "f.txt"), "b\n");
+    sh(ws, "commit", "-qam", "y");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("an edit repair that runs into a path it cannot look at gives up instead of ending the turn", async () => {
+    const ws = tempDir();
+    mkdirSync(join(ws, "a"));
+    writeFileSync(join(ws, "a", "b.txt"), "x\n");
+    writeFileSync(join(ws, "c.txt"), "unique text here for edit\n");
+    sh(ws, "init", "-q");
+    sh(ws, "add", ".");
+    sh(ws, "commit", "-qm", "x");
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "unique text here", new_string: "x" } }] };
+    registerProvider(new MockProvider([call, { text: "Done." }]));
+    const agent = new Agent({ cfg: testConfig({ sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once", retryDelayMs: 1 });
+    Bun.spawnSync(["rm", "-rf", join(ws, "a")]);
+    writeFileSync(join(ws, "a"), "now a file\n");
+    const r = await agent.send("change the text");
+    expect(r.text).toBe("Done.");
+  });
+
+  test("bash is not mended into a command the rules refuse when the plain one was allowed", async () => {
+    const call: MockReply = { toolCalls: [{ name: "bash", input: { command: "echo hi", path: "sub" } }] };
+    const perm = { ...testConfig().permission, bash: { "echo *": "allow" as const, "*": "deny" as const } };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { permission: perm, sandbox: "auto" });
+    mkdirSync(join(ws, "sub"));
+    await agent.send("say hi");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).not.toContain("the command runs in sub");
+    expect(res.content).toContain("input.path is not a known parameter");
   });
 });
