@@ -4,5 +4,12 @@
   "baseline": "opencode",
   "candidate": "galley",
   "metric": "pass",
-  "decide": { "minLeadPoints": 5, "maxP": 0.05, "cost": "lower" }
+  "rounds": [
+    "t4-1"
+  ],
+  "decide": {
+    "minLeadPoints": 5,
+    "maxP": 0.05,
+    "cost": "lower"
+  }
 }

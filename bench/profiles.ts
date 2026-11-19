@@ -3,13 +3,14 @@
 //
 //   bun bench/profiles.ts <rounds-dir> [<rounds-dir> …] [--write]
 //
-// Only task-runs of Galley at its defaults count: a variant whose config changes anything but the model, the
-// effort or the step limit is left out, and so are rounds whose names say they were dry runs, smoke tests or
-// invalid. The result is the first attempt. Cost is the first attempt's, at list price. With --write the figures
-// go to galley/src/provider/measured.json, which `galley models` reads. No model is called.
+// Only task-runs of Galley as it ships count: the repository's own checkout with no extra flags, and a config that
+// sets nothing but the model, the effort and the provider's address (a changed step limit or helper model leaves a
+// run out). Rounds whose names say they were dry runs, smoke tests or invalid are left out, and so are canary rounds
+// and the tasks the benchmark itself has broken. The result is the first attempt. Cost is the first attempt's, at
+// list price. With --write the figures are merged into galley/src/provider/measured.json, which `galley models` reads.
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
+import { BROKEN_TASKS, costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
 
 // Canary rounds are left out too: their tasks were picked for being stable, which would bias the figures.
 const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|canary/i;
@@ -39,7 +40,7 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
     const models = modelsByRun(round);
     const cost = costByRun(round, { firstOnly: true });
     for (const r of taskRuns(round)) {
-      if (!isDefaultGalley(r)) continue;
+      if (!isDefaultGalley(r) || BROKEN_TASKS.has(r.task)) continue;
       const model = models.get(runKey(r));
       if (!model) continue;
       const effort = typeof r.config!.effort === "string" ? r.config!.effort : "default";

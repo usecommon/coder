@@ -1,5 +1,5 @@
 // The agent loop: call the model, run the tools it asks for, feed results back, repeat until it stops.
-import { mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import type { AdvisorConfig, Config, Effort } from "../config.ts";
 import type { AgentEvent, AgentEventInput, Message, StopReason, ToolCall, ToolResult, Usage } from "../core/types.ts";
@@ -125,6 +125,8 @@ export class Agent {
   private viewFrom?: number;
   /** The size of the whole session when a model took over and began reading only its own part of it. */
   private baseTokens = 0;
+  /** Whether a request was answered since the takeover: until then the last size is still the whole session's. */
+  private viewAnswered = false;
   /** For the check command, across turns (the steps of a plan are turns, and only the last one is checked): whether a
    *  file tool changed something since the last check, whether a command ran since, and what the files looked like
    *  then. A command that changed nothing (ls, grep, a test run) is no reason to run the check. */
@@ -132,6 +134,11 @@ export class Agent {
   private ranCommands = false;
   private checkedPrint?: string;
   private turns = 0;
+
+  /** Where a project's lessons are kept: with the original repository, also when the work is in a worktree. */
+  private get lessonsHome(): string {
+    return this.session.meta.workspace || this.workspace;
+  }
 
   get turnModel(): string {
     return this.mode === "plan" && !this.o.subagent && this.o.cfg.planModel ? this.o.cfg.planModel : this.model;
@@ -189,10 +196,14 @@ export class Agent {
     // The system prompt names no project, so a session's first message says where the agent is.
     const first = this.session.messages.length === 0;
     const turnStart = this.session.messages.length;
+    // Compaction replaces the start of the session, so the turn's start is found again by its opening message.
+    let requestMsg: Message | undefined;
+    const turnAt = () => (requestMsg ? this.session.messages.indexOf(requestMsg) : -1);
     // A lesson from earlier work in this project, if one is related to the request and its check proved it.
-    const lesson = first && cfg.lessons && cfg.check && !this.o.subagent ? pickLesson(this.workspace, text) : undefined;
+    const lesson = first && cfg.lessons && cfg.check && !this.o.subagent ? pickLesson(this.workspace, text, this.lessonsHome) : undefined;
     if (lesson) this.emit({ type: "notice", level: "info", text: `Read a note from earlier work in this project: ${lesson.text.slice(0, 120)}` });
-    this.session.addMessage({ role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${lesson ? `${lessonNote(lesson)}\n\n` : ""}${text}` : text });
+    requestMsg = { role: "user", content: first ? `${environmentNote(this.workspace)}\n\n${lesson ? `${lessonNote(lesson)}\n\n` : ""}${text}` : text };
+    this.session.addMessage(requestMsg);
     if (!this.session.title) this.session.setTitle(text.split("\n")[0]!.slice(0, 80));
 
     let turnUsage = emptyUsage();
@@ -248,6 +259,7 @@ export class Agent {
       turnUsage = addUsage(turnUsage, res.usage);
       turnCost += cost;
       this.lastInputTokens = res.usage.inputTokens + res.usage.cacheReadTokens + res.usage.cacheWriteTokens;
+      if (this.viewFrom !== undefined) this.viewAnswered = true;
       finalText = res.text;
       stopReason = res.stopReason;
 
@@ -310,7 +322,7 @@ export class Agent {
             const scoped = o.review?.scope === "turn";
             const diff = changes(this.workspace, this.undo.snapshots());
             const files = checkReport ? `${diff}\n\nThe project's check, run after this change:\n${checkReport}` : diff;
-            const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, files, scoped ? turnStart : undefined);
+            const report = await this.consult(o.review?.question ?? REVIEW_QUESTION, scoped ? "to review this step" : "to review the finished change", signal, files, scoped ? Math.max(1, turnAt()) : undefined);
             if (report && !reviewPassed(report)) {
               this.session.addMessage({ role: "user", content: reviewMessage(cfg.advisor.model, report) });
               continue;
@@ -364,7 +376,10 @@ export class Agent {
             } else {
               // The stronger model starts from the request and the files, not from the attempt that went wrong.
               this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}. It starts from the request and the files as they are now.` });
-              const earlier = turnStart > 0 ? earlierTurns(this.session.messages.slice(0, turnStart)) : "";
+              // Earlier turns only: if compaction has taken this turn's opening message, a summary would cover this
+              // attempt too, so nothing earlier is quoted.
+              const at = turnAt();
+              const earlier = at > 0 ? earlierTurns(this.session.messages.slice(0, at)) : "";
               // What changed: git's view where there is one (it sees what commands and earlier turns did too), else
               // the file tools' own record.
               const files = gitChanges(this.workspace) || changes(this.workspace, this.undo.snapshots(), 20_000);
@@ -577,8 +592,9 @@ export class Agent {
       this.consultCost += cost;
       const text = res.text.trim().replace(/\s+/g, " ");
       if (!text || /^NONE\.?$/i.test(text)) return;
-      const changed = this.undo.snapshots().map((s) => relative(this.workspace, s.path)).filter((p) => p && !p.startsWith(".."));
-      saveLesson(this.workspace, { text: text.slice(0, 300), check, files: changed, at: new Date().toISOString() });
+      // Files that still exist: one written and removed again in the turn would make the lesson never picked.
+      const changed = this.undo.snapshots().filter((s) => existsSync(s.path)).map((s) => relative(this.workspace, s.path)).filter((p) => p && !p.startsWith(".."));
+      saveLesson(this.lessonsHome, { text: text.slice(0, 300), check, files: changed, at: new Date().toISOString() });
       this.emit({ type: "notice", level: "info", text: `Kept a note for this project: ${text.slice(0, 120)}` });
     } catch (err) {
       if (!signal?.aborted) this.emit({ type: "notice", level: "warn", text: `Could not write a note for this project: ${(err as Error).message.slice(0, 120)}` });
@@ -588,8 +604,9 @@ export class Agent {
   /** Back to the whole session after a takeover. The last request's size covered only the taken-over part, so the
    *  rest is added back: otherwise the next turn sends the whole session without compacting it first. */
   private endView() {
-    if (this.viewFrom !== undefined) this.lastInputTokens += this.baseTokens;
+    if (this.viewFrom !== undefined && this.viewAnswered) this.lastInputTokens += this.baseTokens;
     this.baseTokens = 0;
+    this.viewAnswered = false;
     this.viewFrom = undefined;
   }
 

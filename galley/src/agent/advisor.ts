@@ -89,7 +89,10 @@ export function earlierTurns(messages: Message[], maxChars = 8000): string {
       if (m.content.trim()) answer = m.content.trim();
       continue;
     }
-    if (m.role !== "user" || typeof m.content !== "string" || INJECTED.some((re) => re.test(m.content))) continue;
+    if (m.role !== "user" || typeof m.content !== "string") continue;
+    const own = withoutPreamble(m.content);
+    // An earlier takeover's opening message starts with the workspace note and quotes earlier turns: not a request.
+    if (INJECTED.some((re) => re.test(own)) || /^Earlier in this session:/.test(own) || /\n\nYou are taking over this task from another model \(/.test(m.content)) continue;
     flush();
     if (m.content.startsWith("[Summary of the earlier conversation")) parts.push(m.content);
     else parts.push(`Request: ${withoutPreamble(m.content).replace(/\n\nDo not change anything yet\.[\s\S]*$/, "")}`);

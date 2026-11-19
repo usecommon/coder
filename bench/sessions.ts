@@ -147,6 +147,16 @@ export function isDefaultGalley(r: TaskRun): boolean {
   return Object.values(providers).every((p) => Object.keys(p).every((k) => k === "baseURL"));
 }
 
+/** Tasks broken in the benchmark itself, which the round reports leave out of scoring (report.ts). */
+export const BROKEN_TASKS = new Set(["rust/macros", "go/octal"]);
+
+/** A task under one set of conditions: the same task, agent variant, model, effort, step limit and series of rounds
+ *  (rounds "fresh-1" to "fresh-4" are one series, run with one version of the harness). Comparing a
+ *  failing with a passing run is fair only within one such group; across them a signal is rewarded for telling a weak
+ *  model from a strong one. */
+export const conditionKey = (r: TaskRun, model?: string) =>
+  [r.task, r.agent, model ?? (r.config?.model as string | undefined) ?? "", (r.config?.effort as string | undefined) ?? "", (r.config?.maxSteps as number | undefined) ?? 60, r.round.replace(/-\d+$/, "")].join("|");
+
 /** A canary round: picked tasks, not a sample. Marked by canary.sh, or named so. */
 export const isCanary = (round: string) => /canary/i.test(basename(round)) || existsSync(join(round, "CANARY"));
 
@@ -154,6 +164,8 @@ export const isCanary = (round: string) => /canary/i.test(basename(round)) || ex
 export function modelsByRun(round: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const c of proxyCalls(round)) if (c.status === 200 && c.tag && c.req?.model && !out.has(c.tag)) out.set(c.tag, c.req.model);
+  // A run whose requests were all refused (400, 422) is still a run of that model.
+  for (const c of proxyCalls(round)) if (c.tag && c.req?.model && !out.has(c.tag) && c.blocked === undefined) out.set(c.tag, c.req.model);
   return out;
 }
 
@@ -193,9 +205,14 @@ export function costByRun(round: string, o: { firstOnly?: boolean } = {}): Map<s
   const out = new Map<string, number>();
   const runs = new Map(results(round).map((r) => [runKey(r), r]));
   for (const c of proxyCalls(round)) {
-    if (c.status !== 200 || !c.tag) continue;
+    if (!c.tag) continue;
     const r = runs.get(c.tag);
     if (!r) continue;
+    // A request the provider refused cost nothing, but the run did make one: it has a cost, of zero so far.
+    if (c.status !== 200) {
+      if (!out.has(c.tag)) out.set(c.tag, 0);
+      continue;
+    }
     if (c.t !== undefined && r.startedAt && c.t < r.startedAt - 2000) continue;
     if (o.firstOnly && c.t !== undefined && r.startedAt2 && c.t >= r.startedAt2 - 2000) continue;
     const cost = callCost(c);

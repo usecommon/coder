@@ -258,15 +258,15 @@ export function locate(hay: string, needle: string): { index: number; length: nu
   return hits.length ? { ...hits[0]!, count: hits.length } : undefined;
 }
 
-/** Trailing spaces and tabs taken off each line: edit itself finds text that differs only there. */
-const loose = (s: string) => s.replace(/[ \t]+$/gm, "");
+/** Each line with its trailing white space (carriage returns included) taken off, as edit compares lines. */
+const loose = (s: string) => s.split("\n").map((l) => l.trimEnd()).join("\n");
 
 /** The files under `root` that contain `text`: undefined unless the answer is certain and cheap. Any candidate that
  *  is skipped or cannot be read makes it uncertain: a file over 1 MB, a link, a nested repository, an unreadable
  *  file, or more than 5,000 files or 50 MB in all. In a recorded git repository the candidates are git's file list,
  *  and an ignored file or folder must be searchable too; elsewhere a walk of every folder. Matching ignores trailing
  *  spaces, as edit does. */
-function filesContaining(root: string, text: string): string[] | undefined {
+function filesContaining(root: string, text: string, mayRead: (p: string) => boolean = () => true): string[] | undefined {
   const MAX_FILES = 5000;
   const MAX_BYTES = 50 * 1024 * 1024;
   const want = loose(text);
@@ -279,10 +279,12 @@ function filesContaining(root: string, text: string): string[] | undefined {
       const st = lstatSync(p);
       if (st.isDirectory()) return walk(p, 0);
       if (!st.isFile() || st.size > 1_000_000) return false;
+      // A file the model may not read is not searched for it: that makes the answer uncertain.
+      if (!mayRead(p)) return false;
       bytes += st.size;
       if (bytes > MAX_BYTES) return false;
       const body = readFileSync(p, "utf8");
-      if (!body.slice(0, 8000).includes("\0") && (body.includes(text) || loose(body).includes(want))) hits.push(p);
+      if (body.includes(text) || loose(body).includes(want)) hits.push(p);
       return true;
     } catch {
       return false;
@@ -323,8 +325,11 @@ export const editTool: Tool = {
   // A call without a path is mended when exactly one file in the workspace contains the text to replace.
   repair(input, ctx) {
     if (input.path !== undefined || typeof input.old_string !== "string" || input.old_string.length < 8) return undefined;
-    const hits = filesContaining(ctx.workspace, input.old_string);
+    const mayRead = (p: string) => ctx.gate.allows({ tool: "read", subject: displayPath(ctx.workspace, p) });
+    const hits = filesContaining(ctx.workspace, input.old_string, mayRead);
     if (hits?.length !== 1) return undefined;
+    // Not mended into an edit the rules would refuse: the note would tell which file holds the text.
+    if (!ctx.gate.allows({ tool: "edit", subject: displayPath(ctx.workspace, hits[0]!) })) return undefined;
     // The scratch folder is a place edit can write to as well: a match there makes the workspace's match uncertain.
     const scratch = scratchRoot(ctx);
     if (scratch && scratch !== ctx.workspace && !scratch.startsWith(`${ctx.workspace}/`) && filesContaining(scratch, input.old_string)?.length !== 0) return undefined;

@@ -10,6 +10,7 @@
 //     "question": "Does low effort cut cost by a quarter without losing more than 2 points?",
 //     "baseline": "galley", "candidate": "galley-low",      // agent variant names as in results.jsonl
 //     "metric": "pass",                                     // "pass" (first attempt) or "pass2" (after a second)
+//     "rounds": ["low-1", "low-2"],                         // the rounds it will be judged on, named in advance
 //     "decide": {
 //       "minLeadPoints": -2,        // candidate minus baseline, pooled over the rounds, in points
 //       "maxP": 0.05,               // optional: the sign test over task-runs where they differ must be below this
@@ -31,6 +32,9 @@ export interface Rule {
   baseline: string;
   candidate: string;
   metric?: "pass" | "pass2";
+  /** The rounds this rule will be judged on, by folder name, written before they run. Judging it on other rounds,
+   *  or on some of them only, does not count as a pre-registered test. */
+  rounds?: string[];
   decide: { minLeadPoints?: number; maxP?: number; cost?: "lower" | "lowerSure" | { maxRatio: number } };
 }
 
@@ -158,7 +162,12 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   if (d.cost === "lower") conditions.push({ what: "it costs less", met: !unpriced && ratio < 1, detail: `${((ratio - 1) * 100).toFixed(0)}% (${pct(candCost, baseCost, 0)} of the baseline's cost)${unknownCost}` });
   else if (d.cost === "lowerSure") conditions.push({ what: "it costs less, with the whole 95% interval below", met: !unpriced && interval[1] < 1, detail: `ratio ${ratio.toFixed(2)}, interval ${interval[0].toFixed(2)} to ${interval[1].toFixed(2)}${unknownCost}` });
   else if (d.cost && typeof d.cost === "object") conditions.push({ what: `it costs at most ${d.cost.maxRatio} times the baseline`, met: !unpriced && ratio <= d.cost.maxRatio, detail: `ratio ${ratio.toFixed(2)}${unknownCost}` });
-  const reg = registration(ruleFile, unknownStart ? undefined : startedAt);
+  let reg = registration(ruleFile, unknownStart ? undefined : startedAt);
+  const named = rule.rounds ?? [];
+  const judged = rounds.map((r) => basename(r));
+  if (reg.ok && !named.length) reg = { ok: false, detail: `${reg.detail}; but the rule names no rounds, so the rounds judged could have been picked after the fact` };
+  else if (reg.ok && (named.length !== judged.length || named.some((n) => !judged.includes(n))))
+    reg = { ok: false, detail: `${reg.detail}; but it names the rounds ${named.join(", ")} and was judged on ${judged.join(", ")}` };
   return {
     rule,
     rounds: rounds.map((r) => basename(r)),
@@ -191,6 +200,7 @@ export function validate(rule: Rule, file: string): void {
     throw new Error(`${file}: decide.cost must be "lower", "lowerSure" or { "maxRatio": n }`);
   if (d.minLeadPoints === undefined && d.maxP === undefined && cost === undefined) throw new Error(`${file}: decide names no condition`);
   if (rule.metric !== undefined && rule.metric !== "pass" && rule.metric !== "pass2") throw new Error(`${file}: metric must be "pass" or "pass2"`);
+  if (rule.rounds !== undefined && (!Array.isArray(rule.rounds) || rule.rounds.some((r) => typeof r !== "string"))) throw new Error(`${file}: rounds must be a list of round folder names`);
 }
 
 export function render(v: Verdict): string {

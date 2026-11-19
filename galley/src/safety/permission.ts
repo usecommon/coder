@@ -67,6 +67,11 @@ export class PermissionGate {
     public mode: Mode = "build",
   ) {}
 
+  /** Whether the rules allow this outright, without asking anyone. */
+  allows(req: PermissionRequest): boolean {
+    return evaluate(req, this.rules, this.mode) === "allow";
+  }
+
   async check(req: PermissionRequest, floor: Action = "allow"): Promise<{ ok: true } | { ok: false; why: string }> {
     const action = strictest(evaluate(req, this.rules, this.mode), floor);
     if (action === "allow") return { ok: true };

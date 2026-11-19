@@ -9,7 +9,7 @@
 // with is `pass`, which is the first attempt's in every round.
 import { LIMITS, Watch } from "../galley/src/agent/signals.ts";
 import type { ToolCall, ToolResult } from "../galley/src/core/types.ts";
-import { firstAttempt, pct, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { conditionKey, firstAttempt, pct, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Replayed {
   steps: number;
@@ -49,7 +49,7 @@ export function signalTable(runs: (TaskRun & Replayed)[]): string[] {
   const failing = runs.filter((r) => !r.pass);
   const passing = runs.filter((r) => r.pass);
   const byTask = new Map<string, (TaskRun & Replayed)[]>();
-  for (const r of runs) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r]);
+  for (const r of runs) byTask.set(conditionKey(r), [...(byTask.get(conditionKey(r)) ?? []), r]);
   const has = (r: Replayed, k: string) => (k === "any" ? r.fired.size > 0 : r.fired.has(k));
   const out = ["| Signal | Fires on failing runs | Fires on passing runs | Of the runs it fires on, share that failed | Within one task: AUC (0.5 = chance) | Pairs |", "|---|---|---|---|---|---|"];
   for (const k of KINDS) {
@@ -85,7 +85,7 @@ if (import.meta.main) {
   console.log(`Limits: same check ${LIMITS.sameCheck}, same call ${LIMITS.sameCall}, tool errors ${LIMITS.toolErrors}, long run at ${LIMITS.longRun.toFixed(2)} of the step limit.\n`);
   console.log(signalTable(runs).join("\n"));
   const byTask = new Map<string, boolean[]>();
-  for (const r of runs) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r.pass]);
+  for (const r of runs) byTask.set(conditionKey(r), [...(byTask.get(conditionKey(r)) ?? []), r.pass]);
   const both = [...byTask.values()].filter((g) => g.includes(true) && g.includes(false)).length;
-  console.log(`\n${both} tasks have both a failing and a passing run; each pair compares one of each.`);
+  console.log(`\n${both} task conditions (task, agent, model, effort, step limit) have both a failing and a passing run; each pair compares one of each within one condition.`);
 }

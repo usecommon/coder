@@ -5,25 +5,25 @@
   "anthropic/claude-sonnet-5-5": [
    {
     "effort": "high",
-    "tasks": 309,
-    "solved": 267,
+    "tasks": 303,
+    "solved": 265,
     "ci": [
-     82.1,
-     89.8
+     83.3,
+     90.7
     ],
-    "costPerTask": 0.02726,
+    "costPerTask": 0.02742,
     "byLanguage": {
      "python": [
       87,
       102
      ],
      "go": [
-      101,
-      117
+      99,
+      114
      ],
      "rust": [
       79,
-      90
+      87
      ]
     },
     "rounds": 3,
@@ -34,25 +34,25 @@
   "deepseek/deepseek-flash": [
    {
     "effort": "default",
-    "tasks": 920,
-    "solved": 629,
+    "tasks": 901,
+    "solved": 622,
     "ci": [
-     65.3,
-     71.3
+     65.9,
+     72
     ],
-    "costPerTask": 0.00995,
+    "costPerTask": 0.01001,
     "byLanguage": {
      "python": [
       188,
       344
      ],
      "go": [
-      241,
-      336
+      234,
+      321
      ],
      "rust": [
       200,
-      240
+      236
      ]
     },
     "rounds": 15,
@@ -61,25 +61,25 @@
    },
    {
     "effort": "high",
-    "tasks": 2728,
-    "solved": 1662,
+    "tasks": 2718,
+    "solved": 1659,
     "ci": [
-     59.1,
-     62.7
+     59.2,
+     62.9
     ],
-    "costPerTask": 0.00583,
+    "costPerTask": 0.00584,
     "byLanguage": {
      "python": [
       98,
       171
      ],
      "go": [
-      139,
-      195
+      136,
+      190
      ],
      "rust": [
       109,
-      150
+      145
      ],
      "javascript": [
       92,

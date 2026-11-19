@@ -39,7 +39,8 @@ export const bashTool: Tool = {
       if (typeof command !== "string" || rel.startsWith("..") || isAbsolute(rel) || !existsSync(dir) || !statSync(dir).isDirectory()) return undefined;
       if (rel) {
         // "./" keeps CDPATH out of it, and "--" a folder whose name starts with a dash.
-        command = `cd -- './${rel.replaceAll("'", "'\\''")}' && ${command}`;
+        // On a line of its own, so that a background "&" later in the command does not leave the folder behind.
+        command = `cd -- './${rel.replaceAll("'", "'\\''")}' || exit 1\n${command}`;
         notes.push(`bash has no path argument; ran the command in ${rel}`);
       } else notes.push("bash has no path argument; the command runs in the workspace");
     }

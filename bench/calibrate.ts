@@ -11,7 +11,7 @@
 // that covers 90% of the turns that passed after at least one failure, once there are 30 such turns.
 // No model is called.
 import { LIMITS } from "../galley/src/agent/signals.ts";
-import { roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { conditionKey, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 import { maxStepsOf, replay } from "./signals.ts";
 
 const MIN_FIRES = 30;
@@ -23,7 +23,7 @@ const GRID: Record<Kind, number[]> = { sameCheck: [2, 3, 4, 5], sameCall: [2, 3,
 
 function score(runs: TaskRun[], fires: Map<TaskRun, boolean>) {
   const byTask = new Map<string, TaskRun[]>();
-  for (const r of runs) byTask.set(r.task, [...(byTask.get(r.task) ?? []), r]);
+  for (const r of runs) byTask.set(conditionKey(r), [...(byTask.get(conditionKey(r)) ?? []), r]);
   let s = 0;
   let pairs = 0;
   for (const g of byTask.values())

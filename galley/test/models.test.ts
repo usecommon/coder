@@ -1,9 +1,9 @@
 // More than one model in a session: what is known about models, the signals that a turn is going badly,
 // the advisor, the handover and the fallback.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { advisorRequest, changes, digest, freshStartMessage, reviewPassed, withoutPreamble } from "../src/agent/advisor.ts";
+import { advisorRequest, changes, digest, earlierTurns, freshStartMessage, reviewPassed, withoutPreamble } from "../src/agent/advisor.ts";
 import { lessonNote } from "../src/agent/lessons.ts";
 import { scratchDir } from "../src/tools/bash.ts";
 import { detectSandbox } from "../src/safety/sandbox.ts";
@@ -996,11 +996,27 @@ describe("fixes from the council review", () => {
     writeFileSync(join(ws, "evil.sh"), `#!/bin/sh\ntouch '${flag}'\n`, { mode: 0o755 });
     Bun.spawnSync(["git", "-C", ws, "init", "-q"]);
     Bun.spawnSync(["git", "-C", ws, "config", "core.fsmonitor", join(ws, "evil.sh")]);
-    const { fingerprint, gitChanges, gitFiles } = await import("../src/agent/workspace-state.ts");
+    const { fingerprint, gitChanges, gitFiles, isGitRepo } = await import("../src/agent/workspace-state.ts");
     fingerprint(agent.workspace);
     gitChanges(agent.workspace);
     expect(gitFiles(agent.workspace)).toBeUndefined();
     expect(existsSync(flag)).toBe(false);
+  });
+
+  test("a harmless-looking .git made after the agent started is not used either", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "a.txt"), "one\n");
+    registerProvider(new MockProvider([{ text: "ok" }]));
+    const agent = new Agent({ cfg: testConfig({ sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once" });
+    const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+    sh("init", "-q");
+    sh("add", "a.txt");
+    sh("commit", "-qm", "planted");
+    writeFileSync(join(ws, "a.txt"), "two\n");
+    const { gitChanges, gitFiles, isGitRepo } = await import("../src/agent/workspace-state.ts");
+    expect(isGitRepo(agent.workspace)).toBe(false);
+    expect(gitFiles(agent.workspace)).toBeUndefined();
+    expect(gitChanges(agent.workspace)).toBe("");
   });
 
   test("a repository whose own config would run programs is not used", async () => {
@@ -1101,12 +1117,129 @@ describe("fixes from the second council review", () => {
   test("a takeover that runs long is compacted within its own part, and the earlier attempt stays out of it", async () => {
     const strong = second("up8", (_req, n) => (n < 12 ? { toolCalls: [{ name: "read", input: { path: `f${n}.txt` } }] } : { text: "Done." }));
     const { agent } = setup([stuck, stuck, stuck], { escalateModel: "up8/strong", compactAt: 1, smallModel: "sum8/s" });
-    second("sum8", () => ({ text: "SUMMARY OF THE TAKEN-OVER WORK" }));
+    const sum8 = second("sum8", () => ({ text: "SUMMARY OF THE TAKEN-OVER WORK" }));
     await agent.send("read the file");
+    expect(sum8.requests.length).toBeGreaterThan(0);
+    expect(JSON.stringify(sum8.requests)).not.toContain("missing.txt");
     const last = strong.requests.at(-1)!;
     const texts = last.messages.filter((m) => m.role === "user").map((m) => (m as Extract<Message, { role: "user" }>).content);
     expect(texts[0]).toContain("You are taking over this task");
     expect(texts.some((t) => t.includes("SUMMARY OF THE TAKEN-OVER WORK"))).toBe(true);
     expect(JSON.stringify(last.messages)).not.toContain("missing.txt");
+  });
+});
+
+describe("fixes from the third council review", () => {
+  test("git on the host does not enter a submodule whose config the model rewrote", async () => {
+    const base = tempDir();
+    const src = join(base, "src");
+    const ws = join(base, "ws");
+    const g = (dir: string, ...a: string[]) => Bun.spawnSync(["git", "-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", "-c", "protocol.file.allow=always", ...a]);
+    mkdirSync(src);
+    mkdirSync(ws);
+    g(src, "init", "-q");
+    writeFileSync(join(src, "f.txt"), "x\n");
+    g(src, "add", "f.txt");
+    g(src, "commit", "-qm", "s");
+    g(ws, "init", "-q");
+    g(ws, "submodule", "add", "-q", src, "sub");
+    g(ws, "commit", "-qm", "w");
+    const { recordGit, fingerprint, gitChanges } = await import("../src/agent/workspace-state.ts");
+    recordGit(realpathSync(ws));
+    // What a sandboxed model could do: give the submodule a .git of its own with a clean filter, and touch a file.
+    const flag = join(base, "pwned");
+    const subGit = join(ws, "sub", ".git");
+    Bun.spawnSync(["rm", "-f", subGit]);
+    Bun.spawnSync(["cp", "-r", join(ws, ".git", "modules", "sub"), subGit]);
+    Bun.spawnSync(["git", "config", "-f", join(subGit, "config"), "--unset", "core.worktree"]);
+    writeFileSync(join(ws, "sub", "payload.sh"), `#!/bin/sh\ntouch '${flag}'\ncat\n`, { mode: 0o755 });
+    Bun.spawnSync(["git", "config", "-f", join(subGit, "config"), "filter.ev.clean", join(ws, "sub", "payload.sh")]);
+    writeFileSync(join(ws, "sub", ".gitattributes"), "* filter=ev\n");
+    writeFileSync(join(ws, "sub", "f.txt"), "y\n");
+    fingerprint(realpathSync(ws));
+    gitChanges(realpathSync(ws));
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("a takeover after compaction in the same turn does not quote the failed attempt as an earlier turn", async () => {
+    const strong = second("upz9", [{ text: "Done." }]);
+    let k = 0;
+    const { agent, cfg } = setup((req, n) => {
+      if (req.tools.length === 0) return { text: "SUMMARY-OF-ATTEMPT" };
+      if (n === 0) return { text: "First answer." };
+      k++;
+      if (k <= 4) return { text: `ATTEMPT-NOTE-${k}`, toolCalls: [{ name: "write", input: { path: `f${k}.txt`, content: "x" } }] };
+      return { text: `ATTEMPT-NOTE-${k}`, toolCalls: [{ name: "read", input: { path: "missing.txt" } }] };
+    }, { escalateModel: "upz9/strong" });
+    await agent.send("first request");
+    cfg.compactAt = 50;
+    await agent.send("second request");
+    const msg = lastUser(strong.requests[0]!);
+    expect(msg).not.toContain("SUMMARY-OF-ATTEMPT");
+    expect(msg).not.toContain("ATTEMPT-NOTE");
+  });
+
+  test("an earlier takeover's message is not quoted as a request", () => {
+    const old = freshStartMessage({ from: "a/b", why: "x", request: "Fix the parser bug", files: "D".repeat(9000), environment: "<environment>e</environment>" });
+    const text = earlierTurns([
+      { role: "user", content: "Fix the parser bug" },
+      { role: "assistant", content: "Trying.", toolCalls: [] },
+      { role: "user", content: old },
+      { role: "assistant", content: "Fixed it.", toolCalls: [] },
+    ] as Message[]);
+    expect(text).toContain("Request: Fix the parser bug");
+    expect(text).not.toContain("DDDD");
+  });
+
+  test("a test runner's cache is not a change to the work", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "a.py"), "x");
+    const { fingerprint } = await import("../src/agent/workspace-state.ts");
+    const before = fingerprint(ws);
+    mkdirSync(join(ws, ".pytest_cache", "v"), { recursive: true });
+    writeFileSync(join(ws, ".pytest_cache", "v", "nodeids"), "[]");
+    mkdirSync(join(ws, "target"), { recursive: true });
+    writeFileSync(join(ws, "target", "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+    expect(fingerprint(ws)).toBe(before);
+  });
+
+  test("edit repair does not read a file the rules forbid, and names no file for an edit the rules refuse", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "API_KEY=sk-secret", new_string: "x" } }] };
+    const perm = { ...testConfig().permission, read: { "*": "allow" as const, ".env": "deny" as const } };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { permission: perm });
+    writeFileSync(join(ws, ".env"), "API_KEY=sk-secret\n");
+    await agent.send("change the key");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).not.toContain(".env");
+    expect(res.content).toContain("input.path is required");
+    expect(readFileSync(join(ws, ".env"), "utf8")).toContain("sk-secret");
+  });
+
+  test("edit repair treats a CRLF file as edit does, so two matches stay ambiguous", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "function foo() {\n  return 1;", new_string: "X" } }] };
+    const { ws, mock, agent } = setup([call, { text: "Done." }]);
+    writeFileSync(join(ws, "a.txt"), "function foo() {\r\n  return 1;\r\n}\r\n");
+    writeFileSync(join(ws, "b.txt"), "function foo() {\n  return 1;\n}\n");
+    await agent.send("change foo");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).toContain("input.path is required");
+  });
+
+  test("a lesson names only files that still exist, so it can be read back", async () => {
+    const wrong: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+    const scratch: MockReply = { toolCalls: [{ name: "write", input: { path: "debug_repro.py", content: "x" } }] };
+    const rm: MockReply = { toolCalls: [{ name: "bash", input: { command: "rm debug_repro.py && echo right > out.txt" } }] };
+    const note = "out.txt must say right; the check greps for it.";
+    const { ws, agent } = setup([wrong, { text: "Done." }, scratch, rm, { text: "Fixed." }, { text: note }], { check: "grep -q right out.txt", sandbox: "off", lessons: true });
+    await agent.send("write out.txt");
+    const [lesson] = loadLessons(ws);
+    expect(lesson?.files).toEqual(["out.txt"]);
+    expect(pickLesson(ws, "change what out.txt says")?.text).toBe(note);
+  });
+
+  test("a measured row whose cost is unknown is listed as such", () => {
+    const own = [{ effort: "high", tasks: 10, solved: 5, ci: [23.7, 76.3] as [number, number], costPerTask: null, byLanguage: { go: [5, 10] as [number, number] }, rounds: 1, from: "2026-11-01", to: "2026-11-01" }];
+    const report = modelsReport(testConfig({ models: { "x/unpriced": { name: "X", own } } }), {});
+    expect(report).toContain("x/unpriced, effort high: 50.0% of 10 (23.7 to 76.3), cost unknown");
   });
 });

@@ -9,7 +9,7 @@
 // would run, is not used at all.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readdirSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 interface GitContext {
@@ -18,7 +18,8 @@ interface GitContext {
 }
 
 const recorded = new Map<string, GitContext | null>();
-const HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.untrackedCache=false"];
+// Submodules are not entered: a submodule's .git is inside the workspace, where the model can write its config.
+const HARDEN = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=", "-c", "core.untrackedCache=false", "-c", "diff.ignoreSubmodules=all", "-c", "submodule.recurse=false", "-c", "status.submoduleSummary=false"];
 /** Local config keys that make git run a program: such a repository is not trusted. */
 const RUNS_PROGRAMS = /^(filter\.|diff\.[^.]+\.(textconv|command)|merge\.[^.]+\.driver|core\.(fsmonitor|hookspath|pager|sshcommand|askpass|editor)|include(if)?\.)/i;
 
@@ -44,9 +45,12 @@ export function git(ws: string, args: string[]) {
 export const isGitRepo = (ws: string): boolean => !!recorded.get(ws);
 
 /** git diff of the workspace against HEAD (or the index, before the first commit), without running any program. */
-const diff = (ws: string, extra: string[] = []) => git(ws, ["diff", "HEAD", "--no-ext-diff", "--no-textconv", ...extra, "--", "."]) ?? git(ws, ["diff", "--no-ext-diff", "--no-textconv", ...extra, "--", "."]);
+const diff = (ws: string, extra: string[] = []) =>
+  git(ws, ["diff", "HEAD", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all", ...extra, "--", "."]) ?? git(ws, ["diff", "--no-ext-diff", "--no-textconv", "--ignore-submodules=all", ...extra, "--", "."]);
 
-const SKIP = new Set([".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache"]);
+// Folders that hold dependencies, builds and tool caches: a test run rewrites .pytest_cache, which is no change to the
+// work. A folder marked with CACHEDIR.TAG (cargo, pytest and others write one) is skipped too.
+const SKIP = new Set([".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
 const MAX_FILES = 5000;
 
 /** A fingerprint of the workspace's files: it changes when a file is added, removed or changed. Undefined when it
@@ -54,7 +58,7 @@ const MAX_FILES = 5000;
 export function fingerprint(ws: string): string | undefined {
   const h = createHash("sha256");
   if (isGitRepo(ws)) {
-    const status = git(ws, ["status", "--porcelain=v1", "-uall", "-z", "--", "."]);
+    const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", "."]);
     const d = diff(ws, ["--binary"]);
     if (!status || !d) return undefined;
     h.update(status.stdout).update(d.stdout);
@@ -79,7 +83,7 @@ export function fingerprint(ws: string): string | undefined {
     for (const e of entries.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       const p = join(dir, e.name);
       if (e.isDirectory()) {
-        if (!SKIP.has(e.name) && !walk(p)) return false;
+        if (!SKIP.has(e.name) && !existsSync(join(p, "CACHEDIR.TAG")) && !walk(p)) return false;
       } else if (e.isFile()) {
         if (++files > MAX_FILES) return false;
         try {
@@ -96,7 +100,7 @@ export function fingerprint(ws: string): string | undefined {
 /** What git says has changed in the workspace, clipped: for a model that takes over and cannot see the attempt.
  *  Empty when the workspace is not a recorded repository. */
 export function gitChanges(ws: string, maxChars = 20_000): string {
-  const status = git(ws, ["status", "--porcelain=v1", "-uall", "--", "."])?.stdout.trim();
+  const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "--", "."])?.stdout.trim();
   if (!status) return "";
   const text = `$ git status --porcelain\n${status}\n\n$ git diff HEAD\n${diff(ws)?.stdout.trim() ?? ""}`;
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n[… ${text.length - maxChars} more characters]` : text;

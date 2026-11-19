@@ -624,3 +624,30 @@ The same ten lenses again, run by agents that had not seen the first review, ove
 Of the 17 lower ones, fixed: a refused edit no longer sets off the check; `checkRounds` counts per turn, as documented; the replay counts a step for every model call, as the live loop does; profiles count only effort, model and provider settings as neutral (not the step limit or helper model); a trailing slash no longer lets a skipped round in; an unknown cost shows as unknown in the miner; check output keeps its end even past 2 MB; lesson writes take a lock; tests now cover stale lessons, the 50-lesson cap and the takeover's earlier turns, and the scratch-folder test is skipped visibly without a sandbox; the duplicate diff in the takeover message is gone; the calibration header says what the code does. Not fixed: with `--worktree`, lessons are kept per worktree and not read back by later runs; the edit-repair test's symlink case in git workspaces is now covered by the "uncertain" rule rather than a dedicated test.
 
 Figures after the fixes: the signal replay shows 23 failing runs with the long-run signal, not 22, from the corrected step count; all conclusions stand. Profiles and the verdict on the fourth confirmation are unchanged. Tests: 162 pass.
+
+## Third council review, fresh agents again (19 November)
+
+The same ten lenses, new agents, over the same commits including both earlier rounds of fixes. 32 findings, 25 distinct defects (after 60 and 39); the 14 ranked highest were each sent to an agent told to refute them, and all 14 held again. As in the second round, the most serious was a way out of the sandbox through git.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Git on the host entered submodules.** A submodule's `.git` lies in the writable workspace, so a sandboxed model could give it a clean filter, and Galley's own `git status` on the host would run it with the user's rights and environment. Reproduced | high | Submodules are not entered (`diff.ignoreSubmodules=all`, `--ignore-submodules=all`, no recursion). The test plants such a submodule; it fails with the fix taken out and passes with it in |
+| After compaction within a turn, a takeover quoted a summary of the failed attempt as an "earlier turn" | medium | The turn's start is found by its opening message, not by an index that compaction invalidates; with that message gone, nothing earlier is quoted |
+| An earlier takeover's opening message, with its old diff, was quoted as a request | medium | Skipped |
+| Outside git, a test runner's cache (`.pytest_cache`) counted as a change, so the check ran again and repeated its failure | medium | Tool caches and folders marked `CACHEDIR.TAG` are skipped |
+| The miner's step count missed model calls that made no tool call | medium | Every model call counts, as in the live loop |
+| Edit repair read files the permission rules forbid, and its note could say which file held the text even when the edit was refused | medium | A forbidden file makes the answer uncertain; no repair for an edit the rules refuse |
+| A lesson naming a file created and deleted in the turn was never read back | medium | Only files that still exist are named |
+| Within-task AUC paired runs of different models, efforts and variants | medium | Pairs only within one condition: task, agent, model, effort, step limit and series of rounds |
+| A rule's verdict could count as pre-registered on rounds picked after the fact | medium | A rule names its rounds; judged on others, or on some of them, it is not pre-registered |
+| Errors from mended calls were grouped under the repair note | medium | The note is taken off before grouping |
+| The miner showed $0.00 for runs with no proxy record | medium | Unknown |
+| The takeover-compaction test did not check what the summariser was sent | medium | It does |
+| The "later .git" test passed even without the record-once protection | medium | A harmless planted repository is now used |
+| Edit repair compared lines more strictly than edit (CRLF files) and skipped files with a NUL byte | low | Lines compared as edit compares them; no files skipped |
+
+Also fixed from the unverified ones: a background `&` in a mended `bash` command no longer leaves the folder; the session size is not doubled when a takeover never gets an answer; a run whose requests were all refused costs zero and keeps its model; the benchmark's broken tasks are out of the profiles; trial rounds are never the previous round, and a canary round is not compared with a full one; unparseable tool arguments count as malformed calls; lessons live with the original repository under `--worktree`; a test covers an unpriced measured row; the profiles header says what the code does. Not fixed: on macOS the edit repair's scan of the shared `/tmp` almost always gives up, so the repair rarely applies there (it errs toward doing nothing).
+
+Figures after the fixes: profiles without the broken tasks, Claude Sonnet 5.5 87.5% of 303 and DeepSeek V4.1 Flash 69.0% of 901 (default effort) and 61.0% of 2,718 (high); the signal replay, with pairs only within one condition (658 pairs instead of 9,684), still finds every signal at chance within a task (AUC 0.498 to 0.503); the verdict on the fourth confirmation is unchanged. Tests: 171 pass.
+
+**Three rounds compared.** Findings fell from 60 to 39 to 32, and every defect a skeptic checked held in all three. The first round found errors in the measuring scripts; the second and third each found a way for a model to run code on the host through git, one closed and one opened by the fixes of the round before. Fixes that add host-side commands deserve the most scrutiny.

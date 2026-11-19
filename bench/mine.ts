@@ -73,7 +73,7 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     if (r.agentTimedOut) a.timedOut++;
     if (r.agentExit !== 0 && r.agentExit !== undefined) a.agentFailed++;
     a.memoryKills += r.memoryKills ?? 0;
-    a.costUsd += cost.get(runKey(r)) ?? 0;
+    a.costUsd += cost.get(runKey(r)) ?? NaN;
   }
   for (const [name, a] of Object.entries(agents)) a.medianMinutes = median(runs.filter((r) => r.agent === name).map((r) => (r.agentMs ?? 0) / 60_000));
 
@@ -129,14 +129,16 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     let steps = 0;
     for (let i = 0; i < ms.length; i++) {
       const m = ms[i]!;
-      if (m.role === "assistant" && m.toolCalls.length) steps++;
+      // Every model call is a step, as the live loop counts them (a reply sent back by a check or a review too).
+      if (m.role === "assistant") steps++;
       if (m.role !== "tool") continue;
       const prevMsg = ms[i - 1];
       const calls = prevMsg?.role === "assistant" ? prevMsg.toolCalls : [];
       for (const t of m.results) {
-        const content = String(t.content);
+        // A mended call that failed starts with the repair note: the error is what follows it.
+        const content = String(t.content).replace(/^\([^\n]*\)\n/, "");
         if (t.isError) {
-          if (content.startsWith("Invalid arguments")) {
+          if (content.startsWith("Invalid arguments") || content.startsWith("Invalid JSON arguments")) {
             const call = calls.find((c) => c.id === t.callId);
             tally(malformed, `${t.name} called with {${Object.keys(call?.input ?? {}).sort().join(", ")}}: ${normalize(content)}`, r);
           } else tally(toolErrors, `${t.name}: ${normalize(content)}`, r);
@@ -164,6 +166,9 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
   };
 }
 
+/** Rounds that are trials, not rounds: never the one to compare with. */
+const NOT_A_ROUND = /invalid|aborted|smoke|dry|dump|selftest|probe|try/i;
+
 /** The most recent other round beside this one that has been mined. */
 function previousRound(round: string): string | undefined {
   const parent = dirname(round);
@@ -171,7 +176,7 @@ function previousRound(round: string): string | undefined {
   const own = mtime(round);
   return readdirSync(parent)
     .map((d) => join(parent, d))
-    .filter((d) => d !== round && !isCanary(d) && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
+    .filter((d) => d !== round && !isCanary(d) && !NOT_A_ROUND.test(basename(d)) && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
     .sort((a, b) => mtime(b) - mtime(a))[0];
 }
 
@@ -228,7 +233,8 @@ if (import.meta.main) {
     process.exit(2);
   }
   const i = args.indexOf("--previous");
-  const prevDir = i >= 0 ? args[i + 1] : previousRound(round);
+  // A canary round is a picked set of tasks: comparing it with a full round would show a rise that is not there.
+  const prevDir = i >= 0 ? args[i + 1] : isCanary(round) ? undefined : previousRound(round);
   const prev = prevDir && existsSync(join(prevDir, "mine.json")) ? (JSON.parse(readFileSync(join(prevDir, "mine.json"), "utf8")) as Mined) : undefined;
   const runs = taskRuns(round, { sessions: true });
   const m = mine(round, runs);

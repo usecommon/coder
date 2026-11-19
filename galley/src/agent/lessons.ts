@@ -79,10 +79,10 @@ const words = (s: string) => new Set((s.toLowerCase().match(/[a-z_][a-z0-9_]{3,}
 
 /** The one lesson most related to the request: at least two words in common, or a file it was about named in the
  *  request, and none of its files gone. Undefined when none qualifies: no note is better than an unrelated one. */
-export function pickLesson(workspace: string, request: string): Lesson | undefined {
+export function pickLesson(workspace: string, request: string, home = workspace): Lesson | undefined {
   const want = words(request);
   let best: { l: Lesson; score: number } | undefined;
-  for (const l of loadLessons(workspace)) {
+  for (const l of loadLessons(home)) {
     // A lesson about files that are gone is about code that is gone. (Changes made through the shell are not tracked,
     // so a lesson may name no files; it is then judged by its words alone.)
     if (l.files.some((f) => !existsSync(join(workspace, f)))) continue;
