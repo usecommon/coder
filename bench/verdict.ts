@@ -180,7 +180,9 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
     conditions.push({ what: "every task-run has a result on both sides", met: false, detail: `${missingCand} of the candidate's and ${missingBase} of the baseline's have no result (no model answer or a crash); run them again` });
   const named = rule.rounds ?? [];
   const judged = rounds.map((r) => basename(r));
-  if (reg.ok && !named.length) reg = { ok: false, detail: `${reg.detail}; but the rule names no rounds, so the rounds judged could have been picked after the fact` };
+  if (reg.ok && new Set(judged).size !== judged.length)
+    reg = { ok: false, detail: `${reg.detail}; but two of the rounds judged share a name (${judged.join(", ")}), so which one the rule meant is unclear` };
+  else if (reg.ok && !named.length) reg = { ok: false, detail: `${reg.detail}; but the rule names no rounds, so the rounds judged could have been picked after the fact` };
   else if (reg.ok && (new Set(named).size !== new Set(judged).size || named.some((n) => !judged.includes(n)) || judged.some((j) => !named.includes(j))))
     reg = { ok: false, detail: `${reg.detail}; but it names the rounds ${named.join(", ")} and was judged on ${judged.join(", ")}` };
   return {

@@ -267,7 +267,7 @@ const loose = (s: string) => s.split("\n").map((l) => l.trimEnd()).join("\n");
  *  file, or more than 5,000 files or 50 MB in all. In a recorded git repository the candidates are git's file list,
  *  and an ignored file or folder must be searchable too; elsewhere a walk of every folder. Matching ignores trailing
  *  spaces, as edit does. */
-function filesContaining(root: string, text: string, mayRead: (p: string) => boolean = () => true): string[] | undefined {
+function filesContaining(root: string, text: string, mayRead: (p: string) => boolean = () => true, exact = false): string[] | undefined {
   const MAX_FILES = 5000;
   const MAX_BYTES = 50 * 1024 * 1024;
   const want = loose(text);
@@ -291,7 +291,8 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
       bytes += st.size;
       if (bytes > MAX_BYTES) return false;
       const body = readFileSync(p, "utf8");
-      if (body.includes(text) || loose(body).includes(want)) hits.push(p);
+      // As edit compares: loosely, except with replace_all, which matches exactly.
+      if (body.includes(text) || (!exact && loose(body).includes(want))) hits.push(p);
       return true;
     } catch {
       return false;
@@ -313,8 +314,40 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
     }
     return true;
   };
+  // Before reading anything: whether the ignored folders (dependencies, builds) fit within the limits at all. Most do
+  // not, and then the answer is uncertain at the cost of a few stat calls, not 50 MB of reading.
+  const fits = (dir: string, depth: number, budget: { files: number; bytes: number }): boolean => {
+    if (depth > 12) return false;
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) {
+        if (!fits(p, depth + 1, budget)) return false;
+        continue;
+      }
+      if (--budget.files < 0) return false;
+      try {
+        budget.bytes -= lstatSync(p).size;
+      } catch {
+        return false;
+      }
+      if (budget.bytes < 0) return false;
+    }
+    return true;
+  };
   const listed = gitFiles(root);
   if (listed) {
+    const budget = { files: MAX_FILES, bytes: MAX_BYTES };
+    for (const f of listed.ignored) {
+      const p = join(root, f.replace(/\/$/, ""));
+      const st = lstatSync(p, { throwIfNoEntry: false });
+      if (st?.isDirectory() && !fits(p, 0, budget)) return undefined;
+    }
     // A folder in git's own list is a nested repository or submodule: not searched, so uncertain. Ignored folders
     // are searched, within the same limits.
     for (const f of listed.ignored) if (!check(join(root, f.replace(/\/$/, "")))) return undefined;
@@ -342,13 +375,14 @@ export const editTool: Tool = {
     // Under Seatbelt the scratch folder is the shared system /tmp: no scan of it can be certain, so none is made.
     if (ctx.sandbox === "seatbelt") return undefined;
     const mayRead = (p: string) => ctx.gate.allows({ tool: "read", subject: displayPath(ctx.workspace, p) });
-    const hits = filesContaining(ctx.workspace, input.old_string, mayRead);
+    const exact = input.replace_all === true;
+    const hits = filesContaining(ctx.workspace, input.old_string, mayRead, exact);
     if (hits?.length !== 1) return undefined;
     // Not mended into an edit the rules would refuse: the note would tell which file holds the text.
     if (!ctx.gate.allows({ tool: "edit", subject: displayPath(ctx.workspace, hits[0]!) })) return undefined;
     // The scratch folder is a place edit can write to as well: a match there makes the workspace's match uncertain.
     const scratch = scratchRoot(ctx);
-    if (scratch && scratch !== ctx.workspace && !scratch.startsWith(`${ctx.workspace}/`) && filesContaining(scratch, input.old_string)?.length !== 0) return undefined;
+    if (scratch && scratch !== ctx.workspace && !scratch.startsWith(`${ctx.workspace}/`) && filesContaining(scratch, input.old_string, undefined, exact)?.length !== 0) return undefined;
     const path = relative(ctx.workspace, hits[0]!);
     return { input: { ...input, path }, note: `no path was given; ${path} is the only file containing old_string` };
   },

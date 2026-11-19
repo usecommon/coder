@@ -634,7 +634,9 @@ export class Agent {
    *  written with the user's own rights and network, so then it asks first, as the bash tool does. */
   private async runCheck(command: string, signal?: AbortSignal) {
     const kind = this.o.cfg.sandbox === "off" ? "none" : this.sandbox;
-    const secs = this.o.cfg.checkTimeout ?? 300;
+    // Zero, a negative value or one past what a timer can hold would kill every check at once.
+    const raw = this.o.cfg.checkTimeout;
+    const secs = typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? Math.min(raw, 86_400) : 300;
     if (kind === "none") {
       const ok = await this.gate.check({ tool: "bash", subject: command, reason: "the check runs without a sandbox" }, "ask");
       if (!ok.ok) return { output: "", exitCode: null, timedOut: false, skipped: ok.why };

@@ -119,10 +119,12 @@ export function fingerprint(ws: string): string | undefined {
     if (!status || !d) return undefined;
     // The commit too: changes committed through the shell leave a clean tree but are changes all the same.
     const head = git(ws, ["rev-parse", "-q", "--verify", "HEAD"]);
-    h.update(status.stdout).update(d.stdout).update(head?.stdout ?? "no-head");
+    // Untracked output in dependency, build and cache folders is left out, as for ignored files.
+    const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && e.slice(3).split("/").some((part) => SKIP.has(part))));
+    h.update(entries.join("\0")).update(d.stdout).update(head?.stdout ?? "no-head");
     // Untracked files are not in the diff: their size and time stand in. Status gives paths from the repository's
     // top, which may be above the workspace.
-    for (const entry of status.stdout.split("\0"))
+    for (const entry of entries)
       if (entry.startsWith("?? "))
         try {
           const s = statSync(join(status.top, entry.slice(3)));
@@ -185,6 +187,7 @@ export function gitFiles(ws: string): { listed: string[]; ignored: string[] } | 
   const listed = git(ws, ["ls-files", "-co", "--exclude-standard", "-z"]);
   const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "--directory", "-z"]);
   if (!listed || !ignored) return undefined;
-  const split = (s: string) => s.split("\0").filter(Boolean);
+  // Unique: a file in a merge conflict is listed once per stage.
+  const split = (s: string) => [...new Set(s.split("\0").filter(Boolean))];
   return { listed: split(listed.stdout), ignored: split(ignored.stdout) };
 }

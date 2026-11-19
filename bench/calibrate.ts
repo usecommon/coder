@@ -7,7 +7,8 @@
 // Signals: the watcher is replayed over first attempts at other thresholds, and each setting is scored by how well
 // it tells a failing run from a passing run of the same task (AUC; 0.5 is chance). A different setting is proposed
 // only if it is better by 0.02 or more and fires on at least 30 failing runs. Checks: from the check records Galley
-// writes, how many failed checks came before a turn's first pass; checkRounds is proposed as the number of failures
+// writes, how many checks failed in each turn (checkRounds limits them all, before and after a pass); checkRounds is
+// proposed as the number of failures
 // that covers 90% of the turns that passed after at least one failure, once there are 30 such turns.
 // No model is called.
 import { LIMITS } from "../galley/src/agent/signals.ts";
@@ -69,7 +70,7 @@ function checks(runs: TaskRun[]) {
   const turns: { fails: number; endedPassing: boolean }[] = [];
   for (const r of runs) {
     // The check records of one turn: by the turn number Galley writes, or, without it, a new turn wherever the
-    // round count starts again at 1. In a turn, the failures before its first pass; it ended passing if its last
+    // round count starts again at 1. In a turn, every failed check; it ended passing if its last
     // check passed.
     const groups: Extract<SessionRecord, { type: "check" }>[][] = [];
     let prev: Extract<SessionRecord, { type: "check" }> | undefined;
@@ -87,8 +88,8 @@ function checks(runs: TaskRun[]) {
       prev = c;
     }
     for (const g of groups) {
-      const firstPass = g.findIndex((c) => c.passed);
-      turns.push({ fails: firstPass < 0 ? g.length : firstPass, endedPassing: g.at(-1)!.passed });
+      // Every failure in the turn uses up one of checkRounds, also one after a pass.
+      turns.push({ fails: g.filter((c) => !c.passed).length, endedPassing: g.at(-1)!.passed });
     }
   }
   if (!turns.length) {

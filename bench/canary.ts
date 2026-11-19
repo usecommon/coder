@@ -91,9 +91,12 @@ function check(round: string) {
   const got = new Map(runs.map((r) => [r.task, r.pass]));
   const stable = Object.entries(c.stable).filter(([t]) => got.has(t));
   const failed = stable.filter(([t]) => !got.get(t));
-  // Each stable task's chance of failing, from its history, with one failure added so that no task is assumed
-  // never to fail.
-  const p = stable.map(([, [k, n]]) => (n - k + 1) / (n + 2));
+  // One chance of failing for every stable task, from their pooled history with one failure and one pass added
+  // (so that it is never zero). A prior on each task's own five runs would put each at 1 in 7 and hide a large
+  // regression; pooled, 0 failures in 120 runs gives 1 in 122.
+  const fails = stable.reduce((a, [, [k, n]]) => a + n - k, 0);
+  const total = stable.reduce((a, [, [, n]]) => a + n, 0);
+  const p = stable.map(() => (fails + 1) / (total + 2));
   const pValue = atLeast(failed.length, p);
   const expected = p.reduce((a, b) => a + b, 0);
   const hard = Object.keys(c.hard).filter((t) => got.has(t));

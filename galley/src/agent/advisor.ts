@@ -2,7 +2,7 @@
 // short, so the main model keeps its context and its cached prompt: the advisor is consulted, the session is not
 // handed over (research/model-switching.md, section 4).
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import type { Message } from "../core/types.ts";
@@ -72,7 +72,7 @@ export const freshStartMessage = (o: { from: string; why: string; request: strin
 
 /** Messages Galley adds to a turn itself (a failed check, a review, advice, a takeover, a plan's review): not requests. */
 const INJECTED = [
-  /^The check `[^`\n]*` failed \((?:no exit code|exit code -?\d+); check \d+ of \d+ this turn\):/,
+  /^The check `[\s\S]*?` failed \((?:no exit code|exit code -?\d+); check \d+ of \d+ this turn\):/,
   /^Before you finish, check your work against the original request\./,
   /^A second model \([^)\n]*\) (?:read this session because|reviewed your (?:change|plan))/,
   /^You are taking over this (?:session|task) from another model \(/,
@@ -169,6 +169,30 @@ function unifiedDiff(name: string, before: string, path: string): string | undef
   }
 }
 
+/** What a path holds now, read on the host for another model: only a regular file that is really inside the
+ *  workspace. A link the model planted (to /proc/self/environ, to a file outside, to a device) is named, never read:
+ *  Galley's own environment holds the API keys the sandbox keeps from the model. */
+function look(workspace: string, path: string): { kind: "file" } | { kind: "missing" } | { kind: "other"; what: string } {
+  const st = lstatSync(path, { throwIfNoEntry: false });
+  if (!st) return { kind: "missing" };
+  if (st.isSymbolicLink()) {
+    let to = "";
+    try {
+      to = readlinkSync(path);
+    } catch {}
+    return { kind: "other", what: `a link to ${to}, not read` };
+  }
+  if (!st.isFile()) return { kind: "other", what: "not a regular file, not read" };
+  try {
+    const real = realpathSync(path);
+    const ws = realpathSync(workspace);
+    if (real !== ws && !real.startsWith(`${ws}/`)) return { kind: "other", what: "outside the workspace, not read" };
+  } catch {
+    return { kind: "other", what: "not readable" };
+  }
+  return { kind: "file" };
+}
+
 /** What a turn changed, for a review: a diff for each file that existed before, the whole of each new file. */
 export function changes(workspace: string, snapshots: { path: string; before: string | null }[], maxChars = 40_000): string {
   const out: string[] = [];
@@ -176,10 +200,12 @@ export function changes(workspace: string, snapshots: { path: string; before: st
   for (const s of snapshots) {
     const name = relative(workspace, s.path) || s.path;
     let text: string;
-    if (!existsSync(s.path)) {
+    const now = look(workspace, s.path);
+    if (now.kind === "missing") {
       if (s.before === null) continue; // created and removed again within the turn
       text = `--- ${name} (deleted)`;
-    } else if (s.before === null) text = `--- ${name} (new file)\n${readFileSync(s.path, "utf8")}`;
+    } else if (now.kind === "other") text = `--- ${name} (${now.what})`;
+    else if (s.before === null) text = `--- ${name} (new file)\n${readFileSync(s.path, "utf8")}`;
     else {
       const diff = unifiedDiff(name, s.before, s.path);
       if (diff === "") continue; // changed and changed back

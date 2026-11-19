@@ -703,3 +703,32 @@ Also fixed from the unverified ones: a stale lesson lock is taken by rename, whi
 Each protection added this round was taken out in turn and its test run: all six tests failed without their fix and pass with it. Figures unchanged. Tests: 185 pass.
 
 **Five rounds compared.** Findings 60, 39, 32, 25, 19. Confirmed of those checked: 14, 14, 14, 12, 14. Four rounds in a row found a way to run a program on the host through git; this round replaced the list of dangerous settings with a list of safe ones, which is the change the pattern called for.
+
+## Sixth council review (19 November)
+
+Fresh agents, same lenses. 18 findings, 16 distinct defects; all 14 checked by an agent told to refute them held. For the first time in four rounds none came through git.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **A link the model plants is read on the host.** What a turn changed is read by Galley itself, outside the sandbox, for a review, a takeover or a lesson. A link the model made to `/proc/self/environ` would put Galley's own environment, with its API keys, into a request to another model. `/undo` also read and wrote through links | high | Only a regular file whose real path is inside the workspace is read; a link is named with its target, never followed. Undo remembers a link as a link, and removes whatever is at a path before putting the old content back, so it never writes through a link planted since |
+| The canary gave each stable task its own prior on five runs, 1 in 7, so 6 failures of 24 always-passing tasks read as "no regression" | high | One rate from the pooled history (0 failures in 120 runs gives 1 in 122). Six failures are now far past the 5% line; one failure is not |
+| A round given twice (or once through its parent folder) was judged twice and still counted as pre-registered | medium | Rounds are deduplicated by real path; two judged rounds with the same name make the registration unclear |
+| `--check="npm test"` written as `--check=npm test` (one argument with a space) was taken as the request | medium | `--option=value` keeps spaces for options that take a value |
+| Calibration counted failures before a turn's first pass, but `checkRounds` limits every failure in the turn | medium | Counts every failed check in the turn |
+| Untracked files in dependency or build folders inside a repository set off the check | low | Left out of the fingerprint, as they are outside a repository |
+| A check command holding a backtick or a newline made its failure message look like the user's request to a model taking over | low | Matched whatever the command holds |
+| A file in a merge conflict was listed once per stage, so the edit repair saw it as ambiguous | low | Listed once |
+| With `replace_all`, the edit repair matched loosely, but the edit matches exactly | low | Exact |
+| The edit repair read up to 50 MB of an ignored dependency folder before giving up | low | The ignored folders are sized by `stat` first; if they cannot fit, it gives up without reading |
+| A `checkTimeout` of 0, negative or huge failed every check at once | low | Taken as the default; capped at a day |
+| A lesson lock could be removed by a process that did not hold it, and a stale lock waited longer than the wait allowed | low | The lock holds a token and is removed only by its owner; stale after 2 seconds |
+| In old sessions, a helper that compacted had its cost counted twice in the miner's split | low | Its roll-up is matched without the compaction |
+| No test for a file the rules let the repair read but not edit | low | Added |
+
+Also fixed from the unverified ones: common words ("make", "sure", "should", "file") no longer make a lesson look related; the canary's comment describes its formula.
+
+**Found while checking the figures: the kept rounds' costs were invisible to the bench tools.** Kept rounds hold the proxy log with headers and bodies stripped, as `proxy-usage.jsonl`; `sessions.ts` read only `proxy.jsonl`. Run on the kept fourth confirmation, the verdict showed the cost of all 200 pairs as unknown and the cost condition as not met; the canary could not tell the model of any kept run. Both names are now read. The verdict on `t4-1` is again +4.5 points, p = 0.122, cost 22% lower (interval 9% to 33% lower): not met. Folder arguments that are files are skipped.
+
+Each protection added this round was taken out in turn and its test run: all nine tests failed without their fix and pass with it. Profiles, signal and calibration figures unchanged. Tests: 195 pass.
+
+**Six rounds compared.** Findings 60, 39, 32, 25, 19, 18. Confirmed of those checked: 14, 14, 14, 12, 14, 14. The count has levelled off near 18; the severity has not fallen as fast, because each round looks at host-side reads from a new angle (git, then links).

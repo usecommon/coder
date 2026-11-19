@@ -36,20 +36,25 @@ export function loadLessons(workspace: string): Lesson[] {
 /** Hold a lock file while `fn` runs, so two Galley processes in one project do not lose each other's lessons.
  *  A lock older than ten seconds is taken to be left over from a process that died. */
 function locked<T>(lock: string, fn: () => T): T {
+  // The lock holds a token, so a process removes only its own lock, never one another process has taken since.
+  const token = `${process.pid}.${Math.random().toString(36).slice(2)}`;
   for (let i = 0; ; i++) {
     try {
-      closeSync(openSync(lock, "wx"));
+      const fd = openSync(lock, "wx");
+      writeFileSync(fd, token);
+      closeSync(fd);
       break;
     } catch {
       try {
         // Taken over by a rename, which only one process can win; the loser finds no lock to rename and waits.
-        if (Date.now() - statSync(lock).mtimeMs > 10_000) {
+        // Writing a lesson takes milliseconds: a lock two seconds old was left by a process that died.
+        if (Date.now() - statSync(lock).mtimeMs > 2_000) {
           const stale = `${lock}.${process.pid}.stale`;
           renameSync(lock, stale);
           unlinkSync(stale);
         }
       } catch {}
-      if (i > 200) throw new Error(`could not lock ${lock}`);
+      if (i > 500) throw new Error(`could not lock ${lock}`);
       Bun.sleepSync(10);
     }
   }
@@ -57,7 +62,7 @@ function locked<T>(lock: string, fn: () => T): T {
     return fn();
   } finally {
     try {
-      unlinkSync(lock);
+      if (readFileSync(lock, "utf8") === token) unlinkSync(lock);
     } catch {}
   }
 }
@@ -80,7 +85,9 @@ function write(workspace: string, lesson: Lesson): void {
 
 /** Words of four letters or more, reduced to a rough stem so that "contains" meets "contain". */
 const stem = (w: string) => w.replace(/(ing|ed|es|s)$/, "");
-const words = (s: string) => new Set((s.toLowerCase().match(/[a-z_][a-z0-9_]{3,}/g) ?? []).map(stem));
+/** Words too common to show that a lesson is related to a request. */
+const COMMON = new Set(["this", "that", "with", "from", "have", "will", "into", "when", "what", "then", "than", "them", "they", "there", "their", "these", "those", "make", "sure", "also", "only", "some", "more", "should", "would", "could", "about", "after", "before", "need", "file", "files", "code", "please", "just", "like", "your", "each", "does", "done", "were", "been", "being"]);
+const words = (s: string) => new Set((s.toLowerCase().match(/[a-z_][a-z0-9_]{3,}/g) ?? []).filter((w) => !COMMON.has(w)).map(stem));
 
 /** The one lesson most related to the request: at least two words in common, or a file it was about named in the
  *  request, and none of its files gone. Undefined when none qualifies: no note is better than an unrelated one. */

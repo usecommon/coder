@@ -1,8 +1,8 @@
 // Reading what benchmark rounds keep: results.jsonl, proxy.jsonl and, for Galley, each task-run's session files.
 // Shared by the round miner (mine.ts), the signal replay (signals.ts), the verdicts (verdict.ts), the measured
 // model profiles (profiles.ts), the canary (canary.ts) and the calibration report (calibrate.ts). Read-only.
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import type { Message } from "../galley/src/core/types.ts";
 
 export interface Result {
@@ -66,13 +66,16 @@ export function roundDirs(args: string[]): string[] {
   const out: string[] = [];
   for (const d of args.map((a) => a.replace(/\/+$/, "") || "/")) {
     if (existsSync(join(d, "results.jsonl"))) out.push(d);
-    else for (const sub of existsSync(d) ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
+    else for (const sub of statSync(d, { throwIfNoEntry: false })?.isDirectory() ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
   }
-  return out.sort();
+  // A round given twice (or once itself and once through its parent folder) is judged once.
+  return [...new Map(out.map((d) => [resolve(d), d])).values()].sort();
 }
 
 export const results = (round: string): Result[] => jsonl(join(round, "results.jsonl")).filter((r) => typeof r.pass === "boolean");
-export const proxyCalls = (round: string): any[] => jsonl(join(round, "proxy.jsonl"));
+// A kept round holds the proxy log with request headers and bodies stripped, as proxy-usage.jsonl.
+export const proxyCalls = (round: string): any[] =>
+  jsonl(join(round, existsSync(join(round, "proxy.jsonl")) ? "proxy.jsonl" : "proxy-usage.jsonl"));
 
 function galleyConfig(dir: string): Record<string, unknown> | undefined {
   for (const p of [join(dir, "config", "galley", "config.json"), join(dir, "config", "config.json")]) {

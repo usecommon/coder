@@ -1,14 +1,15 @@
 // More than one model in a session: what is known about models, the signals that a turn is going badly,
 // the advisor, the handover and the fallback.
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { advisorRequest, changes, digest, earlierTurns, freshStartMessage, reviewPassed, withoutPreamble } from "../src/agent/advisor.ts";
 import { lessonNote } from "../src/agent/lessons.ts";
 import { scratchDir } from "../src/tools/bash.ts";
 import { detectSandbox } from "../src/safety/sandbox.ts";
 import { loadLessons, pickLesson, saveLesson } from "../src/agent/lessons.ts";
-import { Agent } from "../src/agent/loop.ts";
+import { Agent, checkFailedMessage } from "../src/agent/loop.ts";
+import { UndoLog } from "../src/tools/undo.ts";
 import { LIMITS, Watch } from "../src/agent/signals.ts";
 import { parsePlan, runSteps } from "../src/agent/steps.ts";
 import { parseArgs } from "../src/args.ts";
@@ -1473,5 +1474,131 @@ describe("fixes from the fifth council review", () => {
     ] as Message[]);
     expect(text).toContain("Answer: Added --verbose.");
     expect(text).toContain("Request: The check `npm test` fails on CI");
+  });
+});
+
+describe("sixth review", () => {
+  const sh = (dir: string, ...a: string[]) => Bun.spawnSync(["git", "-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+  test("what a turn changed names a link the model planted, and never reads what it points to", () => {
+    const ws = tempDir();
+    const outside = join(tempDir(), "secret.env");
+    writeFileSync(outside, "API_KEY=sk-live-0000\n");
+    symlinkSync(outside, join(ws, "new.txt"));
+    writeFileSync(join(ws, "old.txt"), "x");
+    symlinkSync(outside, join(ws, "was-file.txt"));
+    const files = changes(ws, [
+      { path: join(ws, "new.txt"), before: null },
+      { path: join(ws, "was-file.txt"), before: "plain\n" },
+    ]);
+    expect(files).not.toContain("sk-live");
+    expect(files).toContain(`--- new.txt (a link to ${outside}, not read)`);
+    expect(files).toContain("--- was-file.txt (a link to");
+  });
+
+  test("undo replaces a link planted since, instead of writing through it", () => {
+    const ws = tempDir();
+    const outside = join(tempDir(), "victim.txt");
+    writeFileSync(outside, "untouched\n");
+    const path = join(ws, "a.txt");
+    writeFileSync(path, "original\n");
+    const log = new UndoLog();
+    log.beginTurn();
+    log.record(path);
+    Bun.spawnSync(["rm", path]);
+    symlinkSync(outside, path);
+    log.undo();
+    expect(readFileSync(outside, "utf8")).toBe("untouched\n");
+    expect(lstatSync(path).isSymbolicLink()).toBe(false);
+    expect(readFileSync(path, "utf8")).toBe("original\n");
+  });
+
+  test("undo puts back a link as a link, without reading what it points to", () => {
+    const ws = tempDir();
+    const outside = join(tempDir(), "target.txt");
+    writeFileSync(outside, "kept\n");
+    const path = join(ws, "link.txt");
+    symlinkSync(outside, path);
+    const log = new UndoLog();
+    log.beginTurn();
+    log.record(path);
+    expect(log.snapshots()[0]!.before).toBeNull();
+    Bun.spawnSync(["rm", path]);
+    writeFileSync(path, "replaced\n");
+    log.undo();
+    expect(lstatSync(path).isSymbolicLink()).toBe(true);
+    expect(readFileSync(outside, "utf8")).toBe("kept\n");
+  });
+
+  test("--check=... keeps a value with spaces", () => {
+    expect(parseArgs(["run", "fix it", "--check=npm test"]).flags.check).toBe("npm test");
+    expect(parseArgs(["run", "fix it", "--check=npm test"]).positional).toEqual(["fix it"]);
+  });
+
+  test("untracked output in a dependency folder inside a repository is not a change", async () => {
+    const ws = tempDir();
+    sh(ws, "init", "-q");
+    writeFileSync(join(ws, "a.py"), "x");
+    sh(ws, "add", "a.py");
+    sh(ws, "commit", "-qm", "x");
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    mkdirSync(join(ws, "node_modules", "pkg"), { recursive: true });
+    writeFileSync(join(ws, "node_modules", "pkg", "index.js"), "y");
+    expect(fingerprint(ws)).toBe(before);
+    writeFileSync(join(ws, "b.py"), "z");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("a check message for a command with a backtick or a newline is not quoted as a request", () => {
+    for (const cmd of ["set -e\nnpm test", "test `cat n` = 1"]) {
+      const text = earlierTurns([
+        { role: "user", content: "Fix the parser" },
+        { role: "assistant", content: "Done.", toolCalls: [] },
+        { role: "user", content: checkFailedMessage(cmd, 1, "FAILED-OUTPUT", 1, 3) },
+        { role: "assistant", content: "Fixed.", toolCalls: [] },
+      ] as Message[]);
+      expect(text).toContain("Request: Fix the parser");
+      expect(text).not.toContain("FAILED-OUTPUT");
+    }
+  });
+
+  test("with replace_all, edit repair matches exactly, as the edit will", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "foo()\n  bar()", new_string: "baz()", replace_all: true } }] };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
+    writeFileSync(join(ws, "a.txt"), "foo()   \n  bar()\n");
+    writeFileSync(join(ws, "b.txt"), "foo()\n  bar()\n");
+    await agent.send("rename");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).not.toContain("input.path is required");
+    expect(readFileSync(join(ws, "b.txt"), "utf8")).toBe("baz()\n");
+    expect(readFileSync(join(ws, "a.txt"), "utf8")).toBe("foo()   \n  bar()\n");
+  });
+
+  test("edit repair names no file the rules let it read but not edit", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "version = 1", new_string: "version = 2" } }] };
+    const perm = { ...testConfig().permission, edit: { "*": "allow" as const, "locked.cfg": "deny" as const } };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { permission: perm, sandbox: "off" });
+    writeFileSync(join(ws, "locked.cfg"), "version = 1\n");
+    await agent.send("bump the version");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.content).toContain("input.path is required");
+    expect(res.content).not.toContain("locked.cfg");
+    expect(readFileSync(join(ws, "locked.cfg"), "utf8")).toBe("version = 1\n");
+  });
+
+  test("a check time limit of 0 is taken as the default, not as an instant timeout", async () => {
+    const write: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "x" } }] };
+    const { mock, agent } = setup([write, { text: "Done." }, { text: "Again." }], { check: "sleep 0.5 && test -f out.txt", checkTimeout: 0, sandbox: "off" });
+    await agent.send("write out.txt");
+    expect(mock.requests).toHaveLength(2);
+  });
+
+  test("common words alone do not pick a lesson", () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "kept.py"), "x");
+    saveLesson(ws, { text: "make sure the tokenizer file should read utf8", check: "c", files: ["kept.py"], at: "2026-01-01" });
+    expect(pickLesson(ws, "please make sure this file should build")).toBeUndefined();
+    expect(pickLesson(ws, "the tokenizer fails on utf8 input")?.text).toBe("make sure the tokenizer file should read utf8");
   });
 });

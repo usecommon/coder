@@ -21,6 +21,12 @@ export function parseArgs(argv: string[]): Args {
       positional.push(...argv.slice(i + 1));
       break;
     }
+    // "--check=npm test": a known option with a value that holds spaces.
+    const eq = /^--([A-Za-z][\w-]*)=([\s\S]*)$/.exec(a);
+    if (eq && VALUED.has(eq[1]!)) {
+      flags[eq[1]!] = eq[2]!;
+      continue;
+    }
     if (!/\s/.test(a) && (a.startsWith("--") || (a.startsWith("-") && a.length === 2))) {
       let key = a.startsWith("--") ? a.slice(2) : (SHORT[a.slice(1)] ?? a.slice(1));
       let val: string | boolean = true;

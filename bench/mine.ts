@@ -123,11 +123,15 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
       phases.helpers += c;
       if (marked) continue;
       const hm = (h[0] as { model?: string }).model ?? "";
-      const i = rollups.findIndex((x) => x.model === hm && Math.abs(x.costUsd - c) <= 1e-9 * Math.max(1, c));
+      // The roll-up held the helper's turns only: in old sessions its compaction went to its own file alone, as a
+      // usage record just before the compaction record.
+      const compacted = h.reduce((s, x, j) => s + (x.type === "usage" && h[j + 1]?.type === "compaction" ? (x as { costUsd: number }).costUsd : 0), 0);
+      const near = (a: number, b: number) => Math.abs(a - b) <= 1e-9 * Math.max(1, b);
+      const i = rollups.findIndex((x) => x.model === hm && (near(x.costUsd, c) || near(x.costUsd, c - compacted)));
       if (i < 0) continue; // the helper was cut off before its roll-up: nothing of it is in the parent
-      rollups.splice(i, 1);
-      if (hm === meta.model) phases.main -= c;
-      else phases.otherModels -= c;
+      const [hit] = rollups.splice(i, 1);
+      if (hm === meta.model) phases.main -= hit!.costUsd;
+      else phases.otherModels -= hit!.costUsd;
     }
 
     const ms = firstAttempt(r.main);
