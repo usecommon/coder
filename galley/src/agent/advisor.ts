@@ -63,12 +63,41 @@ export const reviewMessage = (advisor: string, report: string) =>
  *  (the files as they are now) and why it was brought in. A model that inherits the whole transcript was measured to
  *  recover less than half of what it adds on its own; given only the edits, 64 to 84% (research/reports, area 1). */
 export const freshStartMessage = (o: { from: string; why: string; request: string; earlier?: string; files: string; environment: string }) =>
-  `${o.environment}\n\n${o.earlier ? `Earlier in this session the user asked:\n\n${clip(o.earlier, 4000)}\n\nThe current request:\n\n` : ""}${o.request}\n\n` +
+  `${o.environment}\n\n${o.earlier ? `Earlier in this session:\n\n${o.earlier}\n\nThe current request:\n\n` : ""}${o.request}\n\n` +
   `You are taking over this task from another model (${o.from}) because ${o.why}. You are not shown its attempt, only where the files stand. ` +
   "Work from the request and the files as they are now: keep what is right, change what is not." +
   (o.files
     ? `\n\nWhat has been changed so far:\n\n<files_changed>\n${o.files}\n</files_changed>`
     : "\n\nNo file was changed with the write or edit tools in this turn. Commands or earlier turns may still have changed files: look before you assume the code is as it was.");
+
+/** Messages Galley adds to a turn itself (a failed check, a review, advice, a takeover, a plan's review): not requests. */
+const INJECTED = [/^The check `/, /^Before you finish, check your work/, /^A second model \(/, /^You are taking over/, /^An independent reviewer/];
+
+/** The session before this turn, for a model that takes over and does not read it: each request, without the
+ *  description of the workspace at the time and without a plan request's instruction to change nothing yet, and the
+ *  answer that ended it (for a plan, the plan). Summaries of compacted work are kept. The latest part is kept when it
+ *  is too long. */
+export function earlierTurns(messages: Message[], maxChars = 8000): string {
+  const parts: string[] = [];
+  let answer = "";
+  const flush = () => {
+    if (answer) parts.push(`Answer: ${answer}`);
+    answer = "";
+  };
+  for (const m of messages) {
+    if (m.role === "assistant") {
+      if (m.content.trim()) answer = m.content.trim();
+      continue;
+    }
+    if (m.role !== "user" || typeof m.content !== "string" || INJECTED.some((re) => re.test(m.content))) continue;
+    flush();
+    if (m.content.startsWith("[Summary of the earlier conversation")) parts.push(m.content);
+    else parts.push(`Request: ${withoutPreamble(m.content).replace(/\n\nDo not change anything yet\.[\s\S]*$/, "")}`);
+  }
+  flush();
+  const text = parts.join("\n\n");
+  return text.length > maxChars ? `[… ${text.length - maxChars} earlier characters left out …]\n${text.slice(-maxChars)}` : text;
+}
 
 /** The first message of a session, without the parts that described the workspace at the time: for quoting it to a
  *  model that takes over later, beside a fresh description. */

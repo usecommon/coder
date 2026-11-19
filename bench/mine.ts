@@ -94,7 +94,9 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     const meta = r.main[0] as { model?: string };
     for (const rec of r.main) {
       if (rec.type === "usage") {
-        const u = rec as Extract<SessionRecord, { type: "usage" }>;
+        const u = rec as Extract<SessionRecord, { type: "usage" }> & { helper?: string };
+        // A helper's cost added to its parent is marked: it is counted from the helper's own file instead.
+        if (u.helper) continue;
         if (u.model === meta.model) phases.main += u.costUsd;
         else phases.otherModels += u.costUsd;
       } else if (rec.type === "status" && rec.status === "error") tally(harness, `session ended in error: ${normalize(String(rec.detail ?? ""))}`, r);
@@ -106,13 +108,21 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
       if (checkRecs.some((c) => !c.passed)) checks.failed++;
       if (checkRecs.some((c) => !c.passed) && checkRecs.at(-1)!.passed) checks.passedAfterFailing++;
     }
-    // Galley adds each helper's cost to its parent session too, under the helper's model (smallModel, or the main
-    // model when none is set). Count it once, as helpers: take it back out of the bucket the parent put it in.
+    // Every helper's own usage counts as helpers. Sessions written before the parent's roll-up was marked still
+    // hold an unmarked copy of it: take it out of the parent's bucket, but never more than the parent recorded on
+    // that model, since a helper cut off mid-run never got its roll-up written.
+    const marked = r.main.some((x) => x.type === "usage" && (x as { helper?: string }).helper);
+    const parentOn = new Map<string, number>();
+    for (const x of r.main) if (x.type === "usage") parentOn.set((x as { model: string }).model, (parentOn.get((x as { model: string }).model) ?? 0) + (x as { costUsd: number }).costUsd);
     for (const h of r.helpers) {
       const c = h.filter((x) => x.type === "usage").reduce((s, x) => s + (x as Extract<SessionRecord, { type: "usage" }>).costUsd, 0);
       phases.helpers += c;
-      if ((h[0] as { model?: string }).model === meta.model) phases.main -= c;
-      else phases.otherModels -= c;
+      if (marked) continue;
+      const hm = (h[0] as { model?: string }).model ?? "";
+      const take = Math.min(c, parentOn.get(hm) ?? 0);
+      parentOn.set(hm, (parentOn.get(hm) ?? 0) - take);
+      if (hm === meta.model) phases.main -= take;
+      else phases.otherModels -= take;
     }
 
     const ms = firstAttempt(r.main);
@@ -169,7 +179,8 @@ export function render(m: Mined, prev: Mined | undefined, signals: string[]): st
   const out: string[] = [`# What went wrong in round ${m.round}`, ""];
   out.push("*Written by `bench/mine.ts` from the round's kept session files. Read-only: nothing was run again.*", "");
   out.push("| Agent | Task-runs | Passed | Timed out | Agent failed | Memory kills | Cost (list price) | Median minutes |", "|---|---|---|---|---|---|---|---|");
-  for (const [a, s] of Object.entries(m.agents)) out.push(`| ${a} | ${s.runs} | ${s.passed} (${pct(s.passed, s.runs)}) | ${s.timedOut} | ${s.agentFailed} | ${s.memoryKills} | $${s.costUsd.toFixed(2)} | ${s.medianMinutes.toFixed(1)} |`);
+  const money = (x: number | null | undefined, d = 2) => (typeof x === "number" && Number.isFinite(x) ? `$${x.toFixed(d)}` : "unknown");
+  for (const [a, s] of Object.entries(m.agents)) out.push(`| ${a} | ${s.runs} | ${s.passed} (${pct(s.passed, s.runs)}) | ${s.timedOut} | ${s.agentFailed} | ${s.memoryKills} | ${money(s.costUsd)} | ${s.medianMinutes.toFixed(1)} |`);
   const seen = (list: Cluster[] | undefined) => new Set((list ?? []).map((c) => c.key));
   const section = (title: string, list: Cluster[], before: Set<string> | undefined, note: string) => {
     out.push("", `## ${title}`, "", note, "");
@@ -201,7 +212,7 @@ export function render(m: Mined, prev: Mined | undefined, signals: string[]): st
     out.push("", "## Compared with the previous round", "", `Previous: ${prev.round}.`);
     for (const [a, s] of Object.entries(m.agents)) {
       const p = prev.agents[a];
-      if (p) out.push(`- ${a}: ${pct(s.passed, s.runs)} against ${pct(p.passed, p.runs)}; cost per task-run $${(s.costUsd / s.runs).toFixed(4)} against $${(p.costUsd / p.runs).toFixed(4)}.`);
+      if (p) out.push(`- ${a}: ${pct(s.passed, s.runs)} against ${pct(p.passed, p.runs)}; cost per task-run ${money(s.costUsd / s.runs, 4)} against ${money(p.costUsd === null ? null : p.costUsd / p.runs, 4)}.`);
     }
     const fresh = [...m.toolErrors, ...m.malformed, ...m.missingCommands, ...m.harnessErrors].filter((c) => !seen([...prev.toolErrors, ...prev.malformed, ...prev.missingCommands, ...prev.harnessErrors]).has(c.key));
     out.push(`- ${fresh.length} kinds of error are new.${fresh.length ? " Most frequent: " + fresh.slice(0, 3).map((c) => `\`${c.key}\` (${c.count})`).join(", ") + "." : ""}`);

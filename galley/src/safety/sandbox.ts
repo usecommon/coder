@@ -18,6 +18,8 @@ export interface ExecOptions {
   cacheDir?: string;
   /** Private directory mounted at /tmp, so scratch files persist between commands without touching the host's /tmp. */
   tmpDir?: string;
+  /** Keep the last 2,000,000 characters of the output instead of the first (a test run's summary comes last). */
+  keepTail?: boolean;
 }
 
 export interface ExecResult {
@@ -163,7 +165,10 @@ export function exec(command: string, o: ExecOptions): Promise<ExecResult> {
     let output = "";
     let timedOut = false;
     const onData = (b: Buffer) => {
-      if (output.length < 2_000_000) output += b.toString();
+      if (o.keepTail) {
+        output += b.toString();
+        if (output.length > 4_000_000) output = output.slice(-2_000_000);
+      } else if (output.length < 2_000_000) output += b.toString();
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);

@@ -15,7 +15,7 @@
 // not count towards a win. No model is called by this script.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns } from "./sessions.ts";
 
 const FILE = join(import.meta.dir, "canary.json");
@@ -44,7 +44,7 @@ function select(args: string[]) {
   const langs = new Set(flag(args, "langs", "python,go,rust").split(","));
   const history = new Map<string, [number, number]>();
   for (const round of roundDirs(args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")))) {
-    if (SKIP_ROUNDS.test(round.split("/").pop()!) || isCanary(round)) continue;
+    if (SKIP_ROUNDS.test(basename(round)) || isCanary(round)) continue;
     const models = modelsByRun(round);
     for (const r of taskRuns(round)) {
       if (!isDefaultGalley(r) || !langs.has(r.lang) || EXCLUDED.has(r.task)) continue;
@@ -81,7 +81,9 @@ function atLeast(k: number, p: number[]): number {
 
 function check(round: string) {
   const c = JSON.parse(readFileSync(FILE, "utf8")) as Canary;
-  const runs = taskRuns(round).filter((r) => r.agent.startsWith("galley"));
+  // Only runs at the canary's own model and effort count: history at one setting says nothing about another.
+  const models = modelsByRun(round);
+  const runs = taskRuns(round).filter((r) => r.agent.startsWith("galley") && r.config?.effort === c.effort && models.get(runKey(r)) === c.model);
   const got = new Map(runs.map((r) => [r.task, r.pass]));
   const stable = Object.entries(c.stable).filter(([t]) => got.has(t));
   const failed = stable.filter(([t]) => !got.get(t));
@@ -96,9 +98,16 @@ function check(round: string) {
   console.log(`Stable tasks failed: ${failed.length} (history makes ${expected.toFixed(1)} likely; chance of ${failed.length} or more: ${pValue.toFixed(3)}).${failed.length ? " " + failed.map(([t]) => t).join(", ") : ""}`);
   console.log(`Hard tasks passed: ${fixed.length}${fixed.length ? ": " + fixed.join(", ") : ""}.`);
   const missing = Object.keys({ ...c.stable, ...c.hard }).filter((t) => !got.has(t));
-  if (missing.length) console.log(`Not run: ${missing.join(", ")}.`);
-  console.log(pValue < 0.05 ? "REGRESSION: more stable tasks failed than history explains. Look before running a full round." : "No regression detected.");
-  if (pValue < 0.05) process.exitCode = 1;
+  if (missing.length) console.log(`Not run (or not at ${c.model}, effort ${c.effort}): ${missing.join(", ")}.`);
+  const missingStable = Object.keys(c.stable).filter((t) => !got.has(t));
+  if (pValue < 0.05) {
+    console.log("REGRESSION: more stable tasks failed than history explains. Look before running a full round.");
+    process.exitCode = 1;
+  } else if (missingStable.length) {
+    // A Galley that crashes on some tasks records no result for them: that is no pass.
+    console.log(`INCONCLUSIVE: ${missingStable.length} stable tasks have no result (an infrastructure error, a crash, or another setting). Run them again before trusting the canary.`);
+    process.exitCode = 1;
+  } else console.log("No regression detected.");
 }
 
 const [cmd, ...rest] = process.argv.slice(2);

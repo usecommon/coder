@@ -64,7 +64,7 @@ const jsonl = (path: string): any[] => {
 /** Round folders among the arguments: a round itself (it has results.jsonl), or a folder of rounds. */
 export function roundDirs(args: string[]): string[] {
   const out: string[] = [];
-  for (const d of args) {
+  for (const d of args.map((a) => a.replace(/\/+$/, "") || "/")) {
     if (existsSync(join(d, "results.jsonl"))) out.push(d);
     else for (const sub of existsSync(d) ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
   }
@@ -135,10 +135,10 @@ export function firstAttempt(recs: SessionRecord[] | undefined): Message[] {
   return out;
 }
 
-/** Galley as it ships: the default checkout, no extra flags, and a config that sets only the model, the effort, the
- *  step limit and where the provider is. Rounds before run.ts recorded checkout and flags count only the variant
+/** Galley as it ships: the default checkout, no extra flags, and a config that sets only the model, the effort and
+ *  where the provider is. Rounds before run.ts recorded checkout and flags count only the variant
  *  named plain "galley". */
-const NEUTRAL_KEYS = new Set(["effort", "providers", "model", "smallModel", "maxSteps"]);
+const NEUTRAL_KEYS = new Set(["effort", "providers", "model"]);
 export function isDefaultGalley(r: TaskRun): boolean {
   if (!r.config || !r.agent.startsWith("galley")) return false;
   if (r.galley === undefined ? r.agent !== "galley" : r.galley !== "default" || (r.galleyArgs ?? []).length > 0) return false;

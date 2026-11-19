@@ -1,8 +1,9 @@
 // File tools: read, list, glob, grep, write, edit. Paths are confined to the workspace, plus the sandbox's /tmp.
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, isAbsolute, join, normalize, relative } from "node:path";
 import { confine, displayPath, OutsideError, PathError } from "../safety/paths.ts";
+import { gitFiles } from "../agent/workspace-state.ts";
 import { scratchDir } from "./bash.ts";
 import { ToolError, type Tool, type ToolContext } from "./types.ts";
 
@@ -257,32 +258,36 @@ export function locate(hay: string, needle: string): { index: number; length: nu
   return hits.length ? { ...hits[0]!, count: hits.length } : undefined;
 }
 
-/** The files under `root` that contain `text`: undefined unless the answer is certain and cheap. In a git repository
- *  the candidates are its tracked and untracked files, minus ignored ones; elsewhere a walk that gives up when it
- *  would have to skip a folder, go deeper than 12 levels, or read more than 5,000 files or 50 MB. */
+/** Trailing spaces and tabs taken off each line: edit itself finds text that differs only there. */
+const loose = (s: string) => s.replace(/[ \t]+$/gm, "");
+
+/** The files under `root` that contain `text`: undefined unless the answer is certain and cheap. Any candidate that
+ *  is skipped or cannot be read makes it uncertain: a file over 1 MB, a link, a nested repository, an unreadable
+ *  file, or more than 5,000 files or 50 MB in all. In a recorded git repository the candidates are git's file list,
+ *  and an ignored file or folder must be searchable too; elsewhere a walk of every folder. Matching ignores trailing
+ *  spaces, as edit does. */
 function filesContaining(root: string, text: string): string[] | undefined {
   const MAX_FILES = 5000;
   const MAX_BYTES = 50 * 1024 * 1024;
+  const want = loose(text);
   let files = 0;
   let bytes = 0;
   const hits: string[] = [];
   const check = (p: string): boolean => {
     if (++files > MAX_FILES) return false;
     try {
-      const st = statSync(p);
-      if (!st.isFile() || st.size > 1_000_000) return true;
+      const st = lstatSync(p);
+      if (st.isDirectory()) return walk(p, 0);
+      if (!st.isFile() || st.size > 1_000_000) return false;
       bytes += st.size;
       if (bytes > MAX_BYTES) return false;
       const body = readFileSync(p, "utf8");
-      if (!body.slice(0, 8000).includes("\0") && body.includes(text)) hits.push(p);
-    } catch {}
-    return true;
+      if (!body.slice(0, 8000).includes("\0") && (body.includes(text) || loose(body).includes(want))) hits.push(p);
+      return true;
+    } catch {
+      return false;
+    }
   };
-  const ls = spawnSync("git", ["-C", root, "ls-files", "-co", "--exclude-standard", "-z"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 20_000 });
-  if (ls.status === 0) {
-    for (const f of ls.stdout.split("\0")) if (f && !check(join(root, f))) return undefined;
-    return hits;
-  }
   const walk = (dir: string, depth: number): boolean => {
     if (depth > 12) return false;
     let entries: import("node:fs").Dirent[];
@@ -293,13 +298,23 @@ function filesContaining(root: string, text: string): string[] | undefined {
     }
     for (const e of entries) {
       const p = join(dir, e.name);
-      if (e.isSymbolicLink()) return false;
       if (e.isDirectory()) {
         if (!walk(p, depth + 1)) return false;
-      } else if (e.isFile() && !check(p)) return false;
+      } else if (!check(p)) return false;
     }
     return true;
   };
+  const listed = gitFiles(root);
+  if (listed) {
+    // A folder in git's own list is a nested repository or submodule: not searched, so uncertain. Ignored folders
+    // are searched, within the same limits.
+    for (const f of listed.listed) {
+      const p = join(root, f);
+      if (lstatSync(p, { throwIfNoEntry: false })?.isDirectory() || !check(p)) return undefined;
+    }
+    for (const f of listed.ignored) if (!check(join(root, f.replace(/\/$/, "")))) return undefined;
+    return hits;
+  }
   return walk(root, 0) ? hits : undefined;
 }
 

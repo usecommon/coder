@@ -44,7 +44,7 @@ export POLYGLOT=${BENCH_TASKS:-$WORK/polyglot} OPENCODE_BIN=$WORK/oc/node_module
 # Check that the sandbox hides what it must before spending anything.
 bun run.ts --selftest --model "$MODEL" --agents "$AGENTS" ${LANGS:+--langs $LANGS} --out "$OUT" 2>&1 | tee "$OUT/selftest.log"
 [ "${PIPESTATUS[0]}" = 0 ] || { echo "sandbox self-test failed; not running"; exit 1; }
-bun run.ts --model "$MODEL" --agents "$AGENTS" --split "$SPLIT" --concurrency "${CONCURRENCY:-10}" ${LIMIT:+--limit $LIMIT} ${LANGS:+--langs $LANGS} ${ONLY:+--only $ONLY} --out "$OUT" 2>&1 | tee -a "$OUT/run.log" | grep -E "infrastructure error|^done|runs \\("
+bun run.ts --model "$MODEL" ${EFFORT:+--effort $EFFORT} --agents "$AGENTS" --split "$SPLIT" --concurrency "${CONCURRENCY:-10}" ${LIMIT:+--limit $LIMIT} ${LANGS:+--langs $LANGS} ${ONLY:+--only $ONLY} --out "$OUT" 2>&1 | tee -a "$OUT/run.log" | grep -E "infrastructure error|^done|runs \\("
 # A self-test-only run (LIMIT=0) has no results to report on.
 if [ -s "$OUT/results.jsonl" ]; then
   bun report.ts "$OUT/results.jsonl" "$OUT/proxy.jsonl" --split="$SPLIT" --prices="$PRICES" ${EXCLUDE:+--exclude=$EXCLUDE} > "$OUT/report.md"

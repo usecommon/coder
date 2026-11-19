@@ -92,6 +92,7 @@ For the keys that are set:
   avoid        deepseek/deepseek-v4-pro  (weaker and dearer: 6.7% against 38.5% for deepseek/deepseek-flash)
 ```
 
+- **What the model that takes over reads:** the current request; the earlier requests of the session with the answer that ended each (for a `--steps` plan, the plan); why it was brought in; and what has changed, from git's status and diff where the workspace is a repository, otherwise from the file tools' record. If its own part of the session grows past `compactAt`, that part alone is compacted.
 - **The model that takes over does not read the attempt that went wrong.** In a controlled study on SWE-bench Verified, a stronger model that inherited the transcript recovered 36 to 47% of what it adds on its own, at a higher price; given only the request and the edits, 64 to 84% ([the second survey](../research/reports/Multi%20model%20methods%20further%20areas.md), area 1). Not yet measured in Galley.
 - **Galley will not hand a turn to a model its profiles say is not stronger.** A second try by the same model does about as much, for less.
 - **Nothing finer is recorded** (which model for debugging, which for front-end work), because no public source measures it. Add or correct profiles under `"models"` in `galley.json`.
@@ -133,7 +134,7 @@ The choices in this mode follow published research: a reviewer stronger than the
 galley run "fix the date parser" --check "npm test"
 ```
 
-When a turn that changed files ends (through the file tools, or a command that left the workspace different), Galley runs the check command in the sandbox with the network off; without a sandbox it asks first, as `bash` does. If the check fails, its output goes back to the model, which fixes the cause and stops again, and the check runs again. Up to three failures (`checkRounds`) are fed back; if it still fails after that, or no step is left, the turn ends with a warning. The steps of a `--steps` plan are checked together after the last one.
+When a turn that changed files ends (through the file tools, or a command that left the workspace different), Galley runs the check command in the sandbox with the network off; without a sandbox it asks first, as `bash` does. If the check fails, its output goes back to the model, which fixes the cause and stops again, and the check runs again. Up to three failures a turn (`checkRounds`) are fed back; if it still fails after that, or no step is left, the turn ends with a warning. A check may run for 300 seconds (`checkTimeout`); the end of its output, where test runners print their summary, is what is kept. The steps of a `--steps` plan are checked together after the last one.
 
 - **The model is told not to edit tests or special-case their inputs, and that it may say a test is wrong instead.** In one study, giving the model that way out cut gaming of tests from 54% to 9%.
 - **A reviewer reads the check's output beside the diff,** so its review rests on something that ran.
@@ -182,6 +183,7 @@ galley serve --port 4096              # HTTP + SSE server (see below)
   "compactAt": 120000,
   "check": "npm test",       // optional: run when a turn that changed files ends; failures go back to the model
   "checkRounds": 3,
+  "checkTimeout": 300,       // seconds
   "lessons": false,          // keep one-line notes when a failing check comes to pass, and read the most related one back
   "providers": { "mylab": { "baseURL": "http://gpu-box:8000/v1", "apiKeyEnv": "MYLAB_KEY" } },
   "mcp": { "github": { "command": "github-mcp-server", "args": ["stdio"] } },
@@ -191,7 +193,9 @@ galley serve --port 4096              # HTTP + SSE server (see below)
 
 The user-wide config is `~/.config/galley/config.json`; `GALLEY_MODEL` overrides the model. Compound shell commands (`a && b | c`) are judged by their strictest part. Project instructions come from `AGENTS.md` (or `CLAUDE.md`).
 
-**Near-miss tool calls are mended, not refused,** where the intent is certain: a `description` argument to `bash` is ignored, a `path` to `bash` that names a folder in the workspace runs the command there, and an `edit` without a path goes to the one file that contains the text to replace. The model is told what was assumed. In the kept benchmark runs 39 calls were refused for such slips.
+**Git on the host.** To tell whether files changed and what changed, Galley runs git outside the sandbox, in a folder the model can write to. So it records the workspace's repository when it starts, before any model turn, and names it in every call: a `.git` the model makes later is never used. Hooks, the file-system monitor, text conversion and external diff are switched off on each call, and a repository whose own config defines filter or diff drivers is not used at all.
+
+**Near-miss tool calls are mended, not refused,** where the intent is certain: a `description` argument to `bash` is ignored, a `path` to `bash` that names a folder in the workspace runs the command there, and an `edit` without a path goes to the one file that contains the text to replace, when that is certain: every candidate file was searched, none was too large or unreadable, and the scratch folder holds no copy. The model is told what was assumed. In the kept benchmark runs 39 calls were refused for such slips.
 
 ## Server API
 

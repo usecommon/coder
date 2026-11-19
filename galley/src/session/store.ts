@@ -10,7 +10,10 @@ import { addUsage, emptyUsage } from "../core/types.ts";
 export type SessionRecord =
   | { type: "meta"; id: string; created: string; workspace: string; model: string; title?: string; parentId?: string }
   | { type: "message"; message: Message }
-  | { type: "usage"; model: string; usage: Usage; costUsd: number }
+  /** `helper` marks a helper's cost added to its parent session: it is also in the helper's own file. */
+  | { type: "usage"; model: string; usage: Usage; costUsd: number; helper?: string }
+  /** Messages [start, end) replaced by one summary (a model that took over reads only its own part). */
+  | { type: "compaction-range"; summary: string; start: number; end: number }
   | { type: "compaction"; summary: string; keep: number }
   | { type: "status"; status: "running" | "done" | "error"; detail?: string; at: string }
   /** A signal that the turn was going badly, recorded whether or not anything acted on it, so that how often each
@@ -103,6 +106,7 @@ export class Session {
         this.usage = addUsage(this.usage, r.usage);
         this.costUsd += r.costUsd;
       } else if (r.type === "compaction") this.messages = [summaryMessage(r.summary), ...this.messages.slice(this.messages.length - r.keep)];
+      else if (r.type === "compaction-range") this.messages = [...this.messages.slice(0, r.start), summaryMessage(r.summary), ...this.messages.slice(r.end)];
       else if (r.type === "meta" && r.title) this.title = r.title;
       else if (r.type === "status") this.status = r.status;
     }
@@ -137,10 +141,16 @@ export class Session {
     this.write({ type: "message", message: m });
   }
 
-  addUsage(model: string, usage: Usage, costUsd: number) {
+  addUsage(model: string, usage: Usage, costUsd: number, o: { helper?: string } = {}) {
     this.usage = addUsage(this.usage, usage);
     this.costUsd += costUsd;
-    this.write({ type: "usage", model, usage, costUsd });
+    this.write({ type: "usage", model, usage, costUsd, ...(o.helper ? { helper: o.helper } : {}) });
+  }
+
+  /** Replace messages [start, end) with one summary. */
+  compactRange(summary: string, start: number, end: number) {
+    this.messages = [...this.messages.slice(0, start), summaryMessage(summary), ...this.messages.slice(end)];
+    this.write({ type: "compaction-range", summary, start, end });
   }
 
   compact(summary: string, keep: number) {

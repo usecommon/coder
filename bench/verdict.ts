@@ -180,6 +180,19 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   };
 }
 
+/** A rule that names a condition the judge does not know, or none at all, would be judged without it: refuse it. */
+export function validate(rule: Rule, file: string): void {
+  const d = rule.decide as Record<string, unknown>;
+  for (const k of Object.keys(d)) if (!["minLeadPoints", "maxP", "cost"].includes(k)) throw new Error(`${file}: unknown condition "decide.${k}"`);
+  if (d.minLeadPoints !== undefined && typeof d.minLeadPoints !== "number") throw new Error(`${file}: decide.minLeadPoints must be a number`);
+  if (d.maxP !== undefined && typeof d.maxP !== "number") throw new Error(`${file}: decide.maxP must be a number`);
+  const cost = d.cost as unknown;
+  if (cost !== undefined && cost !== "lower" && cost !== "lowerSure" && !(cost && typeof cost === "object" && typeof (cost as { maxRatio?: unknown }).maxRatio === "number"))
+    throw new Error(`${file}: decide.cost must be "lower", "lowerSure" or { "maxRatio": n }`);
+  if (d.minLeadPoints === undefined && d.maxP === undefined && cost === undefined) throw new Error(`${file}: decide names no condition`);
+  if (rule.metric !== undefined && rule.metric !== "pass" && rule.metric !== "pass2") throw new Error(`${file}: metric must be "pass" or "pass2"`);
+}
+
 export function render(v: Verdict): string {
   const out = [`# Verdict: ${v.rule.id}`, "", `*Computed by \`bench/verdict.ts\` on ${new Date().toISOString().slice(0, 10)}.*`, "", `**Question.** ${v.rule.question}`, ""];
   out.push(`**Verdict: the rule is ${v.met ? "MET" : "NOT MET"}.**${v.registration.ok ? "" : " **The rule was not registered in time, so this verdict does not count as a pre-registered test.**"}`, "");
@@ -209,6 +222,7 @@ if (import.meta.main) {
   const file = rest[1]!;
   const rule = JSON.parse(readFileSync(file, "utf8")) as Rule;
   for (const k of ["id", "question", "baseline", "candidate", "decide"] as const) if (!rule[k]) throw new Error(`${file}: "${k}" is missing`);
+  validate(rule, file);
   const rounds = roundDirs(rest.slice(2));
   if (!rounds.length) throw new Error("no rounds found");
   const v = judge(rule, file, rounds);

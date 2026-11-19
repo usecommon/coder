@@ -6,7 +6,7 @@
 // SWE-bench tasks, one retrieved experience did best and more did worse, memory that was not checked did harm, and a
 // model's self-written skills lowered results. So: one note, written only after something ran and passed, and read
 // back as a hint that may be out of date. Off unless `lessons` is set. Not measured in Galley.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectDir } from "../session/store.ts";
 
@@ -33,8 +33,36 @@ export function loadLessons(workspace: string): Lesson[] {
   return out;
 }
 
+/** Hold a lock file while `fn` runs, so two Galley processes in one project do not lose each other's lessons.
+ *  A lock older than ten seconds is taken to be left over from a process that died. */
+function locked<T>(lock: string, fn: () => T): T {
+  for (let i = 0; ; i++) {
+    try {
+      closeSync(openSync(lock, "wx"));
+      break;
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > 10_000) unlinkSync(lock);
+      } catch {}
+      if (i > 200) throw new Error(`could not lock ${lock}`);
+      Bun.sleepSync(10);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try {
+      unlinkSync(lock);
+    } catch {}
+  }
+}
+
 export function saveLesson(workspace: string, lesson: Lesson): void {
   mkdirSync(projectDir(workspace), { recursive: true });
+  locked(`${file(workspace)}.lock`, () => write(workspace, lesson));
+}
+
+function write(workspace: string, lesson: Lesson): void {
   const all = [...loadLessons(workspace), lesson];
   if (all.length > MAX_LESSONS) {
     // Rewritten whole through a temporary file, so a crash cannot leave it cut short.

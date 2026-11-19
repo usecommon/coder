@@ -16,9 +16,9 @@ import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
 import { scratchDir } from "../tools/bash.ts";
 import { ToolError, type Tool, type ToolContext } from "../tools/types.ts";
 import { UndoLog } from "../tools/undo.ts";
-import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, freshStartMessage, handoverMessage, withoutPreamble, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
+import { ADVISOR_SYSTEM, adviceMessage, advisorRequest, changes, earlierTurns, freshStartMessage, handoverMessage, OBSERVE_QUESTION, REVIEW_QUESTION, reviewMessage, reviewPassed, stuckQuestion } from "./advisor.ts";
 import { compactionCut, summarize } from "./compact.ts";
-import { fingerprint, gitChanges } from "./workspace-state.ts";
+import { fingerprint, gitChanges, recordGit } from "./workspace-state.ts";
 import { LESSON_REQUEST, lessonNote, pickLesson, saveLesson } from "./lessons.ts";
 import { Watch } from "./signals.ts";
 import { environmentNote, REVIEW_PROMPT, systemPrompt, verifyPrompt } from "./prompt.ts";
@@ -98,6 +98,8 @@ export class Agent {
 
   constructor(private o: AgentOptions) {
     this.workspace = realpathSync(o.workspace);
+    // Before any model turn: which git repository the workspace is in, if any (see workspace-state.ts).
+    recordGit(this.workspace);
     this.model = o.model ?? o.cfg.model;
     this.effort = o.effort;
     this.gate = new PermissionGate(o.cfg.permission, o.approver, o.mode ?? "build");
@@ -205,7 +207,7 @@ export class Agent {
     // last result, which a reviewing advisor reads beside the diff.
     const checking = !!cfg.check && o.check !== false && !this.o.subagent && this.mode !== "plan";
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
-    if (checking && this.checkedPrint === undefined) this.checkedPrint = fingerprint(this.workspace) ?? "";
+    if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) this.checkedPrint = fingerprint(this.workspace) ?? "";
     let checkFails = 0;
     let checkReport: string | undefined;
     let lastFailure: string | undefined;
@@ -260,13 +262,14 @@ export class Agent {
           // that does not rest on a model's opinion (research/reports, areas 2 and 5).
           if (checking && !signal?.aborted && this.changedSinceCheck()) {
             const r = await this.runCheck(cfg.check!, signal);
-            this.unchecked = false;
-            this.ranCommands = false;
-            this.checkedPrint = fingerprint(this.workspace) ?? "";
+            // A check cut short leaves the files as unchecked as they were.
             if (signal?.aborted) {
               stopReason = "other";
               break;
             }
+            this.unchecked = false;
+            this.ranCommands = false;
+            this.checkedPrint = fingerprint(this.workspace) ?? "";
             // A check the user declined to run is no failure to feed back.
             if (r.skipped !== undefined) this.emit({ type: "notice", level: "warn", text: `The check was not run: ${r.skipped}` });
             else {
@@ -276,8 +279,7 @@ export class Agent {
               if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
               if (passed) {
                 this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
-                // A failure is learnt from once; a later failure in the same turn starts its own count.
-                checkFails = 0;
+                // A failure is learnt from once. The count of failures goes on: checkRounds is per turn.
                 lastFailure = undefined;
               } else if (step === maxSteps - 1) {
                 // No step is left to fix it in: say so, and do not leave a message the model never answers.
@@ -324,7 +326,7 @@ export class Agent {
       this.session.addMessage({ role: "tool", results });
       for (const c of res.toolCalls) {
         if (c.name === "bash") this.ranCommands = true;
-        else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly) this.unchecked = true;
+        else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly && results.some((r) => r.callId === c.id && !r.isError)) this.unchecked = true;
       }
       if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });
 
@@ -362,10 +364,10 @@ export class Agent {
             } else {
               // The stronger model starts from the request and the files, not from the attempt that went wrong.
               this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}. It starts from the request and the files as they are now.` });
-              const first = turnStart > 0 ? this.session.messages.find((m) => m.role === "user")?.content : undefined;
-              const earlier = typeof first === "string" ? withoutPreamble(first) : undefined;
-              // What changed: the file tools' own record, and git's, which also sees what commands and earlier turns did.
-              const files = [changes(this.workspace, this.undo.snapshots(), 20_000), gitChanges(this.workspace)].filter(Boolean).join("\n\n");
+              const earlier = turnStart > 0 ? earlierTurns(this.session.messages.slice(0, turnStart)) : "";
+              // What changed: git's view where there is one (it sees what commands and earlier turns did too), else
+              // the file tools' own record.
+              const files = gitChanges(this.workspace) || changes(this.workspace, this.undo.snapshots(), 20_000);
               this.baseTokens = this.lastInputTokens;
               this.viewFrom = this.session.messages.length;
               this.session.addMessage({
@@ -556,7 +558,7 @@ export class Agent {
     child.session.setTitle(`task: ${description}`);
     const r = await child.send(prompt, signal);
     // Roll the helper's cost into the parent session's totals.
-    this.session.addUsage(model, r.usage, r.costUsd);
+    this.session.addUsage(model, r.usage, r.costUsd, { helper: child.session.id });
     return r.text || `(the helper finished without an answer; stop reason: ${r.stopReason})`;
   }
 
@@ -604,6 +606,7 @@ export class Agent {
    *  written with the user's own rights and network, so then it asks first, as the bash tool does. */
   private async runCheck(command: string, signal?: AbortSignal) {
     const kind = this.o.cfg.sandbox === "off" ? "none" : this.sandbox;
+    const secs = this.o.cfg.checkTimeout ?? 300;
     if (kind === "none") {
       const ok = await this.gate.check({ tool: "bash", subject: command, reason: "the check runs without a sandbox" }, "ask");
       if (!ok.ok) return { output: "", exitCode: null, timedOut: false, skipped: ok.why };
@@ -617,9 +620,10 @@ export class Agent {
       workspace: this.workspace,
       readOnly: false,
       network: false,
-      timeoutMs: 600_000,
+      timeoutMs: secs * 1000,
       signal,
       kind,
+      keepTail: true,
       cacheDir,
       tmpDir,
     });
@@ -627,22 +631,26 @@ export class Agent {
     const max = this.o.cfg.maxToolOutput;
     const all = r.output.trimEnd();
     let output = all.length > max ? `${all.slice(0, Math.floor(max / 3))}\n[… ${all.length - max} characters left out …]\n${all.slice(all.length - Math.ceil((2 * max) / 3))}` : all;
-    if (r.timedOut) output += "\n[timed out after 600s]";
+    if (r.timedOut) output += `\n[timed out after ${secs}s]`;
     return { output, exitCode: r.exitCode, timedOut: r.timedOut, skipped: undefined as string | undefined };
   }
 
   private async maybeCompact(signal?: AbortSignal) {
-    // A model that took over reads only its own part of the session; compaction would move where that part starts.
-    if (this.lastInputTokens < this.o.cfg.compactAt || this.viewFrom !== undefined) return;
+    if (this.lastInputTokens < this.o.cfg.compactAt) return;
     const msgs = this.session.messages;
-    const cut = compactionCut(msgs);
+    // A model that took over reads only its own part of the session, from its opening message on. That part is
+    // compacted on its own: the opening message stays, the oldest of the rest becomes a summary, and the earlier
+    // attempt is neither summarised into its view nor lost from the session.
+    const from = this.viewFrom === undefined ? 0 : this.viewFrom + 1;
+    const cut = compactionCut(msgs.slice(from));
     if (cut < 0) return;
     const model = this.o.cfg.smallModel ?? this.model;
     const { provider: pid, model: m } = splitModel(model);
     try {
-      const { summary, usage } = await summarize(getProvider(pid, this.o.cfg), m, msgs.slice(0, cut), signal);
+      const { summary, usage } = await summarize(getProvider(pid, this.o.cfg), m, msgs.slice(from, from + cut), signal);
       this.session.addUsage(model, usage, this.price(model, usage));
-      this.session.compact(summary, msgs.length - cut);
+      if (from) this.session.compactRange(summary, from, from + cut);
+      else this.session.compact(summary, msgs.length - cut);
       this.lastInputTokens = 0;
       this.emit({ type: "compacted", removedMessages: cut });
     } catch (err) {

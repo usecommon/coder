@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { advisorRequest, changes, digest, freshStartMessage, reviewPassed, withoutPreamble } from "../src/agent/advisor.ts";
 import { lessonNote } from "../src/agent/lessons.ts";
 import { scratchDir } from "../src/tools/bash.ts";
+import { detectSandbox } from "../src/safety/sandbox.ts";
+import { loadLessons, pickLesson, saveLesson } from "../src/agent/lessons.ts";
 import { Agent } from "../src/agent/loop.ts";
 import { LIMITS, Watch } from "../src/agent/signals.ts";
 import { parsePlan, runSteps } from "../src/agent/steps.ts";
@@ -954,19 +956,60 @@ describe("fixes from the council review", () => {
     expect(agent.session.messages.at(-1)!.role).toBe("assistant");
   });
 
-  test("the model that takes over is told what git sees changed, and not the stale workspace description", async () => {
+  test("the model that takes over is told what git sees changed", async () => {
     const strong = second("up6", [{ text: "Taken over." }]);
     const sed: MockReply = { toolCalls: [{ name: "bash", input: { command: "sed -i 's/one/two/' a.txt" } }] };
-    const { ws, agent } = setup([sed, stuck, stuck, stuck], { escalateModel: "up6/strong", sandbox: "off" });
+    const ws = tempDir();
     const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, ...a]);
     sh("init", "-q");
     writeFileSync(join(ws, "a.txt"), "one\n");
     sh("-c", "user.email=t@t", "-c", "user.name=t", "add", "a.txt");
     sh("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "start");
+    registerProvider(new MockProvider([sed, stuck, stuck, stuck]));
+    // The repository exists before the agent is made, so it is recorded and used.
+    const agent = new Agent({ cfg: testConfig({ escalateModel: "up6/strong", sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once", retryDelayMs: 1 });
     await agent.send("change a.txt");
     const msg = lastUser(strong.requests[0]!);
     expect(msg).toContain("$ git diff HEAD");
     expect(msg).toContain("+two");
+  });
+
+  test("a later turn's takeover reads the earlier turns, without their stale workspace description", async () => {
+    const strong = second("up7", [{ text: "Taken over." }]);
+    const { agent } = setup([{ text: "Fixed bug X." }, stuck, stuck, stuck], { escalateModel: "up7/strong" });
+    await agent.send("fix bug X");
+    await agent.send("also handle Y");
+    const msg = lastUser(strong.requests[0]!);
+    expect(msg).toContain("Request: fix bug X");
+    expect(msg).toContain("Answer: Fixed bug X.");
+    expect(msg).toContain("also handle Y");
+    expect(msg.match(/<environment>/g)).toHaveLength(1);
+  });
+
+  test("a .git made after the agent started is never used, so a planted hook cannot run on the host", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "a.txt"), "hello world contents\n");
+    registerProvider(new MockProvider([{ text: "ok" }]));
+    const agent = new Agent({ cfg: testConfig({ check: "true", sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once" });
+    // What a sandboxed command could do: make a repository whose config runs a program on every git status.
+    const flag = join(ws, "..", `pwned-${ws.split("/").pop()}`);
+    writeFileSync(join(ws, "evil.sh"), `#!/bin/sh\ntouch '${flag}'\n`, { mode: 0o755 });
+    Bun.spawnSync(["git", "-C", ws, "init", "-q"]);
+    Bun.spawnSync(["git", "-C", ws, "config", "core.fsmonitor", join(ws, "evil.sh")]);
+    const { fingerprint, gitChanges, gitFiles } = await import("../src/agent/workspace-state.ts");
+    fingerprint(agent.workspace);
+    gitChanges(agent.workspace);
+    expect(gitFiles(agent.workspace)).toBeUndefined();
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("a repository whose own config would run programs is not used", async () => {
+    const ws = tempDir();
+    Bun.spawnSync(["git", "-C", ws, "init", "-q"]);
+    Bun.spawnSync(["git", "-C", ws, "config", "filter.x.clean", "touch /tmp/never"]);
+    const { recordGit, isGitRepo } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(false);
   });
 
   test("the fallback message no longer claims that nothing changed", () => {
@@ -981,11 +1024,10 @@ describe("fixes from the council review", () => {
     expect(note.match(/<\/project_note>/g)).toHaveLength(1);
   });
 
-  test("edit without a path is not mended when the scratch folder holds the same text", async () => {
+  test.skipIf(detectSandbox() === "none")("edit without a path is not mended when the scratch folder holds the same text", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "return a - b", new_string: "return a + b" } }] };
     const { ws, mock, agent } = setup([call, { text: "Done." }]);
     writeFileSync(join(ws, "add.py"), "return a - b\n");
-    if (agent.sandbox === "none") return; // no scratch folder without a sandbox
     mkdirSync(scratchDir(ws), { recursive: true });
     writeFileSync(join(scratchDir(ws), "try.py"), "return a - b\n");
     await agent.send("fix add");
@@ -998,5 +1040,73 @@ describe("fixes from the council review", () => {
     const { agent } = setup([stuck, stuck, stuck, { text: "Done." }], { advisor: { model: "nowhere/strong" } });
     await agent.send("read the file");
     expect(agent.session.signals().map((r) => r.acted)).toEqual(["none"]);
+  });
+});
+
+describe("fixes from the second council review", () => {
+  const check = "grep -q right out.txt";
+  const checkNotices = (n: string[]) => n.filter((x) => x.startsWith("Check"));
+
+  test("a plan whose first step writes through the shell and whose last only reads is checked", async () => {
+    const plan: MockReply = { text: "1. Write the file.\n2. Look at it." };
+    const echo: MockReply = { toolCalls: [{ name: "bash", input: { command: "echo wrong > out.txt" } }] };
+    const look: MockReply = { toolCalls: [{ name: "bash", input: { command: "cat out.txt" } }] };
+    const { agent, notices } = setup([plan, echo, { text: "Step 1 done." }, look, { text: "Step 2 done." }, { text: "Cannot fix." }], { check, sandbox: "off" });
+    await runSteps(agent, "write out.txt");
+    expect(checkNotices(notices())[0]).toBe(`Check failed (1 of 3): ${check}`);
+  });
+
+  test("an edit that was refused does not set off the check", async () => {
+    const bad: MockReply = { toolCalls: [{ name: "edit", input: { path: "missing.txt", old_string: "a", new_string: "b" } }] };
+    const { notices } = await (async () => {
+      const x = setup([bad, { text: "No such file." }], { check, sandbox: "off" });
+      await x.agent.send("change missing.txt");
+      return x;
+    })();
+    expect(checkNotices(notices())).toEqual([]);
+  });
+
+  test("checkRounds counts failures over the whole turn, also after a pass", async () => {
+    const wrong: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+    const right: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+    // Self-review keeps the turn going after a pass; the model then breaks the file again, twice.
+    const { notices } = await (async () => {
+      const x = setup([wrong, { text: "1" }, right, { text: "2" }, wrong, { text: "3" }, wrong, { text: "4" }], { check, sandbox: "off", review: true, checkRounds: 2 });
+      await x.agent.send("write out.txt");
+      return x;
+    })();
+    expect(checkNotices(notices())).toEqual([`Check failed (1 of 2): ${check}`, `Check passed: ${check}`, `Check failed (2 of 2): ${check}`, `Check still failing after 2 rounds: ${check}`]);
+  });
+
+  test("the check's time limit is a setting", async () => {
+    const wrong: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "x" } }] };
+    const { mock, agent } = setup([wrong, { text: "Done." }, { text: "Stopping." }], { check: "sleep 5", checkTimeout: 1, sandbox: "off" });
+    await agent.send("write out.txt");
+    expect(lastUser(mock.requests[2]!)).toContain("[timed out after 1s]");
+  });
+
+  test("lessons about files that are gone are not read back, and the file keeps at most 50", () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "kept.py"), "x");
+    saveLesson(ws, { text: "parser module needs utf8 input", check: "c", files: ["gone.py"], at: "2026-01-01" });
+    expect(pickLesson(ws, "fix the parser module")).toBeUndefined();
+    saveLesson(ws, { text: "parser module needs utf8 input", check: "c", files: ["kept.py"], at: "2026-01-02" });
+    expect(pickLesson(ws, "fix the parser module")?.files).toEqual(["kept.py"]);
+    for (let i = 0; i < 60; i++) saveLesson(ws, { text: `note ${i}`, check: "c", files: [], at: `2026-02-${i}` });
+    const all = loadLessons(ws);
+    expect(all).toHaveLength(50);
+    expect(all.at(-1)!.text).toBe("note 59");
+  });
+
+  test("a takeover that runs long is compacted within its own part, and the earlier attempt stays out of it", async () => {
+    const strong = second("up8", (_req, n) => (n < 12 ? { toolCalls: [{ name: "read", input: { path: `f${n}.txt` } }] } : { text: "Done." }));
+    const { agent } = setup([stuck, stuck, stuck], { escalateModel: "up8/strong", compactAt: 1, smallModel: "sum8/s" });
+    second("sum8", () => ({ text: "SUMMARY OF THE TAKEN-OVER WORK" }));
+    await agent.send("read the file");
+    const last = strong.requests.at(-1)!;
+    const texts = last.messages.filter((m) => m.role === "user").map((m) => (m as Extract<Message, { role: "user" }>).content);
+    expect(texts[0]).toContain("You are taking over this task");
+    expect(texts.some((t) => t.includes("SUMMARY OF THE TAKEN-OVER WORK"))).toBe(true);
+    expect(JSON.stringify(last.messages)).not.toContain("missing.txt");
   });
 });

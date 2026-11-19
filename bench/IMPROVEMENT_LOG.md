@@ -599,3 +599,28 @@ The 17 lower ones fixed: canary rounds kept out of the previous-round comparison
 **What the fixes changed in published figures.** Measured profiles: DeepSeek V4.1 Flash at high effort is 60.9% of 2,728 runs, not 59.8% of 3,728 (1,000 runs of variants were pooled in); the Sonnet 5.5 medium-effort row is gone, because it came from a variant whose flags older rounds did not record. The canary changed 2 of its 24 stable and 2 of its 6 hard tasks; the first canary run used the earlier selection. The signal replay now covers 5,904 first attempts: the signals fire on 1.2% of failing and 0.4% of passing runs, AUC 0.501 within a task, and no threshold does better: unchanged conclusions. The verdict on the fourth confirmation is unchanged: +4.5 points, p = 0.122, cost 22% lower.
 
 Tests: 153 pass (9 new for these fixes). No model was called for the review's fixes; the review itself used 25 agents of this session.
+
+## Second council review, with fresh agents (19 November)
+
+The same ten lenses again, run by agents that had not seen the first review, over the same commits now including its fixes. 39 findings, 31 distinct defects; the 14 ranked highest were each sent to an agent told to refute them, and **all 14 held**. Fewer and narrower than the first round (60 findings), but one was the most serious of either round.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Host-side git could be made to run a program.** Galley's own git calls (whether files changed, what changed, which files hold some text) run outside the sandbox, in a folder the model can write to. A sandboxed command could create a `.git` whose config names a file-system monitor, and git on the host would run it. Reproduced with the real sandbox | high | The repository is recorded when the agent is made, before any model turn, and every call names it; hooks, the monitor, text conversion and external diff are switched off on the command line; a repository whose own config defines filter or diff drivers is not used. Two tests plant such a repository |
+| The canary said "no regression" when stable tasks had no result (a Galley that crashes on some tasks records none) | high | Missing stable tasks, or runs at another model or effort, make it INCONCLUSIVE with a failing exit code; `canary.sh` runs at the canary's own effort |
+| In `--steps`, a file written through the shell in an early step was not checked when the last step only read | medium | The baseline is taken at the first turn whenever a check is configured |
+| Calibration merged the harness's first and second attempt into one turn | medium | A new `galley run` starts a new group |
+| In a workspace inside a larger repository, untracked files were looked for at the wrong path | medium | Paths are taken from the repository's top |
+| A check interrupted by the user counted as run | medium | Nothing is reset when the check was cut short |
+| A model taking over saw only the first and the current request: in `--steps`, an instruction to change nothing and a step of a plan it could not see | medium | It reads every earlier request with the answer that ended it (the plan included), clipped to the latest 8,000 characters |
+| Edit repair counted files it had not searched (too large, unreadable, ignored, nested repositories) as not containing the text | medium | Any such file makes the answer uncertain; ignored files are searched within the same limits; trailing spaces are ignored as edit ignores them |
+| A rule with an unknown or misspelled condition was judged without it | medium | Rules are checked before judging |
+| The miner subtracted helper costs the parent never received (a run killed while a helper worked) | medium | Galley marks the helper's roll-up in the parent session; older sessions subtract at most what the parent recorded |
+| `run.ts --galley <other checkout>` was recorded as the default | medium | Compared with the repository's own `cli.ts` |
+| `profiles.ts --write` replaced the file with whatever rounds were on disk | medium | Merged row by row; nothing is written when nothing was measured |
+| A hanging check held a turn for 600 seconds, the benchmark's whole budget | medium | `checkTimeout`, default 300 seconds |
+| After a takeover, compaction was off for the rest of the turn | medium | The taken-over part is compacted on its own; the earlier attempt stays out of it |
+
+Of the 17 lower ones, fixed: a refused edit no longer sets off the check; `checkRounds` counts per turn, as documented; the replay counts a step for every model call, as the live loop does; profiles count only effort, model and provider settings as neutral (not the step limit or helper model); a trailing slash no longer lets a skipped round in; an unknown cost shows as unknown in the miner; check output keeps its end even past 2 MB; lesson writes take a lock; tests now cover stale lessons, the 50-lesson cap and the takeover's earlier turns, and the scratch-folder test is skipped visibly without a sandbox; the duplicate diff in the takeover message is gone; the calibration header says what the code does. Not fixed: with `--worktree`, lessons are kept per worktree and not read back by later runs; the edit-repair test's symlink case in git workspaces is now covered by the "uncertain" rule rather than a dedicated test.
+
+Figures after the fixes: the signal replay shows 23 failing runs with the long-run signal, not 22, from the corrected step count; all conclusions stand. Profiles and the verdict on the fourth confirmation are unchanged. Tests: 162 pass.

@@ -7,8 +7,8 @@
 // Signals: the watcher is replayed over first attempts at other thresholds, and each setting is scored by how well
 // it tells a failing run from a passing run of the same task (AUC; 0.5 is chance). A different setting is proposed
 // only if it is better by 0.02 or more and fires on at least 30 failing runs. Checks: from the check records Galley
-// writes, how many failed checks came before the last one that passed; checkRounds is proposed as the smallest
-// number that covers 90% of the turns that ended passing, once 30 such turns have needed at least one retry.
+// writes, how many failed checks came before a turn's first pass; checkRounds is proposed as the number of failures
+// that covers 90% of the turns that passed after at least one failure, once there are 30 such turns.
 // No model is called.
 import { LIMITS } from "../galley/src/agent/signals.ts";
 import { roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
@@ -74,6 +74,11 @@ function checks(runs: TaskRun[]) {
     const groups: Extract<SessionRecord, { type: "check" }>[][] = [];
     let prev: Extract<SessionRecord, { type: "check" }> | undefined;
     for (const rec of r.main ?? []) {
+      // Each `galley run` (the harness's second attempt is another) starts its turns afresh.
+      if (rec.type === "run") {
+        prev = undefined;
+        continue;
+      }
       if (rec.type !== "check") continue;
       const c = rec as Extract<SessionRecord, { type: "check" }>;
       const newTurn = !prev || (c.turn !== undefined ? c.turn !== prev.turn : c.round === 1 && (prev.round > 1 || prev.passed));

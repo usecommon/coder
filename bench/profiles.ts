@@ -7,8 +7,8 @@
 // effort or the step limit is left out, and so are rounds whose names say they were dry runs, smoke tests or
 // invalid. The result is the first attempt. Cost is the first attempt's, at list price. With --write the figures
 // go to galley/src/provider/measured.json, which `galley models` reads. No model is called.
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
 
 // Canary rounds are left out too: their tasks were picked for being stable, which would bias the figures.
@@ -35,7 +35,7 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
   type Acc = { solved: number; tasks: number; cost: number; langs: Record<string, [number, number]>; rounds: Set<string>; from: number; to: number };
   const acc = new Map<string, Acc>();
   for (const round of dirs) {
-    if (SKIP_ROUNDS.test(round.split("/").pop()!) || isCanary(round)) continue;
+    if (SKIP_ROUNDS.test(basename(round)) || isCanary(round)) continue;
     const models = modelsByRun(round);
     const cost = costByRun(round, { firstOnly: true });
     for (const r of taskRuns(round)) {
@@ -82,10 +82,22 @@ if (import.meta.main) {
     for (const r of rows) console.log(`${ref.padEnd(32)} effort ${r.effort.padEnd(8)} ${((100 * r.solved) / r.tasks).toFixed(1).padStart(5)}% of ${String(r.tasks).padStart(5)} tasks (${r.ci[0]} to ${r.ci[1]}), ${r.costPerTask === null ? "cost unknown" : `$${r.costPerTask.toFixed(4)} a task`}, ${r.rounds} rounds, ${r.from} to ${r.to}`);
   if (write) {
     const file = join(import.meta.dir, "..", "galley", "src", "provider", "measured.json");
+    if (!Object.keys(m).length) {
+      console.log(`\nNothing measured in these rounds; ${file} left as it is.`);
+      process.exit(0);
+    }
+    // Merged into what is there, row by model and effort: a row measured again is replaced, and rows from rounds no
+    // longer on disk are kept.
+    let old: Record<string, Measured[]> = {};
+    try {
+      old = JSON.parse(readFileSync(file, "utf8")).models ?? {};
+    } catch {}
+    for (const [ref, rows] of Object.entries(m)) old[ref] = [...(old[ref] ?? []).filter((o) => !rows.some((r) => r.effort === o.effort)), ...rows];
+    const merged = old;
     const doc = {
       about: "Written by bench/profiles.ts from Galley's own benchmark rounds: Galley at its defaults (apart from model and effort), first attempts, small Exercism-style tasks with hidden tests, cost at list price. Not comparable with the hard-task board figures in models.ts.",
       generated: new Date().toISOString().slice(0, 10),
-      models: m,
+      models: merged,
     };
     writeFileSync(file, JSON.stringify(doc, null, 1) + "\n");
     console.log(`\nWritten to ${file}`);

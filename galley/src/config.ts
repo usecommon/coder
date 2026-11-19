@@ -68,6 +68,8 @@ export interface Config {
   check?: string;
   /** How many failed checks a turn feeds back before it ends anyway (default 3). */
   checkRounds?: number;
+  /** Seconds a check may run before it is stopped (default 300). */
+  checkTimeout?: number;
   /** Keep one-line lessons per project when a failing check comes to pass, and read the most related one back at
    *  the start of a session (default false; see src/agent/lessons.ts). Needs `check`. */
   lessons?: boolean;

@@ -24,13 +24,16 @@ export function replay(recs: SessionRecord[] | undefined, maxSteps: number): Rep
   const fired = new Map<string, number>();
   const ms = firstAttempt(recs);
   let step = 0;
+  // The live loop counts a step for every model call, also one that only answered (a check failure or a review
+  // then sent it back): so does the replay, or the long-run signal would fire later than it did.
   for (let i = 0; i < ms.length; i++) {
     const m = ms[i]!;
-    if (m.role !== "assistant" || !m.toolCalls.length) continue;
+    if (m.role !== "assistant") continue;
     const next = ms[i + 1];
-    if (next?.role !== "tool") continue;
-    const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
-    if (sig && !fired.has(sig.kind)) fired.set(sig.kind, step);
+    if (m.toolCalls.length && next?.role === "tool") {
+      const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
+      if (sig && !fired.has(sig.kind)) fired.set(sig.kind, step);
+    }
     step++;
   }
   return { steps: step, fired };
