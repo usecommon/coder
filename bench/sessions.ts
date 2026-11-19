@@ -135,6 +135,31 @@ export function firstAttempt(recs: SessionRecord[] | undefined): Message[] {
   return out;
 }
 
+/** Where the live loop starts afresh within one `galley run`: a new turn (a step of a plan, the whole task after a
+ *  plan of one step, a plan's revision) gets a new watcher and a new step count; the verifier's second pass in the
+ *  same turn keeps the watcher and starts the step count again. */
+const NEW_TURN = [/^Step \d+ of \d+:/, /^Go ahead: do the task/, /^A second model \([^)\n]*\) reviewed your plan/];
+const NEW_PASS = /^An independent reviewer checked your change against the request and reported:/;
+
+export interface Segment {
+  messages: Message[];
+  /** True when this segment starts a new turn; false for the verifier's pass within a turn (and the first). */
+  newTurn: boolean;
+}
+
+/** The first attempt cut into the turns and passes the live loop counted separately. */
+export function segments(recs: SessionRecord[] | undefined): Segment[] {
+  const out: Segment[] = [];
+  for (const m of firstAttempt(recs)) {
+    const text = m.role === "user" && typeof m.content === "string" ? m.content : undefined;
+    if (!out.length) out.push({ messages: [], newTurn: true });
+    else if (text !== undefined && NEW_TURN.some((re) => re.test(text))) out.push({ messages: [], newTurn: true });
+    else if (text !== undefined && NEW_PASS.test(text)) out.push({ messages: [], newTurn: false });
+    out.at(-1)!.messages.push(m);
+  }
+  return out;
+}
+
 /** Galley as it ships: the default checkout, no extra flags, and a config that sets only the model, the effort and
  *  where the provider is. Rounds before run.ts recorded checkout and flags count only the variant
  *  named plain "galley". */
@@ -223,7 +248,8 @@ export function costByRun(round: string, o: { firstOnly?: boolean } = {}): Map<s
       continue;
     }
     if (c.t !== undefined && r.startedAt && c.t < r.startedAt - 2000) continue;
-    if (o.firstOnly && c.t !== undefined && r.startedAt2 && c.t >= r.startedAt2 - 2000) continue;
+    // startedAt2 is taken before the second attempt sends anything, on the proxy's own clock: no slack is needed.
+    if (o.firstOnly && c.t !== undefined && r.startedAt2 && c.t >= r.startedAt2) continue;
     const cost = callCost(c);
     out.set(c.tag, (out.get(c.tag) ?? 0) + (cost ?? NaN));
   }

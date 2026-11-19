@@ -42,7 +42,12 @@ function locked<T>(lock: string, fn: () => T): T {
       break;
     } catch {
       try {
-        if (Date.now() - statSync(lock).mtimeMs > 10_000) unlinkSync(lock);
+        // Taken over by a rename, which only one process can win; the loser finds no lock to rename and waits.
+        if (Date.now() - statSync(lock).mtimeMs > 10_000) {
+          const stale = `${lock}.${process.pid}.stale`;
+          renameSync(lock, stale);
+          unlinkSync(stale);
+        }
       } catch {}
       if (i > 200) throw new Error(`could not lock ${lock}`);
       Bun.sleepSync(10);

@@ -105,10 +105,13 @@ export function bwrapArgs(o: Pick<ExecOptions, "cwd" | "workspace" | "readOnly" 
   return args;
 }
 
+/** Folders Seatbelt lets every command write, besides the workspace. */
+export const SEATBELT_WRITABLE = ["/private/tmp", "/private/var/folders"];
+
 export function seatbeltProfile(o: Pick<ExecOptions, "workspace" | "readOnly" | "network" | "cacheDir">): string {
   const ws = realpathSync(o.workspace);
   const q = (s: string) => JSON.stringify(s);
-  const rules = ["(version 1)", "(allow default)", "(deny file-write*)", '(allow file-write* (literal "/dev/null") (subpath "/private/tmp") (subpath "/private/var/folders"))'];
+  const rules = ["(version 1)", "(allow default)", "(deny file-write*)", `(allow file-write* (literal "/dev/null") ${SEATBELT_WRITABLE.map((d) => `(subpath "${d}")`).join(" ")})`];
   if (o.cacheDir) rules.push(`(allow file-write* (subpath ${q(o.cacheDir)}))`);
   if (!o.readOnly) rules.push(`(allow file-write* (subpath ${q(ws)}))`, `(deny file-write* (subpath ${q(join(ws, ".git"))}))`);
   if (!o.network) rules.push("(deny network*)");

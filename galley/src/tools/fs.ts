@@ -262,7 +262,8 @@ export function locate(hay: string, needle: string): { index: number; length: nu
 const loose = (s: string) => s.split("\n").map((l) => l.trimEnd()).join("\n");
 
 /** The files under `root` that contain `text`: undefined unless the answer is certain and cheap. Any candidate that
- *  is skipped or cannot be read makes it uncertain: a file over 1 MB, a link, a nested repository, an unreadable
+ *  is skipped or cannot be read makes it uncertain: a file over 1 MB, a link that leads outside the workspace or to
+ *  something other than a file (a link to a file inside it is searched where the file lies), a nested repository, an unreadable
  *  file, or more than 5,000 files or 50 MB in all. In a recorded git repository the candidates are git's file list,
  *  and an ignored file or folder must be searchable too; elsewhere a walk of every folder. Matching ignores trailing
  *  spaces, as edit does. */

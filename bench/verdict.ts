@@ -58,6 +58,10 @@ export interface Verdict {
   candidateCost: number;
   costRatio: number;
   costInterval: [number, number];
+  /** Whether any pair could be priced on both sides. */
+  costIntervalKnown: boolean;
+  /** Pairs whose cost is unknown on one side or both. */
+  unpriced: number;
   perRound: { round: string; pairs: number; lead: number; costRatio: number }[];
   registration: { ok: boolean; detail: string };
   conditions: Condition[];
@@ -177,7 +181,7 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const named = rule.rounds ?? [];
   const judged = rounds.map((r) => basename(r));
   if (reg.ok && !named.length) reg = { ok: false, detail: `${reg.detail}; but the rule names no rounds, so the rounds judged could have been picked after the fact` };
-  else if (reg.ok && (named.length !== judged.length || named.some((n) => !judged.includes(n))))
+  else if (reg.ok && (new Set(named).size !== new Set(judged).size || named.some((n) => !judged.includes(n)) || judged.some((j) => !named.includes(j))))
     reg = { ok: false, detail: `${reg.detail}; but it names the rounds ${named.join(", ")} and was judged on ${judged.join(", ")}` };
   return {
     rule,
@@ -193,6 +197,8 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
     candidateCost: candCost,
     costRatio: ratio,
     costInterval: interval,
+    costIntervalKnown: priced.length > 0,
+    unpriced,
     perRound,
     registration: reg,
     conditions,
@@ -212,6 +218,7 @@ export function validate(rule: Rule, file: string): void {
   if (d.minLeadPoints === undefined && d.maxP === undefined && cost === undefined) throw new Error(`${file}: decide names no condition`);
   if (rule.metric !== undefined && rule.metric !== "pass" && rule.metric !== "pass2") throw new Error(`${file}: metric must be "pass" or "pass2"`);
   if (rule.rounds !== undefined && (!Array.isArray(rule.rounds) || rule.rounds.some((r) => typeof r !== "string"))) throw new Error(`${file}: rounds must be a list of round folder names`);
+  if (rule.rounds && new Set(rule.rounds).size !== rule.rounds.length) throw new Error(`${file}: rounds names a round twice`);
 }
 
 export function render(v: Verdict): string {
@@ -222,8 +229,11 @@ export function render(v: Verdict): string {
   for (const c of v.conditions) out.push(`| ${c.what} | ${c.met ? "yes" : "**no**"} | ${c.detail} |`);
   out.push("", `${v.pairs} paired task-runs from ${v.rounds.length} round${v.rounds.length > 1 ? "s" : ""} (${v.rounds.join(", ")}), judged on \`${v.rule.metric ?? "pass"}\`.`, "");
   out.push("| | Passed | Cost at list price |", "|---|---|---|");
-  out.push(`| ${v.rule.baseline} (baseline) | ${v.baselinePassed} (${pct(v.baselinePassed, v.pairs)}) | $${v.baselineCost.toFixed(2)} |`);
-  out.push(`| ${v.rule.candidate} (candidate) | ${v.candidatePassed} (${pct(v.candidatePassed, v.pairs)}) | $${v.candidateCost.toFixed(2)} |`);
+  // Costs cover only the pairs whose cost is known on both sides; with none, they are unknown, not $0.00.
+  const money = (x: number) => (v.costIntervalKnown ? `$${x.toFixed(2)}` : "unknown");
+  out.push(`| ${v.rule.baseline} (baseline) | ${v.baselinePassed} (${pct(v.baselinePassed, v.pairs)}) | ${money(v.baselineCost)} |`);
+  out.push(`| ${v.rule.candidate} (candidate) | ${v.candidatePassed} (${pct(v.candidatePassed, v.pairs)}) | ${money(v.candidateCost)} |`);
+  if (v.unpriced) out.push("", `Cost is over the ${v.pairs - v.unpriced} pairs priced on both sides; ${v.unpriced} could not be priced.`);
   out.push("", `Cost ratio ${v.costRatio.toFixed(2)} (95% interval ${v.costInterval[0].toFixed(2)} to ${v.costInterval[1].toFixed(2)}, by resampling task-runs).`, "");
   if (v.perRound.length > 1) {
     out.push("| Round | Pairs | Lead, points | Cost ratio |", "|---|---|---|---|");

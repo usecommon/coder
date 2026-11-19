@@ -676,3 +676,30 @@ Also fixed from the unverified ones: a mended `bash` call is not turned into a c
 Figures: unchanged (the verdict on the fourth confirmation, the signals at chance within a condition, the profiles). Tests: 177 pass.
 
 **Four rounds compared.** 60, 39, 32, 25 findings; 14, 14, 14 and 12 confirmed of those checked. Each of the last three rounds found a way to run a program on the host through git, each in code the previous round's fix had added or left narrow. This time the fix closes the mechanism (no program-running config is trusted from any source the model could reach) rather than the path reported.
+
+## Fifth council review (19 November)
+
+Fresh agents, same lenses. 19 findings, 18 distinct defects; all 14 checked by an agent told to refute them held.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Git on the host, a fourth time.** The list of dangerous config keys missed the ones that make git fetch a missing object through a command named in the repository (`remote.<name>.uploadpack` with a partial clone). A `.git` the model made in an earlier session, when there was none to protect, would run it on the host at the next `git diff`. Reproduced | high | The list of dangerous keys is gone: a repository is used only when every key of its own config is on a short list of keys known to run and fetch nothing. Transports are off (`protocol.allow=never`) and lazy fetching is off. The repository in the report is refused; an ordinary one with a remote is still used |
+| Signal replay and the miner's step-limit count ran one watcher and one step count over all the turns of a `--steps` plan and both passes of `--verify` | medium | The first attempt is cut where the live loop starts afresh: a new watcher per turn, kept across the verifier's pass; the step count and the step limit per turn and pass. The reviewer's own demonstration now matches the live loop in both cases |
+| Under macOS, Seatbelt lets every command write two system folders, which the trust check did not count as writable | medium | Counted |
+| The miner compared a round with whatever round came before it, also one of another model or with a second attempt | medium | Only with a round of the same models, attempts and mostly the same tasks; an explicitly named one of another kind is flagged as not like for like |
+| A successful call to a tool from an MCP server set off the check, though it may have changed nothing | medium | Measured like `bash`: the check runs when the files changed |
+| The fingerprint left out ignored files, and a workspace ignored by the enclosing repository looked unchanged after any shell edit | medium | Ignored files are part of it; a workspace the repository ignores is looked at as files |
+| The edit-repair tests depended on the host's sandbox: on macOS one failed and three could not fail | medium | They run with the sandbox off; the scratch-folder test only under bubblewrap |
+| A user's own request that began like a message Galley adds was dropped from a takeover's earlier turns | low | The whole shape of each injected message is matched |
+| A resumed session took edits left by a cut-off run as its baseline and never checked them | low | A resumed session checks once |
+| The same command failing in different folders raised a "same check" signal | low | The folder is part of the key |
+| A rule naming a round twice let an unnamed round count as pre-registered | low | Named and judged rounds compared as sets; duplicates refused |
+| The 2-second slack before a second attempt dropped late first-attempt requests from its cost | low | Removed (both times come from one clock) |
+| In old sessions, a cut-off helper's cost was taken from the main model's spend | low | Only a roll-up record that is really there is taken |
+| The ENOTDIR test never checked that the repair gave up | low | It does |
+
+Also fixed from the unverified ones: a stale lesson lock is taken by rename, which only one process can win; a verdict with no priced pair shows its cost as unknown, not $0.00; the edit repair's comment says what it does with links. Not fixed: in a project with a large ignored dependency folder the edit repair reads up to 5,000 files and then gives up (it errs toward doing nothing).
+
+Each protection added this round was taken out in turn and its test run: all six tests failed without their fix and pass with it. Figures unchanged. Tests: 185 pass.
+
+**Five rounds compared.** Findings 60, 39, 32, 25, 19. Confirmed of those checked: 14, 14, 14, 12, 14. Four rounds in a row found a way to run a program on the host through git; this round replaced the list of dangerous settings with a list of safe ones, which is the change the pattern called for.

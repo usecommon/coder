@@ -40,7 +40,8 @@ export class Watch {
 
       // The same command failing again and again: an edit-and-test loop that is not converging.
       if (r.name === "bash" && typeof call?.input?.command === "string") {
-        const cmd = call.input.command.trim().replace(/\s+/g, " ");
+        const where = typeof call.input.path === "string" ? `[in ${call.input.path}] ` : "";
+        const cmd = where + call.input.command.trim().replace(/\s+/g, " ");
         const code = exitCode(r);
         if (code === 0) this.failing.delete(cmd);
         else if (code !== undefined) {

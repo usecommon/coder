@@ -20,6 +20,7 @@ import { gap, profiles, rereadCost, suggestRoles, weakerWarning } from "../src/p
 import { DEFAULT_PRICES } from "../src/provider/pricing.ts";
 import type { ChatRequest, ChatResponse, Provider } from "../src/provider/types.ts";
 import { Session } from "../src/session/store.ts";
+import type { Tool } from "../src/tools/types.ts";
 import { modelsReport, reachable, switchNotes } from "../src/ui/models.ts";
 import { tempDir, testConfig } from "./helpers.ts";
 
@@ -848,13 +849,13 @@ describe("near-miss tool calls are mended", () => {
 
   test("edit: without a path, the one file that contains the text is used; with two, the call is refused", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "return a - b", new_string: "return a + b" } }] };
-    const one = setup([call, { text: "Done." }]);
+    const one = setup([call, { text: "Done." }], { sandbox: "off" });
     mkdirSync(join(one.ws, "src"));
     writeFileSync(join(one.ws, "src", "add.py"), "def add(a, b):\n    return a - b\n");
     writeFileSync(join(one.ws, "README.md"), "nothing here\n");
     await one.agent.send("fix add");
     expect(readFileSync(join(one.ws, "src", "add.py"), "utf8")).toContain("return a + b");
-    const two = setup([call, { text: "Done." }]);
+    const two = setup([call, { text: "Done." }], { sandbox: "off" });
     writeFileSync(join(two.ws, "a.py"), "return a - b\n");
     writeFileSync(join(two.ws, "b.py"), "return a - b\n");
     await two.agent.send("fix add");
@@ -1040,7 +1041,7 @@ describe("fixes from the council review", () => {
     expect(note.match(/<\/project_note>/g)).toHaveLength(1);
   });
 
-  test.skipIf(detectSandbox() === "none")("edit without a path is not mended when the scratch folder holds the same text", async () => {
+  test.skipIf(detectSandbox() !== "bwrap")("edit without a path is not mended when the scratch folder holds the same text", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "return a - b", new_string: "return a + b" } }] };
     const { ws, mock, agent } = setup([call, { text: "Done." }]);
     writeFileSync(join(ws, "add.py"), "return a - b\n");
@@ -1207,7 +1208,7 @@ describe("fixes from the third council review", () => {
   test("edit repair does not read a file the rules forbid, and names no file for an edit the rules refuse", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "API_KEY=sk-secret", new_string: "x" } }] };
     const perm = { ...testConfig().permission, read: { "*": "allow" as const, ".env": "deny" as const } };
-    const { ws, mock, agent } = setup([call, { text: "Done." }], { permission: perm });
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { permission: perm, sandbox: "off" });
     writeFileSync(join(ws, ".env"), "API_KEY=sk-secret\n");
     await agent.send("change the key");
     const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
@@ -1218,7 +1219,7 @@ describe("fixes from the third council review", () => {
 
   test("edit repair treats a CRLF file as edit does, so two matches stay ambiguous", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "function foo() {\n  return 1;", new_string: "X" } }] };
-    const { ws, mock, agent } = setup([call, { text: "Done." }]);
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
     writeFileSync(join(ws, "a.txt"), "function foo() {\r\n  return 1;\r\n}\r\n");
     writeFileSync(join(ws, "b.txt"), "function foo() {\n  return 1;\n}\n");
     await agent.send("change foo");
@@ -1334,12 +1335,17 @@ describe("fixes from the fourth council review", () => {
     sh(ws, "add", ".");
     sh(ws, "commit", "-qm", "x");
     const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "unique text here", new_string: "x" } }] };
-    registerProvider(new MockProvider([call, { text: "Done." }]));
+    const mock = new MockProvider([call, { text: "Done." }]);
+    registerProvider(mock);
     const agent = new Agent({ cfg: testConfig({ sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once", retryDelayMs: 1 });
     Bun.spawnSync(["rm", "-rf", join(ws, "a")]);
     writeFileSync(join(ws, "a"), "now a file\n");
     const r = await agent.send("change the text");
     expect(r.text).toBe("Done.");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.isError).toBe(true);
+    expect(res.content).not.toContain("is the only file containing old_string");
+    expect(readFileSync(join(ws, "c.txt"), "utf8")).toBe("unique text here for edit\n");
   });
 
   test("bash is not mended into a command the rules refuse when the plain one was allowed", async () => {
@@ -1351,5 +1357,121 @@ describe("fixes from the fourth council review", () => {
     const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
     expect(res.content).not.toContain("the command runs in sub");
     expect(res.content).toContain("input.path is not a known parameter");
+  });
+});
+
+describe("fixes from the fifth council review", () => {
+  const sh = (dir: string, ...a: string[]) => Bun.spawnSync(["git", "-C", dir, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+
+  test("a repository set up to fetch missing objects through a command of its own is not used", async () => {
+    const base = tempDir();
+    const ws = join(base, "ws");
+    mkdirSync(ws);
+    const flag = join(base, "pwned");
+    sh(ws, "init", "-q");
+    writeFileSync(join(ws, "a.txt"), "one\n");
+    sh(ws, "add", "a.txt");
+    sh(ws, "commit", "-qm", "x");
+    const blob = Bun.spawnSync(["git", "-C", ws, "rev-parse", "HEAD:a.txt"]).stdout.toString().trim();
+    Bun.spawnSync(["rm", "-f", join(ws, ".git", "objects", blob.slice(0, 2), blob.slice(2))]);
+    for (const [k, v] of [["core.repositoryformatversion", "1"], ["extensions.partialClone", "origin"], ["remote.origin.promisor", "true"], ["remote.origin.url", base], ["remote.origin.uploadpack", `touch '${flag}'; false`]])
+      Bun.spawnSync(["git", "config", "-f", join(ws, ".git", "config"), k!, v!]);
+    writeFileSync(join(ws, "a.txt"), "two\n");
+    const { recordGit, isGitRepo, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(realpathSync(ws));
+    expect(isGitRepo(realpathSync(ws))).toBe(false);
+    fingerprint(realpathSync(ws));
+    expect(existsSync(flag)).toBe(false);
+  });
+
+  test("an ordinary repository with a remote is still used", async () => {
+    const ws = tempDir();
+    sh(ws, "init", "-q");
+    writeFileSync(join(ws, "a.txt"), "one\n");
+    sh(ws, "add", "a.txt");
+    sh(ws, "commit", "-qm", "x");
+    sh(ws, "remote", "add", "origin", "https://example.com/r.git");
+    sh(ws, "config", "branch.master.remote", "origin");
+    const { recordGit, isGitRepo } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(true);
+  });
+
+  test("a workspace the enclosing repository ignores is looked at as files, so a shell edit is seen", async () => {
+    const top = tempDir();
+    sh(top, "init", "-q");
+    writeFileSync(join(top, ".gitignore"), "scratch/\n");
+    sh(top, "add", ".gitignore");
+    sh(top, "commit", "-qm", "x");
+    const ws = join(top, "scratch");
+    mkdirSync(ws);
+    writeFileSync(join(ws, "main.py"), "print(1)\n");
+    const { recordGit, isGitRepo, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(isGitRepo(ws)).toBe(false);
+    const before = fingerprint(ws);
+    await Bun.sleep(10);
+    writeFileSync(join(ws, "main.py"), "print(2)\n");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("a change to an ignored file inside a repository changes the fingerprint", async () => {
+    const ws = tempDir();
+    sh(ws, "init", "-q");
+    writeFileSync(join(ws, ".gitignore"), "local.cfg\n");
+    sh(ws, "add", ".gitignore");
+    sh(ws, "commit", "-qm", "x");
+    writeFileSync(join(ws, "local.cfg"), "a\n");
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    await Bun.sleep(10);
+    writeFileSync(join(ws, "local.cfg"), "bb\n");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("a tool from an MCP server that changes nothing does not set off the check", async () => {
+    const mcp = { readOnly: false, spec: { name: "mcp_issues_get", description: "x", parameters: { type: "object", properties: {} } }, run: async () => "Issue 7: the parser is slow." } as Tool;
+    const ws = tempDir();
+    const mock = new MockProvider([{ toolCalls: [{ name: "mcp_issues_get", input: {} }] }, { text: "It is about speed." }]);
+    registerProvider(mock);
+    const events: AgentEvent[] = [];
+    const agent = new Agent({ cfg: testConfig({ check: "false", sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once", extraTools: [mcp], onEvent: (e) => events.push(e) });
+    await agent.send("summarise issue 7");
+    expect(events.some((e) => e.type === "notice" && (e as { text: string }).text.startsWith("Check"))).toBe(false);
+    expect(mock.requests).toHaveLength(2);
+  });
+
+  test("a resumed session checks once, as a cut-off run may have left edits unchecked", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "out.txt"), "wrong\n");
+    const session = Session.create(ws, "mock/test");
+    session.addMessage({ role: "user", content: "fix out.txt" });
+    session.addMessage({ role: "assistant", content: "Working on it.", toolCalls: [] });
+    const mock = new MockProvider([{ text: "Finished." }, { text: "Still finished." }]);
+    registerProvider(mock);
+    const events: AgentEvent[] = [];
+    const agent = new Agent({ cfg: testConfig({ check: "grep -q right out.txt", sandbox: "off" }), workspace: ws, session, approver: async () => "once", onEvent: (e) => events.push(e) });
+    await agent.send("finish up");
+    expect(events.some((e) => e.type === "notice" && (e as { text: string }).text.startsWith("Check failed"))).toBe(true);
+  });
+
+  test("the same command failing in different folders is not one repeated check", () => {
+    const w = new Watch(60);
+    const call = (path: string, i: number): ToolCall => ({ id: `c${i}`, name: "bash", input: { command: "npm test", path }, rawInput: JSON.stringify({ command: "npm test", path }) });
+    const fail = (i: number): ToolResult => ({ callId: `c${i}`, name: "bash", content: "x\n[exit code 1]" });
+    const fired = ["a", "b", "c"].map((p, i) => w.step(i, [call(p, i)], [fail(i)]));
+    expect(fired.filter(Boolean)).toEqual([]);
+  });
+
+  test("a user request that starts like a message Galley adds is still quoted to a model taking over", () => {
+    const text = earlierTurns([
+      { role: "user", content: "add a --verbose flag" },
+      { role: "assistant", content: "Added --verbose.", toolCalls: [] },
+      { role: "user", content: "The check `npm test` fails on CI since your change; fix the flaky timeout test" },
+      { role: "assistant", content: "Raised the timeout.", toolCalls: [] },
+    ] as Message[]);
+    expect(text).toContain("Answer: Added --verbose.");
+    expect(text).toContain("Request: The check `npm test` fails on CI");
   });
 });

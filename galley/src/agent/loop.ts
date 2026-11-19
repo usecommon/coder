@@ -9,7 +9,7 @@ import { profiles, rereadCost, weakerWarning } from "../provider/models.ts";
 import type { ChatResponse } from "../provider/types.ts";
 import { costUsd, DEFAULT_PRICES } from "../provider/pricing.ts";
 import { PermissionGate, type Approver, type Mode } from "../safety/permission.ts";
-import { detectSandbox, exec, type SandboxKind } from "../safety/sandbox.ts";
+import { detectSandbox, exec, SEATBELT_WRITABLE, type SandboxKind } from "../safety/sandbox.ts";
 import { projectDir, Session } from "../session/store.ts";
 import { adviseTool } from "../tools/advise.ts";
 import { BUILTIN_TOOLS, runTool } from "../tools/index.ts";
@@ -98,13 +98,14 @@ export class Agent {
 
   constructor(private o: AgentOptions) {
     this.workspace = realpathSync(o.workspace);
-    // Before any model turn: which git repository the workspace is in, if any (see workspace-state.ts).
-    // Galley's folder for the project holds the sandbox's /tmp and caches, which commands can write.
-    recordGit(this.workspace, [projectDir(this.workspace)]);
     this.model = o.model ?? o.cfg.model;
     this.effort = o.effort;
     this.gate = new PermissionGate(o.cfg.permission, o.approver, o.mode ?? "build");
     this.sandbox = o.cfg.sandbox === "off" ? "none" : detectSandbox();
+    // Before any model turn: which git repository the workspace is in, if any (see workspace-state.ts).
+    // Galley's folder for the project holds the sandbox's /tmp and caches, and Seatbelt lets every command write two
+    // system folders: a git folder in any of them is one the model could change.
+    recordGit(this.workspace, [projectDir(this.workspace), ...(this.sandbox === "seatbelt" ? SEATBELT_WRITABLE : [])]);
     const all = [...BUILTIN_TOOLS, ...(o.extraTools ?? [])];
     // Helpers get read-only tools plus bash (which runs read-only in plan mode). The tool list stays fixed
     // across modes so the cached prompt prefix survives a /plan ↔ /build switch.
@@ -219,7 +220,11 @@ export class Agent {
     // last result, which a reviewing advisor reads beside the diff.
     const checking = !!cfg.check && o.check !== false && !this.o.subagent && this.mode !== "plan";
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
-    if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) this.checkedPrint = fingerprint(this.workspace) ?? "";
+    if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) {
+      this.checkedPrint = fingerprint(this.workspace) ?? "";
+      // A session resumed after a run that was cut off may hold edits that were never checked: check once.
+      if (turnStart > 0) this.unchecked = true;
+    }
     let checkFails = 0;
     let checkReport: string | undefined;
     let lastFailure: string | undefined;
@@ -342,7 +347,8 @@ export class Agent {
           : await this.runTools(res.toolCalls, signal);
       this.session.addMessage({ role: "tool", results });
       for (const c of res.toolCalls) {
-        if (c.name === "bash") this.ranCommands = true;
+        // A command, or a tool from an MCP server: whether it changed a file is measured, not assumed.
+        if (c.name === "bash" || c.name.startsWith("mcp_")) this.ranCommands = true;
         else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly && results.some((r) => r.callId === c.id && !r.isError)) this.unchecked = true;
       }
       if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });

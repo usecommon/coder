@@ -9,7 +9,7 @@
 // with is `pass`, which is the first attempt's in every round.
 import { LIMITS, Watch } from "../galley/src/agent/signals.ts";
 import type { ToolCall, ToolResult } from "../galley/src/core/types.ts";
-import { conditionKey, firstAttempt, pct, roundDirs, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { conditionKey, pct, roundDirs, segments, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Replayed {
   steps: number;
@@ -20,24 +20,30 @@ export interface Replayed {
 /** Replay the first attempt through the watcher. It is never re-armed: in these rounds nothing acted on a signal,
  *  so each kind fires at most once, as it would have. */
 export function replay(recs: SessionRecord[] | undefined, maxSteps: number): Replayed {
-  const watch = new Watch(maxSteps);
+  let watch = new Watch(maxSteps);
   const fired = new Map<string, number>();
-  const ms = firstAttempt(recs);
-  let step = 0;
-  // The live loop counts a step for every model call, also one that only answered (a check failure or a review
-  // then sent it back): so does the replay, or the long-run signal would fire later than it did.
-  for (let i = 0; i < ms.length; i++) {
-    const m = ms[i]!;
-    if (m.role !== "assistant") continue;
-    const next = ms[i + 1];
-    // Live, the watcher is not consulted on the last step allowed.
-    if (m.toolCalls.length && next?.role === "tool" && step < maxSteps - 1) {
-      const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
-      if (sig && !fired.has(sig.kind)) fired.set(sig.kind, step);
+  let total = 0;
+  // As live: a new watcher for each turn, kept across the verifier's pass; the step count starts again for both.
+  for (const seg of segments(recs)) {
+    if (seg.newTurn) watch = new Watch(maxSteps);
+    const ms = seg.messages;
+    let step = 0;
+    // The live loop counts a step for every model call, also one that only answered (a check failure or a review
+    // then sent it back): so does the replay, or the long-run signal would fire later than it did.
+    for (let i = 0; i < ms.length; i++) {
+      const m = ms[i]!;
+      if (m.role !== "assistant") continue;
+      const next = ms[i + 1];
+      // Live, the watcher is not consulted on the last step allowed.
+      if (m.toolCalls.length && next?.role === "tool" && step < maxSteps - 1) {
+        const sig = watch.step(step, m.toolCalls as ToolCall[], next.results as ToolResult[]);
+        if (sig && !fired.has(sig.kind)) fired.set(sig.kind, total + step);
+      }
+      step++;
     }
-    step++;
+    total += step;
   }
-  return { steps: step, fired };
+  return { steps: total, fired };
 }
 
 export const maxStepsOf = (r: TaskRun) => (typeof r.config?.maxSteps === "number" ? (r.config.maxSteps as number) : 60);

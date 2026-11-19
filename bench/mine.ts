@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { replayRuns, signalTable } from "./signals.ts";
-import { costByRun, firstAttempt, isCanary, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { costByRun, firstAttempt, isCanary, modelsByRun, segments, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Cluster {
   key: string;
@@ -32,6 +32,8 @@ export interface Mined {
   phases: { main: number; otherModels: number; helpers: number; runs: number };
   steps: { medianPass: number; medianFail: number; atLimit: number };
   recordedSignals: Record<string, number>;
+  /** What the round ran, so that it is compared only with a round that ran the same. */
+  conditions?: { models: string[]; attempts: number; tasks: string[] };
   checks: { runs: number; failed: number; passedAfterFailing: number };
 }
 
@@ -114,17 +116,18 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     // Sessions that record each `galley run` also mark every roll-up: an unmarked helper cost there is one that
     // never reached the parent (the run was cut off while the helper worked), so nothing is subtracted.
     const marked = r.main.some((x) => (x.type === "usage" && (x as { helper?: string }).helper) || x.type === "run");
-    const parentOn = new Map<string, number>();
-    for (const x of r.main) if (x.type === "usage") parentOn.set((x as { model: string }).model, (parentOn.get((x as { model: string }).model) ?? 0) + (x as { costUsd: number }).costUsd);
+    // The old roll-up is one usage record on the helper's model whose cost equals the helper's own total.
+    const rollups = r.main.filter((x) => x.type === "usage") as { model: string; costUsd: number }[];
     for (const h of r.helpers) {
       const c = h.filter((x) => x.type === "usage").reduce((s, x) => s + (x as Extract<SessionRecord, { type: "usage" }>).costUsd, 0);
       phases.helpers += c;
       if (marked) continue;
       const hm = (h[0] as { model?: string }).model ?? "";
-      const take = Math.min(c, parentOn.get(hm) ?? 0);
-      parentOn.set(hm, (parentOn.get(hm) ?? 0) - take);
-      if (hm === meta.model) phases.main -= take;
-      else phases.otherModels -= take;
+      const i = rollups.findIndex((x) => x.model === hm && Math.abs(x.costUsd - c) <= 1e-9 * Math.max(1, c));
+      if (i < 0) continue; // the helper was cut off before its roll-up: nothing of it is in the parent
+      rollups.splice(i, 1);
+      if (hm === meta.model) phases.main -= c;
+      else phases.otherModels -= c;
     }
 
     const ms = firstAttempt(r.main);
@@ -152,9 +155,17 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     }
     (r.pass ? stepsPass : stepsFail).push(steps);
     const max = typeof r.config?.maxSteps === "number" ? (r.config.maxSteps as number) : 60;
-    if (steps >= max) atLimit++;
+    // The limit holds for each turn and each pass, not for the whole attempt.
+    if (segments(r.main).some((seg) => seg.messages.filter((m) => m.role === "assistant").length >= max)) atLimit++;
   }
+  const models = modelsByRun(round);
+  const conditions = {
+    models: [...new Set(runs.map((r) => models.get(runKey(r)) ?? ""))].filter(Boolean).sort(),
+    attempts: Math.max(1, ...runs.map((r) => r.attempts ?? 1)),
+    tasks: [...new Set(runs.map((r) => r.task))].sort(),
+  };
   return {
+    conditions,
     round: basename(round),
     agents,
     toolErrors: clusters(toolErrors),
@@ -168,17 +179,27 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
   };
 }
 
+/** Two rounds can be compared when they ran the same models with the same number of attempts on mostly the same
+ *  tasks. A round mined before conditions were recorded is never compared. */
+function comparable(a?: Mined["conditions"], b?: Mined["conditions"]): boolean {
+  if (!a || !b) return false;
+  if (a.models.join() !== b.models.join() || a.attempts !== b.attempts) return false;
+  const shared = a.tasks.filter((t) => b.tasks.includes(t)).length;
+  return shared >= 0.5 * Math.max(a.tasks.length, b.tasks.length);
+}
+
 /** Rounds that are trials, not rounds: never the one to compare with. */
 const NOT_A_ROUND = /invalid|aborted|smoke|dry|dump|selftest|probe|try/i;
 
 /** The most recent other round beside this one that has been mined. */
-function previousRound(round: string): string | undefined {
+function previousRound(round: string, own?: Mined["conditions"]): string | undefined {
   const parent = dirname(round);
   const mtime = (d: string) => statSync(join(d, "results.jsonl")).mtimeMs;
-  const own = mtime(round);
+  const mine = mtime(round);
   return readdirSync(parent)
     .map((d) => join(parent, d))
-    .filter((d) => d !== round && !isCanary(d) && !NOT_A_ROUND.test(basename(d)) && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < own)
+    .filter((d) => d !== round && !isCanary(d) && !NOT_A_ROUND.test(basename(d)) && existsSync(join(d, "mine.json")) && existsSync(join(d, "results.jsonl")) && mtime(d) < mine)
+    .filter((d) => comparable(own, (JSON.parse(readFileSync(join(d, "mine.json"), "utf8")) as Mined).conditions))
     .sort((a, b) => mtime(b) - mtime(a))[0];
 }
 
@@ -217,6 +238,7 @@ export function render(m: Mined, prev: Mined | undefined, signals: string[]): st
   if (rec.length) out.push("", `Recorded in the sessions while running: ${rec.map(([k, n]) => `${k} ${n}`).join(", ")}.`);
   if (prev) {
     out.push("", "## Compared with the previous round", "", `Previous: ${prev.round}.`);
+    if (!comparable(m.conditions, prev.conditions)) out.push("", "**The two rounds ran different models, attempts or tasks: the figures below are not like for like.**");
     for (const [a, s] of Object.entries(m.agents)) {
       const p = prev.agents[a];
       if (p) out.push(`- ${a}: ${pct(s.passed, s.runs)} against ${pct(p.passed, p.runs)}; cost per task-run ${money(s.costUsd / s.runs, 4)} against ${money(p.costUsd === null ? null : p.costUsd / p.runs, 4)}.`);
@@ -236,10 +258,10 @@ if (import.meta.main) {
   }
   const i = args.indexOf("--previous");
   // A canary round is a picked set of tasks: comparing it with a full round would show a rise that is not there.
-  const prevDir = i >= 0 ? args[i + 1] : isCanary(round) ? undefined : previousRound(round);
-  const prev = prevDir && existsSync(join(prevDir, "mine.json")) ? (JSON.parse(readFileSync(join(prevDir, "mine.json"), "utf8")) as Mined) : undefined;
   const runs = taskRuns(round, { sessions: true });
   const m = mine(round, runs);
+  const prevDir = i >= 0 ? args[i + 1] : isCanary(round) ? undefined : previousRound(round, m.conditions);
+  const prev = prevDir && existsSync(join(prevDir, "mine.json")) ? (JSON.parse(readFileSync(join(prevDir, "mine.json"), "utf8")) as Mined) : undefined;
   const signals = signalTable(replayRuns(runs));
   const md = render(m, prev, signals);
   writeFileSync(join(round, "mine.json"), JSON.stringify(m, null, 1));

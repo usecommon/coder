@@ -71,7 +71,13 @@ export const freshStartMessage = (o: { from: string; why: string; request: strin
     : "\n\nNo file was changed with the write or edit tools in this turn. Commands or earlier turns may still have changed files: look before you assume the code is as it was.");
 
 /** Messages Galley adds to a turn itself (a failed check, a review, advice, a takeover, a plan's review): not requests. */
-const INJECTED = [/^The check `/, /^Before you finish, check your work/, /^A second model \(/, /^You are taking over/, /^An independent reviewer/];
+const INJECTED = [
+  /^The check `[^`\n]*` failed \((?:no exit code|exit code -?\d+); check \d+ of \d+ this turn\):/,
+  /^Before you finish, check your work against the original request\./,
+  /^A second model \([^)\n]*\) (?:read this session because|reviewed your (?:change|plan))/,
+  /^You are taking over this (?:session|task) from another model \(/,
+  /^An independent reviewer checked your change against the request and reported:/,
+];
 
 /** The session before this turn, for a model that takes over and does not read it: each request, without the
  *  description of the workspace at the time and without a plan request's instruction to change nothing yet, and the

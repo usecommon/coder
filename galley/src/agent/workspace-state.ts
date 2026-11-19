@@ -24,13 +24,28 @@ const recorded = new Map<string, GitContext | null>();
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const HARDEN = [
   `--attr-source=${EMPTY_TREE}`,
-  ...["core.fsmonitor=false", "core.hooksPath=/dev/null", "diff.external=", "core.untrackedCache=false", "diff.ignoreSubmodules=all", "submodule.recurse=false", "status.submoduleSummary=false", "core.attributesFile=/dev/null"].flatMap((c) => ["-c", c]),
+  ...["core.fsmonitor=false", "core.hooksPath=/dev/null", "diff.external=", "core.untrackedCache=false", "diff.ignoreSubmodules=all", "submodule.recurse=false", "status.submoduleSummary=false", "core.attributesFile=/dev/null", "protocol.allow=never"].flatMap((c) => ["-c", c]),
 ];
 /** System and user-wide config are not read: a filter defined there (git-lfs) would run for an attribute the model
  *  wrote. Only the repository's own config is read, and only after it was checked. */
-const ENV = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0" };
-/** Config keys that make git run a program: a repository that sets one is not trusted. */
-const RUNS_PROGRAMS = /^(filter\.|diff\.[^.]+\.(textconv|command)|merge\.[^.]+\.driver|core\.(fsmonitor|hookspath|pager|sshcommand|askpass|editor|gitproxy)|include(if)?\.|credential\.|uploadpack\.|receive\.)/i;
+const ENV = { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_NO_LAZY_FETCH: "1", GIT_PROTOCOL_FROM_USER: "0" };
+/** The repository config keys that are trusted: ones that run nothing, fetch nothing and name no program. A
+ *  repository whose own config sets any other key is not used, and Galley falls back to looking at the files. A list
+ *  of keys known to be harmless is kept, not a list of dangerous ones: four reviews in a row found a dangerous key the
+ *  list of dangerous ones had missed (filters, per-worktree config, submodules, remote upload commands). */
+const SAFE_KEYS = [
+  /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|eol|safecrlf|quotepath|checkstat|trustctime|longpaths|protecthfs|protectntfs|preloadindex|sharedrepository|abbrev|compression|loosecompression|warnambiguousrefs|sparsecheckout|sparsecheckoutcone|commitgraph|multipackindex|splitindex)$/,
+  /^user\.(name|email)$/,
+  /^init\.defaultbranch$/,
+  /^branch\..+\.(remote|merge|rebase|pushremote|description)$/,
+  /^remote\..+\.(url|pushurl|fetch|push|tagopt|mirror|prune)$/,
+  /^(pull\.(rebase|ff)|push\.default|fetch\.prune|status\.(showuntrackedfiles|relativepaths)|index\.(version|sparse)|feature\.manyfiles|rerere\.enabled)$/,
+  /^extensions\.(objectformat|worktreeconfig)$/,
+  /^lfs\.repositoryformatversion$/,
+  /^submodule\..+\.(url|active)$/,
+  /^color\./,
+  /^i18n\.(commitencoding|logoutputencoding)$/,
+];
 
 const spawnGit = (args: string[]) => spawnSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 30_000, env: ENV });
 
@@ -43,7 +58,7 @@ function configIsSafe(gitDir: string): boolean {
     .filter(Boolean)
     .every((line) => {
       const [scope, key = ""] = line.split("\t");
-      return scope === "command" || !RUNS_PROGRAMS.test(key);
+      return scope === "command" || SAFE_KEYS.some((re) => re.test(key.toLowerCase()));
     });
 }
 
@@ -68,7 +83,10 @@ export function recordGit(ws: string, writable: string[] = []): void {
   }
   const dotGit = join(ws, ".git");
   const exposed = [gitDir, commonDir].some((d) => (inside(d, ws) && !inside(d, dotGit)) || writable.some((w) => inside(d, w)));
-  recorded.set(ws, exposed || !configIsSafe(gitDir) ? null : { gitDir, commonDir, top });
+  if (exposed || !configIsSafe(gitDir)) return void recorded.set(ws, null);
+  // A workspace the enclosing repository ignores: git would see none of its changes.
+  const ignored = spawnGit(["-C", ws, ...HARDEN, `--git-dir=${gitDir}`, `--work-tree=${top}`, "check-ignore", "-q", "."]);
+  recorded.set(ws, ignored.status === 0 ? null : { gitDir, commonDir, top });
 }
 
 /** Run git on the recorded repository. Undefined when there is none, the workspace was never recorded, or its config
@@ -110,6 +128,19 @@ export function fingerprint(ws: string): string | undefined {
           const s = statSync(join(status.top, entry.slice(3)));
           h.update(`${entry}:${s.size}:${s.mtimeMs}`);
         } catch {}
+    // Ignored files are in neither: their size and time too, outside dependency and cache folders. Too many of them,
+    // and the fingerprint cannot be taken cheaply.
+    const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "-z", "--", "."]);
+    if (!ignored) return undefined;
+    let n = 0;
+    for (const f of ignored.stdout.split("\0")) {
+      if (!f || f.split("/").some((part) => SKIP.has(part))) continue;
+      if (++n > MAX_FILES) return undefined;
+      try {
+        const st = lstatSync(join(ws, f));
+        h.update(`!! ${f}:${st.size}:${st.mtimeMs}`);
+      } catch {}
+    }
     return h.digest("hex");
   }
   let files = 0;
