@@ -10,6 +10,7 @@ import { detectSandbox } from "../src/safety/sandbox.ts";
 import { loadLessons, pickLesson, saveLesson } from "../src/agent/lessons.ts";
 import { Agent, checkFailedMessage } from "../src/agent/loop.ts";
 import { UndoLog } from "../src/tools/undo.ts";
+import { editTool } from "../src/tools/fs.ts";
 import { LIMITS, Watch } from "../src/agent/signals.ts";
 import { parsePlan, runSteps } from "../src/agent/steps.ts";
 import { parseArgs } from "../src/args.ts";
@@ -1157,6 +1158,9 @@ describe("fixes from the third council review", () => {
     writeFileSync(join(ws, "sub", "payload.sh"), `#!/bin/sh\ntouch '${flag}'\ncat\n`, { mode: 0o755 });
     Bun.spawnSync(["git", "config", "-f", join(subGit, "config"), "filter.ev.clean", join(ws, "sub", "payload.sh")]);
     writeFileSync(join(ws, "sub", ".gitattributes"), "* filter=ev\n");
+    // Also where --attr-source does not reach: only not entering the submodule keeps this one from running.
+    mkdirSync(join(subGit, "info"), { recursive: true });
+    writeFileSync(join(subGit, "info", "attributes"), "* filter=ev\n");
     writeFileSync(join(ws, "sub", "f.txt"), "y\n");
     fingerprint(realpathSync(ws));
     gitChanges(realpathSync(ws));
@@ -1203,6 +1207,10 @@ describe("fixes from the third council review", () => {
     writeFileSync(join(ws, ".pytest_cache", "v", "nodeids"), "[]");
     mkdirSync(join(ws, "target"), { recursive: true });
     writeFileSync(join(ws, "target", "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+    // A folder named like no known one, marked as a cache.
+    mkdirSync(join(ws, "mycache"));
+    writeFileSync(join(ws, "mycache", "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+    writeFileSync(join(ws, "mycache", "blob"), "data");
     expect(fingerprint(ws)).toBe(before);
   });
 
@@ -1672,7 +1680,7 @@ describe("seventh review", () => {
     const old = Session.create(ws, "mock/test");
     old.addMessage({ role: "user", content: "explain out.txt" });
     old.addMessage({ role: "assistant", content: "It says wrong.", toolCalls: [] });
-    old.setStatus("done");
+    old.setStatus("done", "end_turn");
     const session = Session.load(ws, old.id);
     const mock = new MockProvider([{ text: "It is a text file." }]);
     registerProvider(mock);
@@ -1739,5 +1747,94 @@ describe("seventh review", () => {
     const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
     expect(res.isError).toBe(true);
     expect(res.content).not.toContain("a.txt is the only file");
+  });
+});
+
+describe("eighth review", () => {
+  const check = "grep -q right out.txt";
+  const writeBroken: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+  const checkNotices = (n: string[]) => n.filter((x) => x.startsWith("Check"));
+  const resume = async (status: [string, string?] | undefined, cfg: Partial<Config> = {}) => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "out.txt"), "wrong\n");
+    const old = Session.create(ws, "mock/test");
+    old.addMessage({ role: "user", content: "fix out.txt" });
+    old.addMessage({ role: "assistant", content: "Working on it.", toolCalls: [] });
+    if (status) old.setStatus(status[0] as "done", status[1]);
+    const mock = new MockProvider([{ text: "Nothing more to do." }, { text: "Still nothing." }]);
+    registerProvider(mock);
+    const events: AgentEvent[] = [];
+    await new Agent({ cfg: testConfig({ check, sandbox: "off", ...cfg }), workspace: ws, session: Session.load(ws, old.id), approver: async () => "once", onEvent: (e) => events.push(e) }).send("continue");
+    return events.filter((e) => e.type === "notice").map((e) => (e as { text: string }).text).filter((t) => t.startsWith("Check"));
+  };
+
+  test("a resumed session is checked once unless its last turn ended cleanly", async () => {
+    expect(await resume(["done", "end_turn"])).toEqual([]);
+    expect((await resume(["done", "other"]))[0]).toStartWith("Check failed");
+    expect((await resume(["done", "tool_use"]))[0]).toStartWith("Check failed");
+    expect((await resume(["running"]))[0]).toStartWith("Check failed");
+  });
+
+  test("every front end records how a turn ended, so a resumed REPL session is not checked for nothing", async () => {
+    const { ws, agent } = setup([{ text: "It is a file." }], { check, sandbox: "off" });
+    await agent.send("what is out.txt?");
+    const loaded = Session.load(ws, agent.session.id);
+    expect([loaded.loadedStatus, loaded.loadedDetail]).toEqual(["done", "end_turn"]);
+  });
+
+  test("a second write to a file already changed this turn runs the check again, also in a folder the fingerprint skips", async () => {
+    const c = "grep -q right build/x.txt";
+    const w = (content: string): MockReply => ({ toolCalls: [{ name: "write", input: { path: "build/x.txt", content } }] });
+    const { agent, notices } = setup([w("wrong"), { text: "Done." }, w("right"), { text: "Fixed." }], { check: c, sandbox: "off" });
+    await agent.send("write build/x.txt");
+    expect(checkNotices(notices())).toEqual([`Check failed (1 of 3): ${c}`, `Check passed: ${c}`]);
+  });
+
+  test("a workspace with more files than the fingerprint takes is still measured: a command that changes nothing is no change", async () => {
+    const ws = tempDir();
+    for (let i = 0; i < 5100; i++) writeFileSync(join(ws, `f${String(i).padStart(5, "0")}.txt`), "x");
+    const { fingerprint } = await import("../src/agent/workspace-state.ts");
+    const before = fingerprint(ws);
+    expect(before).toBeDefined();
+    expect(fingerprint(ws)).toBe(before);
+    writeFileSync(join(ws, "f00000.txt"), "changed");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("in a repository too, an ignored folder marked as a cache is not a change", async () => {
+    const ws = tempDir();
+    const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+    sh("init", "-q");
+    writeFileSync(join(ws, ".gitignore"), "mycache/\n");
+    sh("add", ".gitignore");
+    sh("commit", "-qm", "x");
+    mkdirSync(join(ws, "mycache"));
+    writeFileSync(join(ws, "mycache", "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, "mycache", "blob"), "data");
+    expect(fingerprint(ws)).toBe(before);
+  });
+
+  test("bash with a path through a link out of the workspace is not mended", async () => {
+    const call: MockReply = { toolCalls: [{ name: "bash", input: { command: "pwd", path: "link" } }] };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
+    symlinkSync(tempDir(), join(ws, "link"));
+    await agent.send("where?");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.isError).toBe(true);
+    expect(res.content).not.toContain("the command runs in link");
+  });
+
+  test("an edit that a path would not make valid is not searched for", () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "a.txt"), "version = 1\n");
+    const asked: string[] = [];
+    const ctx = { workspace: ws, sandbox: "none", gate: { allows: (r: { tool: string }) => (asked.push(r.tool), true) } } as unknown as Parameters<NonNullable<Tool["repair"]>>[1];
+    expect(editTool.repair!({ file_path: "a.txt", old_string: "version = 1", new_string: "version = 2" }, ctx)).toBeUndefined();
+    expect(asked).toEqual([]);
+    // The same call without the stray key is searched, and mended.
+    expect(editTool.repair!({ old_string: "version = 1", new_string: "version = 2" }, ctx)?.input.path).toBe("a.txt");
   });
 });

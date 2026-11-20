@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { replayRuns, signalTable } from "./signals.ts";
-import { costByRun, firstAttempt, isCanary, modelsByRun, segments, pct, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
+import { costByRun, firstAttempt, isCanary, modelsByRun, segments, pct, results, runKey, taskRuns, type SessionRecord, type TaskRun } from "./sessions.ts";
 
 export interface Cluster {
   key: string;
@@ -199,7 +199,12 @@ const NOT_A_ROUND = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake/i;
 /** The most recent other round beside this one that has been mined. */
 function previousRound(round: string, own?: Mined["conditions"]): string | undefined {
   const parent = dirname(round);
-  const mtime = (d: string) => statSync(join(d, "results.jsonl")).mtimeMs;
+  // When a round started: its earliest task-run. Not when its results were last written, which a resumed round
+  // changes.
+  const mtime = (d: string) => {
+    const t = Math.min(...results(d).map((r) => (r as { startedAt?: number }).startedAt ?? Infinity));
+    return Number.isFinite(t) ? t : statSync(join(d, "results.jsonl")).mtimeMs;
+  };
   const mine = mtime(round);
   return readdirSync(parent)
     .map((d) => join(parent, d))

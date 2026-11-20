@@ -348,6 +348,8 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
       const st = lstatSync(p, { throwIfNoEntry: false });
       if (st?.isDirectory() && !fits(p, 0, budget)) return undefined;
     }
+    // Nor read anything when git's own list already has more files than are left in the budget.
+    if (listed.listed.length + listed.ignored.length > budget.files) return undefined;
     // A folder in git's own list is a nested repository or submodule: not searched, so uncertain. Ignored folders
     // are searched, within the same limits.
     for (const f of listed.ignored) if (!check(join(root, f.replace(/\/$/, "")))) return undefined;

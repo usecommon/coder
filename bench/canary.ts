@@ -20,6 +20,8 @@ import { basename, join } from "node:path";
 import { isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns } from "./sessions.ts";
 
 const FILE = join(import.meta.dir, "canary.json");
+/** Runs of stable tasks in held-out rounds below which their failure rate is not used. */
+const MIN_HELD_OUT = 20;
 const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake|canary/i;
 /** Tasks the round reports leave out of scoring: broken in the benchmark itself (report.ts). */
 const EXCLUDED = new Set(["rust/macros", "go/octal"]);
@@ -92,6 +94,8 @@ function select(args: string[]) {
   const c: Canary = { selected: new Date().toISOString().slice(0, 10), model, effort, stable: Object.fromEntries(stable), hard: Object.fromEntries(hard), heldOut };
   writeFileSync(FILE, JSON.stringify(c, null, 1) + "\n");
   console.log(`${history.size} tasks with history; ${enough.length} with four runs or more. Chose ${stable.length} stable and ${hard.length} hard tasks. In rounds left out of the choice, tasks chosen as stable failed ${heldOut[0]} of ${heldOut[1]} runs.`);
+  if (heldOut[1] < MIN_HELD_OUT)
+    console.log(`Too few held-out runs (${heldOut[1]}, fewer than ${MIN_HELD_OUT}) to measure how often such tasks fail: check will use their own history, which leans towards false alarms. More rounds at this setting would fix it.`);
   console.log(`ONLY=${[...stable, ...hard].map(([t]) => t).join(",")}`);
 }
 
@@ -120,11 +124,12 @@ function check(round: string) {
   // One chance of failing for every stable task, from rounds left out of the choice, with one failure and one pass
   // added so that it is never zero. Their own history would understate it: they were chosen because it was good.
   // A prior on each task's five runs (1 in 7 each) would hide a large regression.
+  // Below MIN_HELD_OUT runs the held-out count says too little (0 of 0 would put every task at one half).
   let [fails, total] = c.heldOut ?? [0, 0];
-  if (!c.heldOut) {
+  if (total < MIN_HELD_OUT) {
     fails = Object.values(c.stable).reduce((a, [k, n]) => a + n - k, 0);
     total = Object.values(c.stable).reduce((a, [, n]) => a + n, 0);
-    console.log("canary.json has no held-out failure rate (run select again): the rate is taken from the history that chose the tasks, which makes false alarms more likely.");
+    console.log(`canary.json has no held-out failure rate on ${MIN_HELD_OUT} runs or more: the rate is taken from the history that chose the tasks, which makes false alarms more likely.`);
   }
   const p = stable.map(() => (fails + 1) / (total + 2));
   const pValue = atLeast(failed.length, p);

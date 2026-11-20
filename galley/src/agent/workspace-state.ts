@@ -5,8 +5,9 @@
 // Git runs here on the host, outside the sandbox, in a folder the model can write to. So the repository is recorded
 // once, when the agent is made and before any model turn (`recordGit`), and every call names it explicitly: a `.git`
 // the model creates later is never found. Hooks, the file-system monitor, text conversion and external diff are
-// switched off on the command line, and a repository whose own config defines filter or diff drivers, which git
-// would run, is not used at all.
+// switched off on the command line. A repository is not used at all when its git folder is somewhere the sandbox can
+// write (other than the workspace's own .git), when it ignores the workspace, or when its own config sets any key
+// outside a short list of keys known to run and fetch nothing (SAFE_KEYS).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
@@ -106,7 +107,7 @@ const diff = (ws: string, extra: string[] = []) =>
 
 // Folders that hold dependencies, builds and tool caches: a test run rewrites .pytest_cache, which is no change to the
 // work. A folder marked with CACHEDIR.TAG (cargo, pytest and others write one) is skipped too.
-const SKIP = new Set([".git", "node_modules", "dist", "build", "target", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
+const SKIP = new Set([".git", "node_modules", "dist", "build", "target", "obj", "_build", "dist-newstyle", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
 const MAX_FILES = 5000;
 
 /** A fingerprint of the workspace's files: it changes when a file is added, removed or changed. Undefined when it
@@ -140,14 +141,25 @@ export function fingerprint(ws: string): string | undefined {
           const s = statSync(join(status.top, entry.slice(3)));
           h.update(`${entry}:${s.size}:${s.mtimeMs}`);
         } catch {}
-    // Ignored files are in neither: their size and time too, outside dependency and cache folders. Too many of them,
-    // and the fingerprint cannot be taken cheaply.
+    // Ignored files are in neither: their size and time too, outside dependency and cache folders. Past MAX_FILES of
+    // them the rest are left out: a change there is missed, but a command that changes nothing does not count as a
+    // change, which would run the check after every command.
     const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "-z", "--", "."]);
     if (!ignored) return undefined;
     let n = 0;
+    const tagged = new Map<string, boolean>();
+    const inCache = (f: string) => {
+      const parts = f.split("/").slice(0, -1);
+      for (let i = 1; i <= parts.length; i++) {
+        const d = parts.slice(0, i).join("/");
+        if (!tagged.has(d)) tagged.set(d, existsSync(join(ws, d, "CACHEDIR.TAG")));
+        if (tagged.get(d)) return true;
+      }
+      return false;
+    };
     for (const f of ignored.stdout.split("\0")) {
-      if (!f || f.split("/").some((part) => SKIP.has(part))) continue;
-      if (++n > MAX_FILES) return undefined;
+      if (!f || f.split("/").some((part) => SKIP.has(part)) || inCache(f)) continue;
+      if (++n > MAX_FILES) break;
       try {
         const st = lstatSync(join(ws, f));
         h.update(`!! ${f}:${st.size}:${st.mtimeMs}`);
@@ -168,6 +180,7 @@ export function fingerprint(ws: string): string | undefined {
       if (e.isDirectory()) {
         if (!SKIP.has(e.name) && !existsSync(join(p, "CACHEDIR.TAG")) && !walk(p)) return false;
       } else if (e.isFile()) {
+        // Past MAX_FILES the rest are left out, as above.
         if (++files > MAX_FILES) return false;
         try {
           const s = lstatSync(p);
@@ -177,7 +190,8 @@ export function fingerprint(ws: string): string | undefined {
     }
     return true;
   };
-  return walk(ws) ? h.digest("hex") : undefined;
+  walk(ws);
+  return h.digest("hex");
 }
 
 /** What git says has changed in the workspace, clipped: for a model that takes over and cannot see the attempt.

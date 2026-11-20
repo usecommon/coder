@@ -46,8 +46,12 @@ export class Session {
   costUsd = 0;
   title?: string;
   status?: string;
-  /** The status the session had when it was loaded: "done" means the run before finished cleanly. */
+  /** How the last turn ended ("end_turn", "other" for a cut-off one, ...), with the status. */
+  statusDetail?: string;
+  /** The status and its detail when the session was loaded: "done" and "end_turn" mean the turn before finished
+   *  cleanly, and its check ran. */
   loadedStatus?: string;
+  loadedDetail?: string;
 
   private constructor(
     readonly id: string,
@@ -79,6 +83,7 @@ export class Session {
     const s = new Session(meta.id, file, meta);
     s.replay(records);
     s.loadedStatus = s.status;
+    s.loadedDetail = s.statusDetail;
     return s;
   }
 
@@ -111,7 +116,10 @@ export class Session {
       } else if (r.type === "compaction") this.messages = [summaryMessage(r.summary), ...this.messages.slice(this.messages.length - r.keep)];
       else if (r.type === "compaction-range") this.messages = [...this.messages.slice(0, r.start), summaryMessage(r.summary), ...this.messages.slice(r.end)];
       else if (r.type === "meta" && r.title) this.title = r.title;
-      else if (r.type === "status") this.status = r.status;
+      else if (r.type === "status") {
+        this.status = r.status;
+        this.statusDetail = r.detail;
+      }
     }
   }
 
@@ -185,6 +193,7 @@ export class Session {
 
   setStatus(status: "running" | "done" | "error", detail?: string) {
     this.status = status;
+    this.statusDetail = detail;
     this.write({ type: "status", status, detail, at: new Date().toISOString() });
   }
 }

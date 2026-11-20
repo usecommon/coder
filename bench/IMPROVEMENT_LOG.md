@@ -741,7 +741,7 @@ Fresh agents, same lenses; the round was cut off by a usage limit and resumed. 1
 |---|---|---|
 | **`/undo` through a folder link.** The sixth round guarded the file itself, not the folders above it. A model that turned a folder into a link to `$HOME` after an edit had `/undo`, on the host, delete and rewrite a file there (`.bashrc`, say). Reproduced | medium | Each snapshot records the real path of its folder; undo leaves a file alone when the path no longer leads there |
 | `/undo` recreated every file, so an executable script came back without its execute bit | medium | A regular file with one name is written in place, and its mode is restored in any case; a folder deleted since is made again |
-| **The canary over-alarmed.** Its pooled rate came from the history that chose the tasks for being good, 1 in 122. Left out of the choice one round at a time, such tasks failed 4 of 120 runs. With the old rate any 2 failures in 24 raised REGRESSION, and one held-out round of an unchanged Galley did | medium | `select` now measures the failure rate on rounds left out of the choice and stores it; `check` uses it. Now 4 failures of 24 are needed (about 5% by chance). A test round named `fake1` was left out of the history, which changed one stable task |
+| **The canary over-alarmed.** Its pooled rate came from the history that chose the tasks for being good, 1 in 122. Left out of the choice one round at a time, such tasks failed 4 of 120 runs. With the old rate any 2 failures in 24 raised REGRESSION, and one held-out round of an unchanged Galley did | medium | `select` now measures the failure rate on rounds left out of the choice and stores it; `check` uses it. Now 4 failures of 24 are needed (an unchanged Galley gets there about 1.6% of the time; 3 failures, at 7%, are not enough). A test round named `fake1` was left out of the history, which changed one stable task |
 | Every OpenCode run on Anthropic was taken to be on Claude Haiku 5.5, the model of its title request, which answers first. OpenCode rounds on Sonnet and on Opus looked alike to the miner | medium | A run's model is the one that wrote the most output |
 | After a round, `profiles.ts --write` replaced a row from 19 rounds with one from whatever rounds were on disk | medium | A row is replaced only by one resting on as many task-runs, or with `--replace` |
 | Rounds were deduplicated by resolved path, not real path; the log said real path. A link to a round counted it twice | medium | Real path |
@@ -755,3 +755,27 @@ Also fixed from the unverified ones: a workspace inside a repository's `build/` 
 Each fix was taken out in turn and its test run: ten of eleven tests failed without their fix. The eleventh, writing a file in place, is covered twice: without it the mode is still restored afterwards. Measured profiles: DeepSeek V4.1 Flash at high effort is 61.1% of 2,717 runs, not 61.0% of 2,718 (the test round). Tests: 206 pass.
 
 **Seven rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18. Confirmed of those checked: 14, 14, 14, 12, 14, 14, 14. Two of this round's confirmed findings were caused by the previous round's fixes, and both were found by the next round. That is the case for running the rounds, and for not stopping at a round that only fixed things.
+
+## Eighth council review (20 November)
+
+Fresh agents, same lenses. 19 findings, 15 distinct; all 14 checked by an agent told to refute them held. Four came from the seventh round's own fixes.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **The canary's new held-out rate could be empty.** With thin history no task qualifies when a round is left out, and `select` stored 0 of 0. `check` read that as a rate of one half per task, so 14 failures of 24 always-passing tasks were "no regression" | high | A held-out count under 20 runs is not used: `check` falls back to the tasks' own history and says it leans towards false alarms; `select` warns when it writes one |
+| A resumed session skipped its check when the run before had stopped on Ctrl-C or the step limit, because `galley run` writes "done" for those too | medium | Only a turn that ended cleanly (`end_turn`) counts as checked |
+| Only `galley run` wrote a status, so every resumed REPL or server session ran the check, and a failing one drew the model into fixes nobody asked for | medium | The agent writes how each turn started and ended, whatever the front end |
+| After a failed check, a fix to a file already changed in the turn did not run the check again when the file was in a folder the fingerprint skips (`build/`), since only a file's first change was counted | medium | Every write to a workspace file counts |
+| A workspace with more than 5,000 files outside known dependency folders could not be fingerprinted, so any command, even `ls`, ran the check again | medium | Past 5,000 files the rest are left out of the fingerprint (a change there is missed). `obj`, `_build` and `dist-newstyle` are skipped as build output, and a folder marked with `CACHEDIR.TAG` is skipped inside a repository too |
+| The `bash` path repair took a folder that is a link out of the workspace (`link -> /etc`) as inside it | low | Compared on real paths |
+| In old sessions, the miner counted the "interrupted" results that a second attempt adds as the first attempt's last step | low | Left out |
+| The miner took the round whose results were written last as the previous one, so a resumed older round came after a newer one | low | Rounds are ordered by when their first task-run started |
+| Two processes could both take over a stale lesson lock, the second removing the first's fresh lock | low | After renaming, the lock is removed only if it is the one found stale; otherwise it is put back |
+| Three tests could not fail: one for the edit repair's key check, one for the `CACHEDIR.TAG` rule, one for not entering submodules (another protection covered it) | low | Each now tests its own protection |
+| The log put the canary's false-alarm chance at 5%; it is 1.6%. The header of `workspace-state.ts` described the old list of dangerous git settings | low | Corrected |
+
+Also fixed from the unverified one: the edit repair gives up before reading when git's list of files is already longer than its budget.
+
+Each fix was taken out in turn and its test run: all ten tests failed without their fix. Signal replay and calibration unchanged (5,904 first attempts). Tests: 213 pass.
+
+**Eight rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19. Confirmed of those checked: 14 in every round but the fourth (12). Four of this round's confirmed findings came from the seventh round's fixes, against two the round before: the count has stopped falling, and more of it is now in code written in response to the review itself. Most of those were in when the check re-runs, which has been changed in four of the last five rounds.

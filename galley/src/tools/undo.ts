@@ -37,6 +37,8 @@ function realDir(path: string): string | undefined {
 export class UndoLog {
   private turns: Snapshot[][] = [];
   private current: Snapshot[] | undefined;
+  /** Every call to record, including those for a file already recorded: how many writes to workspace files. */
+  writes = 0;
 
   beginTurn(): void {
     this.current = [];
@@ -45,6 +47,7 @@ export class UndoLog {
 
   /** Call before modifying `path`; only the first snapshot per turn is kept. */
   record(path: string): void {
+    this.writes++;
     if (!this.current) this.beginTurn();
     if (this.current!.some((s) => s.path === path)) return;
     // Content is read only from a regular file: a link is remembered as a link, never followed.

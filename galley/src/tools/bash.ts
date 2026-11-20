@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { exec } from "../safety/sandbox.ts";
 import { projectDir } from "../session/store.ts";
@@ -37,6 +37,9 @@ export const bashTool: Tool = {
       const dir = typeof path === "string" ? resolve(ctx.workspace, path) : "";
       const rel = dir ? relative(ctx.workspace, dir) : "..";
       if (typeof command !== "string" || rel.startsWith("..") || isAbsolute(rel) || !existsSync(dir) || !statSync(dir).isDirectory()) return undefined;
+      // Through links too: a folder that is a link to /etc is not a folder of the workspace.
+      const really = relative(realpathSync(ctx.workspace), realpathSync(dir));
+      if (really.startsWith("..") || isAbsolute(really)) return undefined;
       if (rel) {
         // "./" keeps CDPATH out of it, and "--" a folder whose name starts with a dash.
         // On a line of its own, so that a background "&" later in the command does not leave the folder behind.

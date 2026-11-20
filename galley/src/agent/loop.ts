@@ -78,7 +78,7 @@ const usd = (n: number) => `$${n.toFixed(n >= 0.01 ? 2 : 4)}`;
 const maxConsults = (adv: AdvisorConfig) => adv.maxUses ?? (adv.every ? 8 : 3);
 
 /** The result recorded for a tool call that a cut-off session left without one. */
-const INTERRUPTED = "This call did not finish: the session was interrupted while it ran. Whether it took effect is not known, so check before relying on it.";
+export const INTERRUPTED = "This call did not finish: the session was interrupted while it ran. Whether it took effect is not known, so check before relying on it.";
 
 export class Agent {
   readonly gate: PermissionGate;
@@ -187,7 +187,11 @@ export class Agent {
     splitModel(ref);
     this.endView();
     this.undo.beginTurn();
-    if (!this.o.subagent) this.turns++;
+    if (!this.o.subagent) {
+      this.turns++;
+      // Written by every front end (run, the REPL, the server), so that a resumed session knows how the last turn ended.
+      this.session.setStatus("running");
+    }
     this.consults = 0;
     this.consultUsage = emptyUsage();
     this.consultCost = 0;
@@ -223,9 +227,9 @@ export class Agent {
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
     if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) {
       this.checkedPrint = fingerprint(this.workspace) ?? "";
-      // A session resumed after a run that was cut off may hold edits that were never checked: check once. One whose
-      // run finished cleanly was checked then.
-      if (turnStart > 0 && this.session.loadedStatus !== "done") this.unchecked = true;
+      // A session resumed after a turn that was cut off (killed, stopped, out of steps) may hold edits that were
+      // never checked: check once. One whose last turn finished cleanly was checked then.
+      if (turnStart > 0 && !(this.session.loadedStatus === "done" && this.session.loadedDetail === "end_turn")) this.unchecked = true;
     }
     let checkFails = 0;
     let checkReport: string | undefined;
@@ -343,7 +347,7 @@ export class Agent {
         }
         break;
       }
-      this.undoBefore = this.undo.changedThisTurn();
+      this.undoBefore = this.undo.writes;
       const results =
         res.stopReason === "max_tokens"
           ? res.toolCalls.map<ToolResult>((c) => ({ callId: c.id, name: c.name, isError: true, content: "Your output was cut off at the token limit, so this call was not run. Retry with a smaller change." }))
@@ -353,9 +357,9 @@ export class Agent {
         // A command, or a tool from an MCP server: whether it changed a file is measured, not assumed.
         if (c.name === "bash" || c.name.startsWith("mcp_")) this.ranCommands = true;
         else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly && results.some((r) => r.callId === c.id && !r.isError)) {
-          // A file newly changed this turn is known to be a change; a write to the scratch folder, or a file changed
-          // again, is measured instead.
-          if (this.undo.changedThisTurn() > this.undoBefore) this.unchecked = true;
+          // A write to a workspace file is known to be a change (the file tools record each one); a write to the
+          // scratch folder is not recorded, and is measured instead.
+          if (this.undo.writes > this.undoBefore) this.unchecked = true;
           else this.ranCommands = true;
         }
       }
@@ -449,6 +453,7 @@ export class Agent {
     turnUsage = addUsage(turnUsage, this.consultUsage);
     turnCost += this.consultCost;
     this.emit({ type: "turn_end", usage: turnUsage, costUsd: turnCost, stopReason });
+    if (!this.o.subagent) this.session.setStatus(stopReason === "error" ? "error" : "done", stopReason);
     return { text: finalText, stopReason, usage: turnUsage, costUsd: turnCost };
   }
 

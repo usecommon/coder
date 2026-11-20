@@ -48,10 +48,15 @@ function locked<T>(lock: string, fn: () => T): T {
       try {
         // Taken over by a rename, which only one process can win; the loser finds no lock to rename and waits.
         // Writing a lesson takes milliseconds: a lock two seconds old was left by a process that died.
-        if (Date.now() - statSync(lock).mtimeMs > 2_000) {
+        const st = statSync(lock);
+        if (Date.now() - st.mtimeMs > 2_000) {
           const stale = `${lock}.${process.pid}.stale`;
           renameSync(lock, stale);
-          unlinkSync(stale);
+          // Another process may have taken the stale lock over and made a fresh one between the look and the rename:
+          // then the fresh one is put back.
+          const got = statSync(stale);
+          if (got.ino === st.ino) unlinkSync(stale);
+          else renameSync(stale, lock);
         }
       } catch {}
       if (i > 500) throw new Error(`could not lock ${lock}`);

@@ -3,6 +3,7 @@
 // model profiles (profiles.ts), the canary (canary.ts) and the calibration report (calibrate.ts). Read-only.
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import { INTERRUPTED } from "../galley/src/agent/loop.ts";
 import type { Message } from "../galley/src/core/types.ts";
 
 export interface Result {
@@ -132,7 +133,13 @@ export function firstAttempt(recs: SessionRecord[] | undefined): Message[] {
   }
   let users = 0;
   for (const m of messagesOf(all)) {
-    if (m.role === "user" && !(typeof m.content === "string" && users > 0 && INJECTED.some((re) => re.test(m.content))) && ++users > 1) break;
+    if (m.role === "user" && !(typeof m.content === "string" && users > 0 && INJECTED.some((re) => re.test(m.content))) && ++users > 1) {
+      // The second attempt first closes the tool calls the first left open (all "interrupted"): that is not part of
+      // the first attempt.
+      const last = out.at(-1);
+      if (last?.role === "tool" && last.results.length && last.results.every((t) => t.isError && t.content === INTERRUPTED)) out.pop();
+      break;
+    }
     out.push(m);
   }
   return out;

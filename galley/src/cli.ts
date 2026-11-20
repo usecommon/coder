@@ -178,11 +178,9 @@ async function main() {
       render(e);
     };
     const agent = new Agent({ cfg, workspace, session, approver, onEvent, extraTools: tools, mode: flags.plan ? "plan" : "build", model: modelFor(flags, cfg, session) });
-    session.setStatus("running");
     const ctrl = new AbortController();
     process.on("SIGINT", () => ctrl.abort());
     const r = cfg.steps ? await runSteps(agent, task, ctrl.signal) : await agent.send(task, ctrl.signal);
-    session.setStatus(r.stopReason === "error" ? "error" : "done", r.stopReason);
     if (!json && stdoutMid) process.stdout.write("\n");
     clients.forEach((m) => m.close());
     if (worktree) console.error(c.dim(`changes are in ${worktree} (branch galley/${session.id}); review, commit there, then merge`));
