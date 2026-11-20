@@ -233,8 +233,10 @@ export class Agent {
       // a check (none configured then, plan mode, a declined one), and edits may follow the last check.
       const last = this.session.lastCheck;
       const asChecked = last?.command === cfg.check && last.print !== undefined && now !== undefined && last.print === now;
-      const wrote = [...this.session.toolsUsed].some((n) => !this.tools.find((t) => t.spec.name === n)?.readOnly);
-      if (turnStart > 0 && !asChecked && wrote) this.unchecked = true;
+      const writes = (names: Set<string>, files = false) =>
+        [...names].some((n) => !(files && (n === "bash" || n.startsWith("mcp_"))) && !this.tools.find((t) => t.spec.name === n)?.readOnly);
+      // A file tool's write since that check is a change even where the fingerprint does not look (build folders).
+      if (turnStart > 0 && writes(this.session.toolsUsed) && (!asChecked || writes(this.session.toolsSinceCheck, true))) this.unchecked = true;
     }
     let checkFails = 0;
     let checkReport: string | undefined;
@@ -310,6 +312,10 @@ export class Agent {
               const passed = r.exitCode === 0 && !r.timedOut;
               this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1, turn: this.turns, print: this.checkedPrint || undefined });
               if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
+              if (signal?.aborted) {
+                stopReason = "other";
+                break;
+              }
               if (passed) {
                 this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
                 // A failure is learnt from once. The count of failures goes on: checkRounds is per turn.
@@ -332,13 +338,14 @@ export class Agent {
             }
           }
           // Self-review: once per turn, if files changed, ask the model to check its work against the request.
-          if (cfg.review && !reviewed && this.undo.changedThisTurn() > 0) {
+          // No review when no step is left to act on it, or after an abort: it would be a message nobody answers.
+          if (cfg.review && !reviewed && step < maxSteps - 1 && !signal?.aborted && this.undo.changedThisTurn() > 0) {
             reviewed = true;
             this.session.addMessage({ role: "user", content: REVIEW_PROMPT });
             continue;
           }
           // The advisor's review: once per turn, a second model checks the change against the request.
-          else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && this.undo.changedThisTurn() > 0 && this.consults < maxConsults(cfg.advisor) && !signal?.aborted) {
+          else if (cfg.advisor?.review && !advisorReviewed && !this.o.subagent && step < maxSteps - 1 && this.undo.changedThisTurn() > 0 && this.consults < maxConsults(cfg.advisor) && !signal?.aborted) {
             advisorReviewed = true;
             const scoped = o.review?.scope === "turn";
             const diff = changes(this.workspace, this.undo.snapshots());

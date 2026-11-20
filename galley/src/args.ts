@@ -8,7 +8,7 @@ export interface Args {
 
 const SHORT: Record<string, string> = { m: "model", s: "session", y: "yes", h: "help" };
 const VALUED = new Set(["model", "session", "session-id", "cwd", "port", "hostname", "advisor", "reviewer", "observe", "escalate", "effort", "check"]);
-const COMMANDS = new Set(["run", "serve", "sessions", "show", "init", "doctor", "models", "help"]);
+const COMMANDS = new Set(["run", "serve", "sessions", "show", "init", "doctor", "models", "trust", "help"]);
 
 /** Options start with a dash and hold no whitespace: a task that begins with dashes (pasted test output, a list)
  *  is a task. A bare `--` ends the options, as usual. */

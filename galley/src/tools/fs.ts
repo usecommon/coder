@@ -268,6 +268,7 @@ const loose = (s: string) => s.split("\n").map((l) => l.trimEnd()).join("\n");
  *  and an ignored file or folder must be searchable too; elsewhere a walk of every folder. Matching ignores trailing
  *  spaces, as edit does. */
 function filesContaining(root: string, text: string, mayRead: (p: string) => boolean = () => true, exact = false): string[] | undefined {
+  const seen = new Set<string>();
   const MAX_FILES = 5000;
   const MAX_BYTES = 50 * 1024 * 1024;
   const want = loose(text);
@@ -276,6 +277,9 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
   let bytes = 0;
   const hits: string[] = [];
   const check = (p: string): boolean => {
+    // A path git lists twice (a folder and a file in it) is looked at once.
+    if (seen.has(p)) return true;
+    seen.add(p);
     if (++files > MAX_FILES) return false;
     try {
       const st = lstatSync(p);
@@ -290,12 +294,14 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
       if (!mayRead(p)) return false;
       bytes += st.size;
       if (bytes > MAX_BYTES) return false;
-      // A binary or non-UTF-8 file is no match: an edit would write it back mangled.
       const buf = readFileSync(p);
       const body = buf.toString("utf8");
-      if (isBinary(buf) || !Buffer.from(body, "utf8").equals(buf)) return true;
       // As edit compares: loosely, except with replace_all, which matches exactly.
-      if (body.includes(text) || (!exact && loose(body).includes(want))) hits.push(p);
+      const hit = body.includes(text) || (!exact && loose(body).includes(want));
+      // A binary or non-UTF-8 file that holds the text cannot be edited, but it is a second place the text is: the
+      // answer is uncertain, not "the other file".
+      if (isBinary(buf) || !Buffer.from(body, "utf8").equals(buf)) return !hit;
+      if (hit) hits.push(p);
       return true;
     } catch {
       return false;

@@ -798,3 +798,29 @@ Fresh agents, same lenses, told this time to look hardest at the fixes of the la
 Each fix was taken out in turn and its test run: eight of nine tests failed without their fix. The ninth, the once-per-session guard, is now redundant: after the first check the files match its record, so a second turn is not checked again anyway. Signal replay and calibration unchanged (5,904 first attempts); canary selection unchanged. Tests: 217 pass.
 
 **Nine rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15; distinct 11, the fewest yet. The resume rule had been patched in rounds 5, 7 and 8 by how the last turn ended, and each patch missed a case; this round it was rebuilt on what the files are, which no front end or stop reason can get wrong.
+
+## Tenth council review (20 November)
+
+Fresh agents, same lenses; cut off by a usage limit and resumed. 22 findings, 20 distinct; all 14 checked held. Both high ones are old security holes in code no earlier round had looked at closely; most of the rest are in `/undo` and the resume rule, changed in the last four rounds.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **A `galley.json` in the workspace was trusted.** The model can write it from the sandbox, and the next run took from it MCP servers (started on the host, with Galley's environment and its API keys), provider addresses (where the keys are sent), `sandbox: "off"`, permission rules and the check command. Reproduced: no prompt, key leaked | high | From a workspace's `galley.json` only harmless settings are used until the user runs `galley trust`, which records the file's digest; any later change needs trusting again. Galley names the settings it left out. The user-wide config is unaffected, and so is the benchmark, which configures Galley there |
+| **A write through a dangling link landed outside the workspace.** A link to a file that does not yet exist passed the path check, and the host-side write created its target (an autostart entry, say) | high | A path whose missing part is a link is refused |
+| The edit repair treated a non-UTF-8 file holding the text as no match, so an edit meant for a Latin-1 file went to the other one (the ninth round's fix) | medium | Such a file makes the answer uncertain: no repair |
+| A `write` aimed at a folder left an undo snapshot, and `/undo` then failed and left the turn's changes in place | medium | No snapshot of a folder |
+| `/undo` read snapshots as text and wrote a binary file back mangled | medium | Snapshots are bytes |
+| `/undo` no longer restored a file the project had hard-linked (the seventh round's guard) | medium | Written in place when it is the same file (device and inode) as before the turn; anything else at the path is replaced |
+| On resume, a file-tool write after the last check went unseen in a folder the fingerprint skips | medium | The session records which tools ran since the last check; a file-tool write among them means a check |
+| On Windows every changed file was "outside the workspace", so reviews, lessons and takeovers saw no diff | medium | Compared with `relative()`, as the path checks are |
+| `--worktree` ran plain git on the host in a workspace where the model may have made a repository with hooks | medium | Hardened like every other git call, and refused when the repository's config is not known to be safe |
+| Over several rounds, the verdict's sign test and cost interval counted runs of one task as independent | medium | Both count tasks. One round, as in every verdict so far, gives the same result |
+| Round folders reached through a link were judged under the link's name, which every name-based filter then missed (the seventh round's fix) | medium | Judged under the real path |
+| A review was asked for on the last step, or after an abort, and never answered | low | Not asked |
+| A path git lists twice (a folder and a file in it) counted as two matches in the edit repair | low | Each path looked at once |
+
+Also fixed from the unverified ones: a session file cut off in its last line loads; a test that asserted the old resume rule is renamed for what it now checks; edit's binary refusal is tested on a file that is valid UTF-8 apart from NUL bytes. Not fixed: the profiles' Wilson interval treats repeated runs of a task as independent, so it is too narrow; the edit repair without git reads up to its limit before giving up; listing ignored files lists a large dependency tree in full before skipping it.
+
+Each fix was taken out in turn and its test run: all eleven tests failed without their fix. Verdict on the fourth confirmation unchanged. Tests: 228 pass.
+
+**Ten rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22. The rise this round came from reviewers reaching code the earlier rounds had not: the config loader and the path check, both older than this work, held the two worst holes found since the git ones.

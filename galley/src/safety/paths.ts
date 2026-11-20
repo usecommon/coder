@@ -1,5 +1,5 @@
 // Keep model-supplied paths inside the workspace, and keep writes out of .git.
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 export class PathError extends Error {}
@@ -11,6 +11,8 @@ function realish(p: string): string {
   let cur = p;
   const tail: string[] = [];
   while (!existsSync(cur)) {
+    // A link whose target does not exist: writing to it would create the target, wherever that is.
+    if (lstatSync(cur, { throwIfNoEntry: false })?.isSymbolicLink()) throw new PathError(`${p} is a link to something that does not exist`);
     const parent = dirname(cur);
     if (parent === cur) return p;
     tail.unshift(cur.slice(parent.length + (parent.endsWith(sep) ? 0 : 1)));
@@ -19,7 +21,7 @@ function realish(p: string): string {
   return resolve(realpathSync(cur), ...tail);
 }
 
-const inside = (root: string, p: string) => {
+export const inside = (root: string, p: string) => {
   const rel = relative(root, p);
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 };

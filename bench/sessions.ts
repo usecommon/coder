@@ -69,8 +69,9 @@ export function roundDirs(args: string[]): string[] {
     if (existsSync(join(d, "results.jsonl"))) out.push(d);
     else for (const sub of statSync(d, { throwIfNoEntry: false })?.isDirectory() ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
   }
-  // A round given twice (or once itself and once through its parent folder, or through a link) is judged once.
-  return [...new Map(out.map((d) => [realpathSync(d), d])).values()].sort();
+  // A round given twice (or once itself and once through its parent folder, or through a link) is judged once, under
+  // its real path, so that its own name is the one every filter sees.
+  return [...new Set(out.map((d) => realpathSync(d)))].sort();
 }
 
 export const results = (round: string): Result[] => jsonl(join(round, "results.jsonl")).filter((r) => typeof r.pass === "boolean");

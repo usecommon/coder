@@ -50,8 +50,9 @@ export class Session {
   statusDetail?: string;
   /** The last check run in this session: its command and a fingerprint of the files just after it. */
   lastCheck?: { command: string; print?: string };
-  /** Every tool the session has called, including in parts since compacted. */
+  /** Every tool the session has called, including in parts since compacted; and those called since the last check. */
   readonly toolsUsed = new Set<string>();
+  readonly toolsSinceCheck = new Set<string>();
 
   private constructor(
     readonly id: string,
@@ -77,7 +78,15 @@ export class Session {
     const records = readFileSync(file, "utf8")
       .split("\n")
       .filter(Boolean)
-      .map((l) => JSON.parse(l) as SessionRecord);
+      // A line cut off when the process was killed mid-write is dropped (only the last can be).
+      .flatMap((l, i, all) => {
+        try {
+          return [JSON.parse(l) as SessionRecord];
+        } catch (err) {
+          if (i === all.length - 1) return [];
+          throw err;
+        }
+      });
     const meta = records[0];
     if (!meta || meta.type !== "meta") throw new Error(`Corrupt session file ${file}`);
     const s = new Session(meta.id, file, meta);
@@ -109,8 +118,15 @@ export class Session {
     for (const r of records) {
       if (r.type === "message") {
         this.messages.push(r.message);
-        if (r.message.role === "assistant") for (const c of r.message.toolCalls) this.toolsUsed.add(c.name);
-      } else if (r.type === "check") this.lastCheck = { command: r.command, print: r.print };
+        if (r.message.role === "assistant")
+          for (const c of r.message.toolCalls) {
+            this.toolsUsed.add(c.name);
+            this.toolsSinceCheck.add(c.name);
+          }
+      } else if (r.type === "check") {
+        this.lastCheck = { command: r.command, print: r.print };
+        this.toolsSinceCheck.clear();
+      }
       else if (r.type === "usage") {
         this.usage = addUsage(this.usage, r.usage);
         this.costUsd += r.costUsd;
@@ -149,7 +165,11 @@ export class Session {
   }
 
   addMessage(m: Message) {
-    if (m.role === "assistant") for (const c of m.toolCalls) this.toolsUsed.add(c.name);
+    if (m.role === "assistant")
+      for (const c of m.toolCalls) {
+        this.toolsUsed.add(c.name);
+        this.toolsSinceCheck.add(c.name);
+      }
     this.messages.push(m);
     this.write({ type: "message", message: m });
   }
@@ -186,6 +206,7 @@ export class Session {
 
   addCheck(c: { command: string; exitCode: number | null; passed: boolean; round: number; turn?: number; print?: string }) {
     this.lastCheck = { command: c.command, print: c.print };
+    this.toolsSinceCheck.clear();
     this.write({ type: "check", ...c, at: new Date().toISOString() });
   }
 

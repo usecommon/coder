@@ -1,6 +1,8 @@
 // Configuration: built-in defaults < ~/.config/galley/config.json < ./galley.json < environment.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
+import { dataDir } from "./session/store.ts";
 import { join } from "node:path";
 import type { ModelProfile } from "./provider/models.ts";
 import type { Price } from "./provider/pricing.ts";
@@ -146,9 +148,48 @@ function readJson(path: string): Partial<Config> {
   }
 }
 
-export function loadConfig(cwd: string, overrides: Partial<Config> = {}): Config {
+/** Keys of a workspace's galley.json that start programs on the host, send API keys elsewhere, loosen the sandbox or
+ *  the rules, or run commands. The model can write that file (the workspace is writable from the sandbox), so these are
+ *  used only from a file the user has trusted, as it is now. */
+export const TRUSTED_ONLY = ["mcp", "providers", "sandbox", "network", "permission", "check", "checkTimeout", "lessons", "escalateContext"] as const;
+
+const trustFile = () => join(dataDir(), "trusted.json");
+const digestOf = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+
+/** Trust the workspace's galley.json as it is now (`galley trust`). A later change, by anyone, needs trusting again. */
+export function trustProjectConfig(cwd: string): string | undefined {
+  const file = join(cwd, "galley.json");
+  if (!existsSync(file)) return undefined;
+  let all: Record<string, string> = {};
+  try {
+    all = JSON.parse(readFileSync(trustFile(), "utf8"));
+  } catch {}
+  all[realpathSync(file)] = digestOf(file);
+  mkdirSync(dataDir(), { recursive: true });
+  writeFileSync(trustFile(), JSON.stringify(all, null, 1) + "\n");
+  return file;
+}
+
+function trusted(file: string): boolean {
+  try {
+    return JSON.parse(readFileSync(trustFile(), "utf8"))[realpathSync(file)] === digestOf(file);
+  } catch {
+    return false;
+  }
+}
+
+/** The configuration: defaults, the user's config, the workspace's galley.json, GALLEY_MODEL, then `overrides`.
+ *  Keys of galley.json that only a trusted file may set are left out, and their names put in `ignored`. */
+export function loadConfig(cwd: string, overrides: Partial<Config> = {}, ignored: string[] = []): Config {
   const user = readJson(join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "galley", "config.json"));
-  const project = readJson(join(cwd, "galley.json"));
+  const projectFile = join(cwd, "galley.json");
+  const project = readJson(projectFile);
+  if (existsSync(projectFile) && !trusted(projectFile))
+    for (const k of TRUSTED_ONLY)
+      if (k in project) {
+        delete (project as Record<string, unknown>)[k];
+        ignored.push(k);
+      }
   const env: Partial<Config> = process.env.GALLEY_MODEL ? { model: process.env.GALLEY_MODEL } : {};
   const layers = [user, project, env, overrides];
   const cfg: Config = structuredClone(DEFAULT_CONFIG);

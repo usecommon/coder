@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
 // galley: a safety-first, model-agnostic coding agent.
+import { addWorktree } from "./agent/workspace-state.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, openSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { Agent } from "./agent/loop.ts";
 import { runSteps } from "./agent/steps.ts";
 import { INIT_PROMPT } from "./agent/prompt.ts";
-import { loadConfig, type Config, type Effort } from "./config.ts";
+import { loadConfig, trustProjectConfig, type Config, type Effort } from "./config.ts";
 import type { AgentEvent } from "./core/types.ts";
 import { McpClient } from "./mcp/client.ts";
 import type { Approver } from "./safety/permission.ts";
@@ -31,6 +32,7 @@ Usage:
   galley show <id>                 replay a session's transcript
   galley init                      write AGENTS.md for this repository
   galley doctor                    check sandbox, config and API keys
+  galley trust                     use this workspace's galley.json in full, as it is now
   galley models                    what is known about each model, and which roles suit the ones you can reach
 
 Options:
@@ -82,12 +84,10 @@ function openSession(workspace: string, cfg: Config, flags: Args["flags"]): Sess
 }
 
 function makeWorktree(workspace: string, sessionHint: string): string {
-  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: workspace, encoding: "utf8" });
-  if (top.status !== 0) throw new Error("--worktree needs a git repository");
   const dir = join(projectDir(workspace), "worktrees", sessionHint);
   mkdirSync(join(projectDir(workspace), "worktrees"), { recursive: true });
-  const r = spawnSync("git", ["worktree", "add", "-b", `galley/${sessionHint}`, dir], { cwd: workspace, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`git worktree add failed: ${r.stderr.trim()}`);
+  const err = addWorktree(workspace, `galley/${sessionHint}`, dir);
+  if (err) throw new Error(err);
   return dir;
 }
 
@@ -99,7 +99,17 @@ async function main() {
   if (typeof flags.model === "string") overrides.model = flags.model;
   if (flags["no-sandbox"]) overrides.sandbox = "off";
   if (flags.verify) overrides.verify = true;
-  const cfg = loadConfig(workspace, overrides);
+  if (cmd === "trust") {
+    const file = trustProjectConfig(workspace);
+    console.log(file ? `Trusted ${file} as it is now. A later change to it needs trusting again.` : `No galley.json in ${workspace}.`);
+    return;
+  }
+  const ignored: string[] = [];
+  const cfg = loadConfig(workspace, overrides, ignored);
+  if (ignored.length)
+    console.error(
+      c.yellow(`galley.json sets ${ignored.join(", ")}, which are not used: the file is not trusted (the model can write it, so it may not be yours). Read it, then run \`galley trust\` to use them.`),
+    );
   // A flag changes one setting of a role and keeps the rest of what the config files say about it.
   if (typeof flags.advisor === "string") cfg.advisor = { ...cfg.advisor, model: flags.advisor };
   // A reviewer is an advisor that checks every finished unit of work. It decides for itself when to speak, so the

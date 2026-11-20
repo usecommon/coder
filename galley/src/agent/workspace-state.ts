@@ -63,7 +63,10 @@ function configIsSafe(gitDir: string): boolean {
     });
 }
 
-const inside = (dir: string, root: string) => dir === root || dir.startsWith(`${root}/`);
+const inside = (dir: string, root: string) => {
+  const rel = relative(root, dir);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+};
 
 /** Record the workspace's repository, if it has one. Call once per workspace, before the model can write to it. The
  *  repository is refused when its git folder is somewhere the sandbox can write (inside the workspace, apart from
@@ -100,6 +103,17 @@ export function git(ws: string, args: string[]) {
 }
 
 export const isGitRepo = (ws: string): boolean => !!recorded.get(ws);
+
+/** Add a worktree of the workspace's repository on a new branch, with git hardened as for every other call: a
+ *  repository the model may have made runs no hook, filter or monitor. Returns an error, or undefined. */
+export function addWorktree(ws: string, branch: string, dir: string): string | undefined {
+  const r = spawnGit(["-C", ws, ...HARDEN, "rev-parse", "--absolute-git-dir"]);
+  if (r.status !== 0) return "--worktree needs a git repository";
+  const gitDir = r.stdout.trim();
+  if (!configIsSafe(gitDir)) return "--worktree: the repository's config sets keys that could run a program, so Galley will not run git on it";
+  const add = spawnGit(["-C", ws, ...HARDEN, `--git-dir=${gitDir}`, "worktree", "add", "-b", branch, dir]);
+  return add.status === 0 ? undefined : `git worktree add failed: ${add.stderr.trim()}`;
+}
 
 /** git diff of the workspace against HEAD (or the index, before the first commit), without running any program. */
 const diff = (ws: string, extra: string[] = []) =>

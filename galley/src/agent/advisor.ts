@@ -1,6 +1,7 @@
 // A second model that reads the session and advises the one doing the work. It runs nothing and its answer is
 // short, so the main model keeps its context and its cached prompt: the advisor is consulted, the session is not
 // handed over (research/model-switching.md, section 4).
+import { inside } from "../safety/paths.ts";
 import { spawnSync } from "node:child_process";
 import { lstatSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -186,7 +187,7 @@ function look(workspace: string, path: string): { kind: "file" } | { kind: "miss
   try {
     const real = realpathSync(path);
     const ws = realpathSync(workspace);
-    if (real !== ws && !real.startsWith(`${ws}/`)) return { kind: "other", what: "outside the workspace, not read" };
+    if (!inside(ws, real)) return { kind: "other", what: "outside the workspace, not read" };
   } catch {
     return { kind: "other", what: "not readable" };
   }

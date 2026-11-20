@@ -102,7 +102,7 @@ function rng(seed: number) {
 export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const metric = rule.metric ?? "pass";
   const passed = (r: { pass: boolean; pass2?: boolean }) => (metric === "pass2" ? (r.pass2 ?? r.pass) : r.pass);
-  type Pair = { round: string; base: boolean; cand: boolean; baseCost: number; candCost: number };
+  type Pair = { round: string; task: string; base: boolean; cand: boolean; baseCost: number; candCost: number };
   const pairs: Pair[] = [];
   let startedAt: number | undefined;
   // A run with no start time makes the start of the rounds unknown, and with it whether the rule came first.
@@ -126,14 +126,18 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
     missingBase += cands.filter((r) => !base.has(r.task)).length;
     for (const c of cands) {
       const b = base.get(c.task);
-      if (b) pairs.push({ round: basename(round), base: passed(b), cand: passed(c), baseCost: cost.get(runKey(b)) ?? NaN, candCost: cost.get(runKey(c)) ?? NaN });
+      if (b) pairs.push({ round: basename(round), task: c.task, base: passed(b), cand: passed(c), baseCost: cost.get(runKey(b)) ?? NaN, candCost: cost.get(runKey(c)) ?? NaN });
     }
   }
   const n = pairs.length;
   const basePassed = pairs.filter((p) => p.base).length;
   const candPassed = pairs.filter((p) => p.cand).length;
-  const onlyCand = pairs.filter((p) => p.cand && !p.base).length;
-  const onlyBase = pairs.filter((p) => p.base && !p.cand).length;
+  // The sign test counts tasks, not task-runs: runs of one task in several rounds are not independent. A task counts
+  // for the side that passed it more often over the rounds (in one round, the side that alone passed it).
+  const byTask = new Map<string, number>();
+  for (const x of pairs) byTask.set(x.task, (byTask.get(x.task) ?? 0) + Number(x.cand) - Number(x.base));
+  const onlyCand = [...byTask.values()].filter((d) => d > 0).length;
+  const onlyBase = [...byTask.values()].filter((d) => d < 0).length;
   const lead = n ? (100 * (candPassed - basePassed)) / n : 0;
   const p = signTest(onlyCand, onlyCand + onlyBase);
   // Cost is compared over the pairs whose cost is known on both sides: a model with no price, or a run with no
@@ -144,15 +148,24 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const baseCost = sum(priced, "baseCost");
   const candCost = sum(priced, "candCost");
   const ratio = baseCost ? candCost / baseCost : NaN;
-  // A 95% interval for the cost ratio: resample task-runs with replacement, 2,000 times.
+  // A 95% interval for the cost ratio: resample tasks (each with its runs in every round) with replacement, 2,000
+  // times.
+  const perTask = new Map<string, { baseCost: number; candCost: number }>();
+  for (const x of priced) {
+    const t = perTask.get(x.task) ?? { baseCost: 0, candCost: 0 };
+    t.baseCost += x.baseCost;
+    t.candCost += x.candCost;
+    perTask.set(x.task, t);
+  }
+  const units = [...perTask.values()];
   const draws: number[] = [];
   const rand = rng(12345);
-  const np = priced.length;
+  const np = units.length;
   for (let i = 0; i < 2000 && np; i++) {
     let bc = 0;
     let cc = 0;
     for (let j = 0; j < np; j++) {
-      const x = priced[Math.floor(rand() * np)]!;
+      const x = units[Math.floor(rand() * np)]!;
       bc += x.baseCost;
       cc += x.candCost;
     }
@@ -170,7 +183,7 @@ export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const conditions: Condition[] = [];
   const d = rule.decide;
   if (d.minLeadPoints !== undefined) conditions.push({ what: d.minLeadPoints >= 0 ? `${rule.candidate} at least ${d.minLeadPoints} points ahead of ${rule.baseline}` : `${rule.candidate} at most ${-d.minLeadPoints} points behind ${rule.baseline}`, met: n > 0 && lead >= d.minLeadPoints, detail: `${lead >= 0 ? "+" : ""}${lead.toFixed(1)} points` });
-  if (d.maxP !== undefined) conditions.push({ what: `the difference is significant (sign test p < ${d.maxP}) and in the candidate's favour`, met: p < d.maxP && onlyCand > onlyBase, detail: `p = ${p.toFixed(3)}; ${onlyCand} task-runs only the candidate passed, ${onlyBase} only the baseline` });
+  if (d.maxP !== undefined) conditions.push({ what: `the difference is significant (sign test p < ${d.maxP}) and in the candidate's favour`, met: p < d.maxP && onlyCand > onlyBase, detail: `p = ${p.toFixed(3)}; ${onlyCand} tasks went to the candidate, ${onlyBase} to the baseline` });
   const unknownCost = unpriced ? `; cost unknown for ${unpriced} of ${pairs.length} pairs (a model with no price, or no request on record)` : "";
   if (d.cost === "lower") conditions.push({ what: "it costs less", met: !unpriced && ratio < 1, detail: `${((ratio - 1) * 100).toFixed(0)}% (${pct(candCost, baseCost, 0)} of the baseline's cost)${unknownCost}` });
   else if (d.cost === "lowerSure") conditions.push({ what: "it costs less, with the whole 95% interval below", met: !unpriced && interval[1] < 1, detail: `ratio ${ratio.toFixed(2)}, interval ${interval[0].toFixed(2)} to ${interval[1].toFixed(2)}${unknownCost}` });
@@ -236,7 +249,7 @@ export function render(v: Verdict): string {
   out.push(`| ${v.rule.baseline} (baseline) | ${v.baselinePassed} (${pct(v.baselinePassed, v.pairs)}) | ${money(v.baselineCost)} |`);
   out.push(`| ${v.rule.candidate} (candidate) | ${v.candidatePassed} (${pct(v.candidatePassed, v.pairs)}) | ${money(v.candidateCost)} |`);
   if (v.unpriced) out.push("", `Cost is over the ${v.pairs - v.unpriced} pairs priced on both sides; ${v.unpriced} could not be priced.`);
-  out.push("", `Cost ratio ${v.costRatio.toFixed(2)} (95% interval ${v.costInterval[0].toFixed(2)} to ${v.costInterval[1].toFixed(2)}, by resampling task-runs).`, "");
+  out.push("", `Cost ratio ${v.costRatio.toFixed(2)} (95% interval ${v.costInterval[0].toFixed(2)} to ${v.costInterval[1].toFixed(2)}, by resampling tasks).`, "");
   if (v.perRound.length > 1) {
     out.push("| Round | Pairs | Lead, points | Cost ratio |", "|---|---|---|---|");
     for (const r of v.perRound) out.push(`| ${r.round} | ${r.pairs} | ${r.lead >= 0 ? "+" : ""}${r.lead.toFixed(1)} | ${r.costRatio.toFixed(2)} |`);
