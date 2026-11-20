@@ -240,7 +240,7 @@ export function render(m: Mined, prev: Mined | undefined, signals: string[]): st
   section("Harness failures", m.harnessErrors, prev && seen(prev.harnessErrors), "Sessions that ended in an error.");
   out.push("", "## Where Galley's money went", "");
   const total = m.phases.main + m.phases.otherModels + m.phases.helpers;
-  out.push(`Over ${m.phases.runs} sessions, by Galley's own pricing: main model ${pct(m.phases.main, total)}, helpers ${pct(m.phases.helpers, total)}, other models (advisor, takeover, fallback) ${pct(m.phases.otherModels, total)}; $${total.toFixed(2)} in all.`);
+  out.push(`Over ${m.phases.runs} sessions, by Galley's own pricing: main model ${pct(m.phases.main, total)}, helpers ${pct(m.phases.helpers, total)}, other models (advisor, takeover, fallback, and the small or plan model: compaction, lessons, plan turns) ${pct(m.phases.otherModels, total)}; $${total.toFixed(2)} in all.`);
   out.push("", `Steps per first attempt: median ${m.steps.medianPass} when it passed, ${m.steps.medianFail} when it failed; ${m.steps.atLimit} ran into the step limit.`);
   if (m.checks.runs) out.push("", `The check command ran in ${m.checks.runs} sessions: it failed at least once in ${m.checks.failed}, and passed in the end after failing in ${m.checks.passedAfterFailing}.`);
   out.push("", "## Trouble signals", "", "Replayed over the first attempts (`bench/signals.ts`):", "", ...signals);

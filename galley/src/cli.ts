@@ -101,7 +101,7 @@ async function main() {
   if (flags.verify) overrides.verify = true;
   if (cmd === "trust") {
     const file = trustProjectConfig(workspace);
-    console.log(file ? `Trusted ${file} as it is now. A later change to it needs trusting again.` : `No galley.json in ${workspace}.`);
+    console.log(file ? `Trusted ${file} as it is now. A later change to it needs trusting again.` : `No galley.json in ${workspace} (a link to one elsewhere is not trusted).`);
     return;
   }
   const ignored: string[] = [];

@@ -13,7 +13,8 @@
 //     "rounds": ["low-1", "low-2"],                         // the rounds it will be judged on, named in advance
 //     "decide": {
 //       "minLeadPoints": -2,        // candidate minus baseline, pooled over the rounds, in points
-//       "maxP": 0.05,               // optional: the sign test over task-runs where they differ must be below this
+//       "maxP": 0.05,               // optional: the sign test over tasks must be below this (a task counts for the side
+//                                   // that passed it more often over the rounds; ties are left out)
 //       "cost": "lower"             // "lower", "lowerSure" (the whole 95% interval below), or { "maxRatio": 0.75 }
 //     }
 //   }
@@ -22,9 +23,9 @@
 // the earliest task-run of the rounds started and not changed since. With --write it is saved to
 // bench/verdicts/<id>.md and a line is added to bench/IMPROVEMENT_LOG.md. Read-only otherwise; no model is called.
 import { spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
-import { BROKEN_TASKS, costByRun, pct, roundDirs, runKey, signTest, taskRuns } from "./sessions.ts";
+import { BROKEN_TASKS, costByRun, pct, roundDirs, runKey, signTest, taskRuns, rng } from "./sessions.ts";
 
 export interface Rule {
   id: string;
@@ -72,7 +73,8 @@ const git = (args: string[], cwd: string) => spawnSync("git", args, { cwd, encod
 
 /** Was the rule file committed before the rounds started, and left alone since? */
 function registration(file: string, startedAt: number | undefined): { ok: boolean; detail: string } {
-  const abs = resolve(file);
+  // Its real path: git names the repository's top by its real path, and a link would put the rule "outside" it.
+  const abs = realpathSync(resolve(file));
   const root = git(["rev-parse", "--show-toplevel"], dirname(abs));
   if (!root) return { ok: false, detail: "the rule file is not in a git repository" };
   const rel = relative(root, abs);
@@ -91,13 +93,6 @@ function registration(file: string, startedAt: number | undefined): { ok: boolea
   return { ok: true, detail: `committed at ${when(first)} UTC (${firstH}), before the rounds started (${when(startedAt)} UTC)` };
 }
 
-/** A deterministic random number generator, so a verdict comes out the same every time it is computed. */
-function rng(seed: number) {
-  return () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
-  };
-}
 
 export function judge(rule: Rule, ruleFile: string, rounds: string[]): Verdict {
   const metric = rule.metric ?? "pass";

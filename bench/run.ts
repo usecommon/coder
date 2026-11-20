@@ -43,6 +43,11 @@ const EFFORT = args.effort ?? "high";
 const PLACEHOLDER_KEY = "sk-bench-placeholder-not-a-real-key";
 const keyEnv = (): Record<string, string> => ({ [`${PROVIDER.toUpperCase()}_API_KEY`]: PLACEHOLDER_KEY });
 const REPO_GALLEY = join(import.meta.dir, "..", "galley", "src", "cli.ts");
+// The state of the repository's Galley when the round starts: a round run from uncommitted changes is an experiment,
+// not Galley as it ships (bench/sessions.ts, isDefaultGalley).
+const gitOut = (args: string[]) => Bun.spawnSync(["git", "-C", join(import.meta.dir, ".."), ...args]).stdout.toString().trim();
+const GALLEY_COMMIT = gitOut(["rev-parse", "HEAD"]) || undefined;
+const GALLEY_DIRTY = gitOut(["status", "--porcelain", "--", "galley/src"]) !== "";
 const GALLEY = args.galley ?? REPO_GALLEY;
 const OPENCODE = args.opencode ?? process.env.OPENCODE_BIN!;
 const OC_CACHE_SEED = args["oc-cache"] ?? process.env.OC_CACHE_SEED;
@@ -851,7 +856,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
     memoryKills: a.memoryKills + g.memoryKills + (second ? second.a.memoryKills + second.g.memoryKills : 0),
     // How Galley was run, beyond its config file: which checkout and which extra flags. The measured profiles and
     // the canary count only runs of the default checkout with no extra flags.
-    ...(agent.startsWith("galley") || VARIANTS[agent]?.galley ? { galley: resolve(galleyOf(agent)) === resolve(REPO_GALLEY) ? "default" : galleyOf(agent), galleyArgs: [...GALLEY_ARGS, ...(VARIANTS[agent]?.args ?? [])] } : {}),
+    ...(agent.startsWith("galley") || VARIANTS[agent]?.galley ? { galley: resolve(galleyOf(agent)) === resolve(REPO_GALLEY) ? "default" : galleyOf(agent), galleyArgs: [...GALLEY_ARGS, ...(VARIANTS[agent]?.args ?? [])], galleyCommit: GALLEY_COMMIT, galleyDirty: GALLEY_DIRTY } : {}),
     // With two attempts allowed: `pass` stays the first attempt's result, `pass2` is the result after both.
     ...(ATTEMPTS >= 2 ? { attempts: second ? 2 : 1, pass2, ...(second ? { startedAt2: second.started, agentMs2: second.a.ms, agentTimedOut2: second.a.timedOut, gradeExit2: second.g.code } : {}) } : {}),
   };

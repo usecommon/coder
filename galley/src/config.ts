@@ -1,5 +1,5 @@
 // Configuration: built-in defaults < ~/.config/galley/config.json < ./galley.json < environment.
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { dataDir } from "./session/store.ts";
@@ -157,22 +157,29 @@ const trustFile = () => join(dataDir(), "trusted.json");
 const digestOf = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
 /** Trust the workspace's galley.json as it is now (`galley trust`). A later change, by anyone, needs trusting again. */
+/** Where trust for a workspace's galley.json is kept: under the workspace's own path, so that a link from one
+ *  workspace to another's trusted file is not the trusted file. */
+const trustKey = (cwd: string) => join(realpathSync(cwd), "galley.json");
+/** Only a regular file in the workspace can be trusted; a link (to another project's trusted file, say) cannot. */
+const ownFile = (file: string) => lstatSync(file, { throwIfNoEntry: false })?.isFile() === true;
+
 export function trustProjectConfig(cwd: string): string | undefined {
   const file = join(cwd, "galley.json");
-  if (!existsSync(file)) return undefined;
+  if (!ownFile(file)) return undefined;
   let all: Record<string, string> = {};
   try {
     all = JSON.parse(readFileSync(trustFile(), "utf8"));
   } catch {}
-  all[realpathSync(file)] = digestOf(file);
+  all[trustKey(cwd)] = digestOf(file);
   mkdirSync(dataDir(), { recursive: true });
   writeFileSync(trustFile(), JSON.stringify(all, null, 1) + "\n");
   return file;
 }
 
-function trusted(file: string): boolean {
+function trusted(cwd: string, file: string): boolean {
+  if (!ownFile(file)) return false;
   try {
-    return JSON.parse(readFileSync(trustFile(), "utf8"))[realpathSync(file)] === digestOf(file);
+    return JSON.parse(readFileSync(trustFile(), "utf8"))[trustKey(cwd)] === digestOf(file);
   } catch {
     return false;
   }
@@ -184,7 +191,7 @@ export function loadConfig(cwd: string, overrides: Partial<Config> = {}, ignored
   const user = readJson(join(process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "galley", "config.json"));
   const projectFile = join(cwd, "galley.json");
   const project = readJson(projectFile);
-  if (existsSync(projectFile) && !trusted(projectFile))
+  if (existsSync(projectFile) && !trusted(cwd, projectFile))
     for (const k of TRUSTED_ONLY)
       if (k in project) {
         delete (project as Record<string, unknown>)[k];

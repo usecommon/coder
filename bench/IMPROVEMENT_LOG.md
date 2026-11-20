@@ -824,3 +824,22 @@ Also fixed from the unverified ones: a session file cut off in its last line loa
 Each fix was taken out in turn and its test run: all eleven tests failed without their fix. Verdict on the fourth confirmation unchanged. Tests: 228 pass.
 
 **Ten rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22. The rise this round came from reviewers reaching code the earlier rounds had not: the config loader and the path check, both older than this work, held the two worst holes found since the git ones.
+
+## Eleventh council review (20 November)
+
+Fresh agents, same lenses. 16 findings, 15 distinct; 13 held and 1 was refuted (diff text in a takeover's message crosses no trust boundary: the model that wrote it is the one being replaced, and the request is stated outside it).
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Trust could be borrowed (the tenth round's fix).** Trust was looked up by the file's real path, so a `galley.json` that is a link to another project's trusted file was trusted. The model can read which files are trusted, and make the link. Reproduced | high | Only a regular file in the workspace can be trusted, and trust is kept under the workspace's own path. Either alone stops it; the test fails only without both |
+| A session file cut off in its last line loaded (the tenth round's fix), but the next record was glued onto the fragment, and the session could not be loaded again | medium | The fragment is cut off the file when it loads |
+| A model that took over while the check was failing was not shown the failure; if it changed nothing, the check never ran again and the turn ended as if done | medium | The check runs again when it stops, and its failure reaches it |
+| The profiles' 95% intervals counted every run as independent, though rounds rerun the same tasks: DeepSeek V4.1 Flash at high effort showed 59.2 to 62.9 | medium | Intervals resample tasks: now 57.8 to 64.2 (high), 60.9 to 76.7 (default), 80.9 to 93.4 (Sonnet 5.5) |
+| A round run from uncommitted changes to Galley counted as Galley at its defaults, and went into the profiles after the round | medium | `run.ts` records the commit and whether `galley/src` had changes; a changed checkout is an experiment |
+| `--worktree` refused ordinary repositories (a VS Code or merge setting is not on the fingerprint's short list of safe keys) (the tenth round's fix) | medium | With hooks, monitor, transports and tree attributes already off, it refuses only what could still run a program on checkout: a filter, included config, or attributes in the git folder |
+| git listed every file of a dependency tree before Galley skipped it; a large one overflowed, and every command then counted as a change | medium | Pathspecs keep git from listing the skipped folders at all |
+| Smaller: the trust test read the developer's own config; a test could not fail; the verdict's rule-file check failed through a link; the rule format still said task-runs; the miner's "other models" label left out compaction and lessons; the edit repair without git read before sizing | low | Each fixed |
+
+Each fix was taken out in turn and its test run: all of them failed without their fix (the two trust guards together, as each alone is enough). Verdict on the fourth confirmation unchanged. Tests: 232 pass.
+
+**Eleven rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22, 16. Three of this round's confirmed findings were in the tenth round's fixes, one of them high. A security fix written quickly to close a hole was the one that had a hole.

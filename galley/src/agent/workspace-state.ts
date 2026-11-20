@@ -10,7 +10,7 @@
 // outside a short list of keys known to run and fetch nothing (SAFE_KEYS).
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, sep } from "node:path";
 
 interface GitContext {
@@ -110,7 +110,13 @@ export function addWorktree(ws: string, branch: string, dir: string): string | u
   const r = spawnGit(["-C", ws, ...HARDEN, "rev-parse", "--absolute-git-dir"]);
   if (r.status !== 0) return "--worktree needs a git repository";
   const gitDir = r.stdout.trim();
-  if (!configIsSafe(gitDir)) return "--worktree: the repository's config sets keys that could run a program, so Galley will not run git on it";
+  // Hooks, the monitor, transports and attributes in the tree are off (HARDEN). What is left that could run a program
+  // during a checkout: a filter, named by attributes in the git folder itself, or config pulled in from elsewhere.
+  const keys = spawnGit([...HARDEN, `--git-dir=${gitDir}`, "config", "--name-only", "--list"]);
+  const risky = keys.stdout.split("\n").filter((k) => /^(filter\.|include\.|includeif\.)/i.test(k));
+  const attrs = join(gitDir, "info", "attributes");
+  if (keys.status !== 0 || risky.length || (existsSync(attrs) && readFileSync(attrs, "utf8").trim()))
+    return `--worktree: the repository ${risky.length ? `sets ${risky.join(", ")}` : "has attributes in its git folder"}, which could run a program on checkout, so Galley will not make a worktree of it`;
   const add = spawnGit(["-C", ws, ...HARDEN, `--git-dir=${gitDir}`, "worktree", "add", "-b", branch, dir]);
   return add.status === 0 ? undefined : `git worktree add failed: ${add.stderr.trim()}`;
 }
@@ -124,13 +130,16 @@ const diff = (ws: string, extra: string[] = []) =>
 const SKIP = new Set([".git", "node_modules", "dist", "build", "target", "obj", "_build", "dist-newstyle", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
 // Each file costs one stat: a hundred thousand take a fraction of a second, and only at the end of a turn.
 const MAX_FILES = 100_000;
+/** Pathspecs that keep git from listing the skipped folders at all: a dependency tree of hundreds of thousands of
+ *  files would otherwise be listed in full, and overflow, before being left out. */
+const NOT_SKIPPED = [...SKIP].map((d) => `:(exclude,glob)**/${d}/**`);
 
 /** A fingerprint of the workspace's files: it changes when a file is added, removed or changed. Undefined when it
  *  cannot be taken cheaply, which callers treat as "may have changed". */
 export function fingerprint(ws: string): string | undefined {
   const h = createHash("sha256");
   if (isGitRepo(ws)) {
-    const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", "."]);
+    const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", ".", ...NOT_SKIPPED]);
     const d = diff(ws, ["--binary"]);
     if (!status || !d) return undefined;
     // The commit too: changes committed through the shell leave a clean tree but are changes all the same.
@@ -173,7 +182,7 @@ export function fingerprint(ws: string): string | undefined {
         } catch {}
     // Ignored files are in neither: their size and time too, outside dependency and cache folders. Past MAX_FILES of
     // them the fingerprint cannot be taken, which counts as "may have changed".
-    const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "-z", "--", "."]);
+    const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "-z", "--", ".", ...NOT_SKIPPED]);
     if (!ignored) return undefined;
     let n = 0;
     for (const f of ignored.stdout.split("\0")) {

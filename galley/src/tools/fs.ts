@@ -375,6 +375,8 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
     }
     return hits;
   }
+  // Without git's list: sized by stat first, as above, before anything is read.
+  if (!fits(root, 0, { files: MAX_FILES, bytes: MAX_BYTES })) return undefined;
   return walk(root, 0) ? hits : undefined;
 }
 

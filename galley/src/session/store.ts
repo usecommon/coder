@@ -1,6 +1,6 @@
 // Append-only JSONL sessions: every message, usage record and compaction is a line, so sessions can be
 // resumed, forked and replayed exactly.
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, truncateSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -75,7 +75,21 @@ export class Session {
     const match = existsSync(dir) ? readdirSync(dir).filter((f) => f.startsWith(id) && f.endsWith(".jsonl")) : [];
     if (match.length !== 1) throw new Error(match.length ? `"${id}" matches ${match.length} sessions` : `No session "${id}" in this workspace`);
     const file = join(dir, match[0]!);
-    const records = readFileSync(file, "utf8")
+    const text = readFileSync(file, "utf8");
+    // A last line cut off when the process was killed mid-write is removed from the file, so that the next record
+    // is not glued onto it.
+    if (text && !text.endsWith("\n")) {
+      const tail = text.slice(text.lastIndexOf("\n") + 1);
+      let whole = true;
+      try {
+        JSON.parse(tail);
+      } catch {
+        whole = false;
+      }
+      if (whole) appendFileSync(file, "\n");
+      else truncateSync(file, Buffer.byteLength(text.slice(0, text.lastIndexOf("\n") + 1)));
+    }
+    const records = text
       .split("\n")
       .filter(Boolean)
       // A line cut off when the process was killed mid-write is dropped (only the last can be).

@@ -10,7 +10,7 @@
 // list price. With --write the figures are merged into galley/src/provider/measured.json, which `galley models` reads.
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { BROKEN_TASKS, costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
+import { BROKEN_TASKS, costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, taskInterval } from "./sessions.ts";
 
 // Canary rounds are left out too: their tasks were picked for being stable, which would bias the figures.
 const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake|canary/i;
@@ -33,7 +33,7 @@ export interface Measured {
 const refOf = (model: string) => (model.startsWith("claude-") ? `anthropic/${model}` : `deepseek/${model}`);
 
 export function measure(dirs: string[]): Record<string, Measured[]> {
-  type Acc = { solved: number; tasks: number; cost: number; langs: Record<string, [number, number]>; rounds: Set<string>; from: number; to: number };
+  type Acc = { solved: number; tasks: number; cost: number; langs: Record<string, [number, number]>; byTask: Map<string, [number, number]>; rounds: Set<string>; from: number; to: number };
   const acc = new Map<string, Acc>();
   for (const round of dirs) {
     if (SKIP_ROUNDS.test(basename(round)) || isCanary(round)) continue;
@@ -45,7 +45,9 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
       if (!model) continue;
       const effort = typeof r.config!.effort === "string" ? r.config!.effort : "default";
       const key = `${refOf(model)}|${effort}`;
-      const a = acc.get(key) ?? { solved: 0, tasks: 0, cost: 0, langs: {}, rounds: new Set(), from: Infinity, to: 0 };
+      const a: Acc = acc.get(key) ?? { solved: 0, tasks: 0, cost: 0, langs: {}, byTask: new Map(), rounds: new Set(), from: Infinity, to: 0 };
+      const t = a.byTask.get(r.task) ?? [0, 0];
+      a.byTask.set(r.task, [t[0] + Number(r.pass), t[1] + 1]);
       a.tasks++;
       if (r.pass) a.solved++;
       a.cost += cost.get(runKey(r)) ?? NaN;
@@ -64,7 +66,9 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
   const day = (t: number) => (Number.isFinite(t) && t ? new Date(t).toISOString().slice(0, 10) : "unknown");
   for (const [key, a] of [...acc].sort()) {
     const [ref, effort] = key.split("|") as [string, string];
-    const [lo, hi] = wilson(a.solved, a.tasks);
+    // Over tasks, not task-runs: the rounds run the same tasks again, and a task mostly passes every time or fails
+    // every time, so runs are far from independent.
+    const [lo, hi] = taskInterval([...a.byTask.values()]);
     (out[ref] ??= []).push({ effort, tasks: a.tasks, solved: a.solved, ci: [+(lo * 100).toFixed(1), +(hi * 100).toFixed(1)], costPerTask: Number.isFinite(a.cost) ? +(a.cost / a.tasks).toFixed(5) : null, byLanguage: a.langs, rounds: a.rounds.size, from: day(a.from), to: day(a.to) });
   }
   return out;

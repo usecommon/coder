@@ -8,8 +8,8 @@
     "tasks": 303,
     "solved": 265,
     "ci": [
-     83.3,
-     90.7
+     80.9,
+     93.4
     ],
     "costPerTask": 0.02742,
     "byLanguage": {
@@ -37,8 +37,8 @@
     "tasks": 202,
     "solved": 139,
     "ci": [
-     62.1,
-     74.8
+     60.9,
+     76.7
     ],
     "costPerTask": 0.00658,
     "byLanguage": {
@@ -64,8 +64,8 @@
     "tasks": 2717,
     "solved": 1659,
     "ci": [
-     59.2,
-     62.9
+     57.8,
+     64.2
     ],
     "costPerTask": 0.00584,
     "byLanguage": {

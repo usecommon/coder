@@ -24,6 +24,9 @@ export interface Result {
   /** Galley only, in rounds from 19 November 2026 on: "default" or the cli.ts of another checkout, and extra flags. */
   galley?: string;
   galleyArgs?: string[];
+  /** The checkout's commit, and whether galley/src had uncommitted changes, when the round ran. */
+  galleyCommit?: string;
+  galleyDirty?: boolean;
 }
 
 /** One record of a Galley session file. Only the fields used here are typed. */
@@ -183,6 +186,8 @@ const LEGACY_EXPERIMENTS = /^(r\d+[ab]?(-.*)?|fv\d+)$/;
 export function isDefaultGalley(r: TaskRun): boolean {
   if (!r.config || !r.agent.startsWith("galley")) return false;
   if (r.galley === undefined && LEGACY_EXPERIMENTS.test(r.round)) return false;
+  // A checkout with uncommitted changes to Galley is an experiment, whatever the round is called.
+  if (r.galleyDirty === true) return false;
   if (r.galley === undefined ? r.agent !== "galley" : r.galley !== "default" || (r.galleyArgs ?? []).length > 0) return false;
   if (Object.keys(r.config).some((k) => !NEUTRAL_KEYS.has(k))) return false;
   const providers = (r.config.providers ?? {}) as Record<string, Record<string, unknown>>;
@@ -310,6 +315,34 @@ function lgamma(x: number): number {
 }
 
 /** Wilson 95% interval for k of n, as fractions. */
+/** A deterministic random number generator, so a figure comes out the same every time it is computed. */
+export function rng(seed: number) {
+  return () => {
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    return seed / 4294967296;
+  };
+}
+
+/** A 95% interval for a pass rate over runs grouped by task: tasks are resampled with replacement, since runs of one
+ *  task are not independent (a task mostly passes every time, or fails every time). [passed, runs] per task. */
+export function taskInterval(perTask: [number, number][], draws = 2000): [number, number] {
+  if (!perTask.length) return [NaN, NaN];
+  const rand = rng(12345);
+  const rates: number[] = [];
+  for (let i = 0; i < draws; i++) {
+    let k = 0;
+    let n = 0;
+    for (let j = 0; j < perTask.length; j++) {
+      const [a, b] = perTask[Math.floor(rand() * perTask.length)]!;
+      k += a;
+      n += b;
+    }
+    rates.push(k / n);
+  }
+  rates.sort((a, b) => a - b);
+  return [rates[Math.floor(draws * 0.025)]!, rates[Math.floor(draws * 0.975)]!];
+}
+
 export function wilson(k: number, n: number): [number, number] {
   if (!n) return [0, 1];
   const z = 1.96;

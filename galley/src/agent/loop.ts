@@ -418,6 +418,9 @@ export class Agent {
               // What changed: git's view where there is one (it sees what commands and earlier turns did too), else
               // the file tools' own record.
               const files = gitChanges(this.workspace) || changes(this.workspace, this.undo.snapshots(), 20_000);
+              // It is not shown the failed check, so it may stop having changed nothing: the check runs again then,
+              // and its failure reaches it.
+              if (checking && lastFailure !== undefined) this.unchecked = true;
               this.baseTokens = this.lastInputTokens;
               this.viewFrom = this.session.messages.length;
               this.session.addMessage({

@@ -192,7 +192,7 @@ galley serve --port 4096              # HTTP + SSE server (see below)
 }
 ```
 
-**A workspace's `galley.json` is not trusted by default.** The model can write it (the workspace is writable from the sandbox), so from it Galley takes only settings that cannot start a program, send an API key elsewhere or loosen a rule: not `mcp`, `providers`, `sandbox`, `network`, `permission`, `check`, `checkTimeout`, `lessons` or `escalateContext`. It says which it left out. `galley trust` uses the file in full as it is now; any later change, by anyone, needs trusting again. The user-wide config below is always used.
+**A workspace's `galley.json` is not trusted by default.** The model can write it (the workspace is writable from the sandbox), so from it Galley takes only settings that cannot start a program, send an API key elsewhere or loosen a rule: not `mcp`, `providers`, `sandbox`, `network`, `permission`, `check`, `checkTimeout`, `lessons` or `escalateContext`. It says which it left out. `galley trust` uses the file in full as it is now; any later change, by anyone, needs trusting again. Only a regular file can be trusted, not a link to one elsewhere. The user-wide config below is always used.
 
 The user-wide config is `~/.config/galley/config.json`; `GALLEY_MODEL` overrides the model. Compound shell commands (`a && b | c`) are judged by their strictest part. Project instructions come from `AGENTS.md` (or `CLAUDE.md`).
 
