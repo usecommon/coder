@@ -46,6 +46,8 @@ export class Session {
   costUsd = 0;
   title?: string;
   status?: string;
+  /** The status the session had when it was loaded: "done" means the run before finished cleanly. */
+  loadedStatus?: string;
 
   private constructor(
     readonly id: string,
@@ -76,6 +78,7 @@ export class Session {
     if (!meta || meta.type !== "meta") throw new Error(`Corrupt session file ${file}`);
     const s = new Session(meta.id, file, meta);
     s.replay(records);
+    s.loadedStatus = s.status;
     return s;
   }
 

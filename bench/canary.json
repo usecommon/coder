@@ -1,5 +1,5 @@
 {
- "selected": "2026-11-18",
+ "selected": "2026-11-20",
  "model": "deepseek-flash",
  "effort": "high",
  "stable": {
@@ -44,6 +44,10 @@
    5
   ],
   "go/robot-simulator": [
+   5,
+   5
+  ],
+  "python/affine-cipher": [
    5,
    5
   ],
@@ -94,10 +98,6 @@
   "rust/variable-length-quantity": [
    5,
    5
-  ],
-  "rust/pig-latin": [
-   5,
-   5
   ]
  },
  "hard": {
@@ -125,5 +125,9 @@
    0,
    5
   ]
- }
+ },
+ "heldOut": [
+  4,
+  120
+ ]
 }

@@ -34,7 +34,7 @@ export function loadLessons(workspace: string): Lesson[] {
 }
 
 /** Hold a lock file while `fn` runs, so two Galley processes in one project do not lose each other's lessons.
- *  A lock older than ten seconds is taken to be left over from a process that died. */
+ *  A lock older than two seconds is taken to be left over from a process that died. */
 function locked<T>(lock: string, fn: () => T): T {
   // The lock holds a token, so a process removes only its own lock, never one another process has taken since.
   const token = `${process.pid}.${Math.random().toString(36).slice(2)}`;

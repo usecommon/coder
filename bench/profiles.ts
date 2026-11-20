@@ -1,7 +1,7 @@
 // Model profiles from Galley's own runs. Public boards measure models on hard terminal tasks; this measures them
 // on the tasks Galley's benchmark has run, with Galley as the harness, from the rounds kept on disk.
 //
-//   bun bench/profiles.ts <rounds-dir> [<rounds-dir> …] [--write]
+//   bun bench/profiles.ts <rounds-dir> [<rounds-dir> …] [--write [--replace]]
 //
 // Only task-runs of Galley as it ships count: the repository's own checkout with no extra flags, and a config that
 // sets nothing but the model, the effort and the provider's address (a changed step limit or helper model leaves a
@@ -13,7 +13,7 @@ import { basename, join } from "node:path";
 import { BROKEN_TASKS, costByRun, isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns, wilson } from "./sessions.ts";
 
 // Canary rounds are left out too: their tasks were picked for being stable, which would bias the figures.
-const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|canary/i;
+const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake|canary/i;
 
 export interface Measured {
   /** Reasoning effort, or "default" when the run left it to Galley's default of the time. */
@@ -73,9 +73,12 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const write = args.includes("--write");
-  const dirs = roundDirs(args.filter((a) => a !== "--write"));
+  // --replace: a row measured now replaces the old one even when it rests on fewer task-runs (a correction that
+  // leaves runs out).
+  const replace = args.includes("--replace");
+  const dirs = roundDirs(args.filter((a) => a !== "--write" && a !== "--replace"));
   if (!dirs.length) {
-    console.error("usage: bun bench/profiles.ts <rounds-dir> [<rounds-dir> …] [--write]");
+    console.error("usage: bun bench/profiles.ts <rounds-dir> [<rounds-dir> …] [--write [--replace]]");
     process.exit(2);
   }
   const m = measure(dirs);
@@ -87,13 +90,20 @@ if (import.meta.main) {
       console.log(`\nNothing measured in these rounds; ${file} left as it is.`);
       process.exit(0);
     }
-    // Merged into what is there, row by model and effort: a row measured again is replaced, and rows from rounds no
-    // longer on disk are kept.
+    // Merged into what is there, row by model and effort. A row measured again replaces the old one only when it
+    // rests on at least as many task-runs: the rounds behind a row may no longer be on disk, and one new round must
+    // not replace a figure from many. Rows from rounds no longer on disk are kept.
     let old: Record<string, Measured[]> = {};
     try {
       old = JSON.parse(readFileSync(file, "utf8")).models ?? {};
     } catch {}
-    for (const [ref, rows] of Object.entries(m)) old[ref] = [...(old[ref] ?? []).filter((o) => !rows.some((r) => r.effort === o.effort)), ...rows];
+    for (const [ref, rows] of Object.entries(m)) {
+      const prev = old[ref] ?? [];
+      const fresh = rows.filter((r) => !prev.some((o) => o.effort === r.effort && o.tasks > r.tasks && !replace));
+      for (const r of rows)
+        if (!fresh.includes(r)) console.error(`Kept the earlier ${ref} row at effort ${r.effort}: it rests on more task-runs than the ${r.tasks} measured now (--replace to replace it).`);
+      old[ref] = [...prev.filter((o) => !fresh.some((r) => r.effort === o.effort)), ...fresh];
+    }
     const merged = old;
     const doc = {
       about: "Written by bench/profiles.ts from Galley's own benchmark rounds: Galley at its defaults (apart from model and effort), first attempts, small Exercism-style tasks with hidden tests, cost at list price. Not comparable with the hard-task board figures in models.ts.",

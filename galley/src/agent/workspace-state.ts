@@ -10,7 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 interface GitContext {
   gitDir: string;
@@ -119,8 +119,18 @@ export function fingerprint(ws: string): string | undefined {
     if (!status || !d) return undefined;
     // The commit too: changes committed through the shell leave a clean tree but are changes all the same.
     const head = git(ws, ["rev-parse", "-q", "--verify", "HEAD"]);
-    // Untracked output in dependency, build and cache folders is left out, as for ignored files.
-    const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && e.slice(3).split("/").some((part) => SKIP.has(part))));
+    // Untracked output in dependency, build and cache folders is left out, as for ignored files: folders below the
+    // workspace only, since a workspace may itself sit in one (<repo>/build/app).
+    const real = (p: string) => {
+      try {
+        return realpathSync(p);
+      } catch {
+        return p;
+      }
+    };
+    const [wsReal, topReal] = [real(ws), real(status.top)];
+    const below = (p: string) => relative(wsReal, join(topReal, p)).split(sep);
+    const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && below(e.slice(3)).some((part) => SKIP.has(part))));
     h.update(entries.join("\0")).update(d.stdout).update(head?.stdout ?? "no-head");
     // Untracked files are not in the diff: their size and time stand in. Status gives paths from the repository's
     // top, which may be above the workspace.

@@ -732,3 +732,26 @@ Also fixed from the unverified ones: common words ("make", "sure", "should", "fi
 Each protection added this round was taken out in turn and its test run: all nine tests failed without their fix and pass with it. Profiles, signal and calibration figures unchanged. Tests: 195 pass.
 
 **Six rounds compared.** Findings 60, 39, 32, 25, 19, 18. Confirmed of those checked: 14, 14, 14, 12, 14, 14. The count has levelled off near 18; the severity has not fallen as fast, because each round looks at host-side reads from a new angle (git, then links).
+
+## Seventh council review (20 November)
+
+Fresh agents, same lenses; the round was cut off by a usage limit and resumed. 18 findings, 18 distinct; all 14 checked by an agent told to refute them held. Two came from the sixth round's own fixes: the canary's new pooled rate, and `/undo`'s new remove-then-write.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **`/undo` through a folder link.** The sixth round guarded the file itself, not the folders above it. A model that turned a folder into a link to `$HOME` after an edit had `/undo`, on the host, delete and rewrite a file there (`.bashrc`, say). Reproduced | medium | Each snapshot records the real path of its folder; undo leaves a file alone when the path no longer leads there |
+| `/undo` recreated every file, so an executable script came back without its execute bit | medium | A regular file with one name is written in place, and its mode is restored in any case; a folder deleted since is made again |
+| **The canary over-alarmed.** Its pooled rate came from the history that chose the tasks for being good, 1 in 122. Left out of the choice one round at a time, such tasks failed 4 of 120 runs. With the old rate any 2 failures in 24 raised REGRESSION, and one held-out round of an unchanged Galley did | medium | `select` now measures the failure rate on rounds left out of the choice and stores it; `check` uses it. Now 4 failures of 24 are needed (about 5% by chance). A test round named `fake1` was left out of the history, which changed one stable task |
+| Every OpenCode run on Anthropic was taken to be on Claude Haiku 5.5, the model of its title request, which answers first. OpenCode rounds on Sonnet and on Opus looked alike to the miner | medium | A run's model is the one that wrote the most output |
+| After a round, `profiles.ts --write` replaced a row from 19 rounds with one from whatever rounds were on disk | medium | A row is replaced only by one resting on as many task-runs, or with `--replace` |
+| Rounds were deduplicated by resolved path, not real path; the log said real path. A link to a round counted it twice | medium | Real path |
+| Every resumed session ran the check, also after a run that finished | medium | Only after a run that did not finish (or a session with no status) |
+| A write to the scratch folder alone set off the check again after a failure | low | File tools set it off only when they changed a workspace file; anything else is measured |
+| A session from the commit that first recorded runs (1d81129) had its helper cost counted twice by the miner | low | Marked only by the helper's name on the roll-up |
+| Untested: the signal record of a handover; the token count after a takeover; old notes not read back with lessons off; per-language figures in `galley models`; a declined check clearing the result an advisor reads | low | Tests for each |
+
+Also fixed from the unverified ones: a workspace inside a repository's `build/` folder saw no file made through the shell (only folders below the workspace are skipped now); a malformed `edit` that a path would not make valid is no longer searched for; the lesson lock's comment gives its real two seconds.
+
+Each fix was taken out in turn and its test run: ten of eleven tests failed without their fix. The eleventh, writing a file in place, is covered twice: without it the mode is still restored afterwards. Measured profiles: DeepSeek V4.1 Flash at high effort is 61.1% of 2,717 runs, not 61.0% of 2,718 (the test round). Tests: 206 pass.
+
+**Seven rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18. Confirmed of those checked: 14, 14, 14, 12, 14, 14, 14. Two of this round's confirmed findings were caused by the previous round's fixes, and both were found by the next round. That is the case for running the rounds, and for not stopping at a round that only fixed things.

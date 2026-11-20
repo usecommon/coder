@@ -372,6 +372,9 @@ export const editTool: Tool = {
   // A call without a path is mended when exactly one file in the workspace contains the text to replace.
   repair(input, ctx) {
     if (input.path !== undefined || typeof input.old_string !== "string" || input.old_string.length < 8) return undefined;
+    // A call that adding a path would not make valid (another key, a new_string that is not text) is not worth a scan.
+    if (Object.keys(input).some((k) => !["old_string", "new_string", "replace_all"].includes(k)) || typeof input.new_string !== "string") return undefined;
+    if (input.replace_all !== undefined && typeof input.replace_all !== "boolean") return undefined;
     // Under Seatbelt the scratch folder is the shared system /tmp: no scan of it can be certain, so none is made.
     if (ctx.sandbox === "seatbelt") return undefined;
     const mayRead = (p: string) => ctx.gate.allows({ tool: "read", subject: displayPath(ctx.workspace, p) });

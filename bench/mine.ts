@@ -113,9 +113,10 @@ export function mine(round: string, runs: TaskRun[] = taskRuns(round, { sessions
     // Every helper's own usage counts as helpers. Sessions written before the parent's roll-up was marked still
     // hold an unmarked copy of it: take it out of the parent's bucket, but never more than the parent recorded on
     // that model, since a helper cut off mid-run never got its roll-up written.
-    // Sessions that record each `galley run` also mark every roll-up: an unmarked helper cost there is one that
-    // never reached the parent (the run was cut off while the helper worked), so nothing is subtracted.
-    const marked = r.main.some((x) => (x.type === "usage" && (x as { helper?: string }).helper) || x.type === "run");
+    // Only a roll-up that carries the helper's name is marked; sessions from the commit that began recording runs
+    // (1d81129) do not mark them yet, so a run record says nothing either way. An unmarked session goes through the
+    // matching below, which subtracts nothing for a helper cut off before its roll-up.
+    const marked = r.main.some((x) => x.type === "usage" && (x as { helper?: string }).helper);
     // The old roll-up is one usage record on the helper's model whose cost equals the helper's own total.
     const rollups = r.main.filter((x) => x.type === "usage") as { model: string; costUsd: number }[];
     for (const h of r.helpers) {
@@ -193,7 +194,7 @@ function comparable(a?: Mined["conditions"], b?: Mined["conditions"]): boolean {
 }
 
 /** Rounds that are trials, not rounds: never the one to compare with. */
-const NOT_A_ROUND = /invalid|aborted|smoke|dry|dump|selftest|probe|try/i;
+const NOT_A_ROUND = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake/i;
 
 /** The most recent other round beside this one that has been mined. */
 function previousRound(round: string, own?: Mined["conditions"]): string | undefined {

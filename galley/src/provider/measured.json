@@ -1,6 +1,6 @@
 {
  "about": "Written by bench/profiles.ts from Galley's own benchmark rounds: Galley at its defaults (apart from model and effort), first attempts, small Exercism-style tasks with hidden tests, cost at list price. Not comparable with the hard-task board figures in models.ts.",
- "generated": "2026-11-19",
+ "generated": "2026-11-20",
  "models": {
   "anthropic/claude-sonnet-5-5": [
    {
@@ -61,7 +61,7 @@
    },
    {
     "effort": "high",
-    "tasks": 2718,
+    "tasks": 2717,
     "solved": 1659,
     "ci": [
      59.2,
@@ -71,7 +71,7 @@
     "byLanguage": {
      "python": [
       98,
-      171
+      170
      ],
      "go": [
       136,
@@ -130,7 +130,7 @@
       80
      ]
     },
-    "rounds": 19,
+    "rounds": 18,
     "from": "2026-11-12",
     "to": "2026-11-14"
    }

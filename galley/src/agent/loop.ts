@@ -134,6 +134,7 @@ export class Agent {
    *  then. A command that changed nothing (ls, grep, a test run) is no reason to run the check. */
   private unchecked = false;
   private ranCommands = false;
+  private undoBefore = 0;
   private checkedPrint?: string;
   private turns = 0;
 
@@ -222,8 +223,9 @@ export class Agent {
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
     if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) {
       this.checkedPrint = fingerprint(this.workspace) ?? "";
-      // A session resumed after a run that was cut off may hold edits that were never checked: check once.
-      if (turnStart > 0) this.unchecked = true;
+      // A session resumed after a run that was cut off may hold edits that were never checked: check once. One whose
+      // run finished cleanly was checked then.
+      if (turnStart > 0 && this.session.loadedStatus !== "done") this.unchecked = true;
     }
     let checkFails = 0;
     let checkReport: string | undefined;
@@ -341,6 +343,7 @@ export class Agent {
         }
         break;
       }
+      this.undoBefore = this.undo.changedThisTurn();
       const results =
         res.stopReason === "max_tokens"
           ? res.toolCalls.map<ToolResult>((c) => ({ callId: c.id, name: c.name, isError: true, content: "Your output was cut off at the token limit, so this call was not run. Retry with a smaller change." }))
@@ -349,7 +352,12 @@ export class Agent {
       for (const c of res.toolCalls) {
         // A command, or a tool from an MCP server: whether it changed a file is measured, not assumed.
         if (c.name === "bash" || c.name.startsWith("mcp_")) this.ranCommands = true;
-        else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly && results.some((r) => r.callId === c.id && !r.isError)) this.unchecked = true;
+        else if (!this.tools.find((t) => t.spec.name === c.name)?.readOnly && results.some((r) => r.callId === c.id && !r.isError)) {
+          // A file newly changed this turn is known to be a change; a write to the scratch folder, or a file changed
+          // again, is measured instead.
+          if (this.undo.changedThisTurn() > this.undoBefore) this.unchecked = true;
+          else this.ranCommands = true;
+        }
       }
       if (step === maxSteps - 1) this.emit({ type: "notice", level: "warn", text: `Stopped after ${maxSteps} steps.` });
 

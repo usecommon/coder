@@ -127,9 +127,9 @@ What happens between rounds is partly automatic now. None of these calls a model
 | Tool | What it does | When |
 |---|---|---|
 | `mine.ts <round>` | Groups tool errors, malformed tool calls, commands the sandbox lacks and harness failures (split by agent); replays the trouble signals; splits Galley's cost by phase; marks what is new since the previous round. Writes `mine.md` and `mine.json` | `round.sh` runs it after every round |
-| `profiles.ts <rounds> --write` | Galley's own pass rate and cost per model and effort, by language, into `galley/src/provider/measured.json`, which `galley models` shows | `round.sh` refreshes it after every round; committing the change is a person's call |
+| `profiles.ts <rounds> --write` | Galley's own pass rate and cost per model and effort, by language, into `galley/src/provider/measured.json`, which `galley models` shows | `round.sh` refreshes it after every round; a row is replaced only by one that rests on as many task-runs (`--replace` to force it); committing the change is a person's call |
 | `verdict.ts judge <rule> <rounds>` | Judges rounds against a rule in `rules/`: lead, sign test, cost ratio with a resampled interval. Says when the rule was committed after the rounds began, so a rule cannot be written to fit a result | After the rounds a rule was written for; `--write` saves the verdict and adds a line to the improvement log |
-| `canary.sh` | Runs 30 tasks with a long history (24 Galley nearly always passes, 6 it always fails) and flags a change that fails more of the first kind than history explains | Before a full round of a change. About $0.20 on DeepSeek |
+| `canary.sh` | Runs 30 tasks with a long history (24 Galley nearly always passes, 6 it always fails) and flags a change that fails more of the first kind than history explains, judged by how often such tasks failed in rounds left out of their choice | Before a full round of a change. About $0.20 on DeepSeek |
 | `calibrate.ts <rounds>` | Replays the trouble signals at other thresholds and reads the check records, and proposes a setting only when the data support it | Now and then |
 | `signals.ts <rounds>` | How often each trouble signal fires on failing and on passing runs, and within one task | Now and then |
 

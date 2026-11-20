@@ -11,7 +11,8 @@
 // The canary is 24 tasks Galley passed in at least 90% of at least four runs, and 6 it failed in all of at least
 // four: the first catch breakage, the second show a fix. Chosen by hash among those that qualify, so the choice
 // does not lean on the author. A change "regresses" when it fails more of the stable tasks than their history makes
-// likely (one-sided, p < 0.05). Tasks Galley was developed on are fine here: the canary looks for breakage, it does
+// likely (one-sided, p < 0.05). How likely is measured on rounds the choice did not see: the tasks were picked for
+// a good history, so that same history makes them look safer than they are. Tasks Galley was developed on are fine here: the canary looks for breakage, it does
 // not count towards a win. No model is called by this script.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -19,7 +20,7 @@ import { basename, join } from "node:path";
 import { isCanary, isDefaultGalley, modelsByRun, roundDirs, runKey, taskRuns } from "./sessions.ts";
 
 const FILE = join(import.meta.dir, "canary.json");
-const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|canary/i;
+const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake|canary/i;
 /** Tasks the round reports leave out of scoring: broken in the benchmark itself (report.ts). */
 const EXCLUDED = new Set(["rust/macros", "go/octal"]);
 
@@ -30,6 +31,8 @@ interface Canary {
   /** Task → [passed, runs] in history. */
   stable: Record<string, [number, number]>;
   hard: Record<string, [number, number]>;
+  /** [failed, runs] of the stable tasks in rounds left out of their choice, one round at a time. */
+  heldOut?: [number, number];
 }
 
 const flag = (args: string[], name: string, dflt: string) => {
@@ -42,30 +45,53 @@ function select(args: string[]) {
   const model = flag(args, "model", "deepseek-flash");
   const effort = flag(args, "effort", "high");
   const langs = new Set(flag(args, "langs", "python,go,rust").split(","));
-  const history = new Map<string, [number, number]>();
+  // Each round's runs at this setting: task → [passed, runs].
+  const perRound: Map<string, [number, number]>[] = [];
   for (const round of roundDirs(args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")))) {
     if (SKIP_ROUNDS.test(basename(round)) || isCanary(round)) continue;
     const models = modelsByRun(round);
+    const runs = new Map<string, [number, number]>();
     for (const r of taskRuns(round)) {
       if (!isDefaultGalley(r) || !langs.has(r.lang) || EXCLUDED.has(r.task)) continue;
       if (r.config!.effort !== effort || models.get(runKey(r)) !== model) continue;
-      const h = history.get(r.task) ?? [0, 0];
+      const h = runs.get(r.task) ?? [0, 0];
       h[1]++;
       if (r.pass) h[0]++;
-      history.set(r.task, h);
+      runs.set(r.task, h);
     }
+    if (runs.size) perRound.push(runs);
   }
-  const byHash = (xs: [string, [number, number]][]) => xs.sort((a, b) => (hash(a[0]) < hash(b[0]) ? -1 : 1));
-  const enough = [...history].filter(([, [, n]]) => n >= 4);
-  const stable = byHash(enough.filter(([, [k, n]]) => k / n >= 0.9)).slice(0, 24);
-  const hard = byHash(enough.filter(([, [k]]) => k === 0)).slice(0, 6);
+  const choose = (rounds: Map<string, [number, number]>[]) => {
+    const history = new Map<string, [number, number]>();
+    for (const runs of rounds)
+      for (const [t, [k, n]] of runs) {
+        const h = history.get(t) ?? [0, 0];
+        history.set(t, [h[0] + k, h[1] + n]);
+      }
+    const byHash = (xs: [string, [number, number]][]) => xs.sort((a, b) => (hash(a[0]) < hash(b[0]) ? -1 : 1));
+    const enough = [...history].filter(([, [, n]]) => n >= 4);
+    return { history, enough, stable: byHash(enough.filter(([, [k, n]]) => k / n >= 0.9)).slice(0, 24), hard: byHash(enough.filter(([, [k]]) => k === 0)).slice(0, 6) };
+  };
+  const { history, enough, stable, hard } = choose(perRound);
+  // How often tasks chosen this way fail in a round the choice did not see: each round in turn is left out, the
+  // canary chosen again from the others, and its stable tasks' results in the left-out round counted.
+  const heldOut: [number, number] = [0, 0];
+  perRound.forEach((left, i) => {
+    for (const [t] of choose(perRound.filter((_, j) => j !== i)).stable) {
+      const r = left.get(t);
+      if (r) {
+        heldOut[0] += r[1] - r[0];
+        heldOut[1] += r[1];
+      }
+    }
+  });
   if (!stable.length) {
     console.error("No stable task qualifies (check the rounds path, --model, --effort and --langs); canary.json left unchanged.");
     process.exit(1);
   }
-  const c: Canary = { selected: new Date().toISOString().slice(0, 10), model, effort, stable: Object.fromEntries(stable), hard: Object.fromEntries(hard) };
+  const c: Canary = { selected: new Date().toISOString().slice(0, 10), model, effort, stable: Object.fromEntries(stable), hard: Object.fromEntries(hard), heldOut };
   writeFileSync(FILE, JSON.stringify(c, null, 1) + "\n");
-  console.log(`${history.size} tasks with history; ${enough.length} with four runs or more. Chose ${stable.length} stable and ${hard.length} hard tasks.`);
+  console.log(`${history.size} tasks with history; ${enough.length} with four runs or more. Chose ${stable.length} stable and ${hard.length} hard tasks. In rounds left out of the choice, tasks chosen as stable failed ${heldOut[0]} of ${heldOut[1]} runs.`);
   console.log(`ONLY=${[...stable, ...hard].map(([t]) => t).join(",")}`);
 }
 
@@ -91,11 +117,15 @@ function check(round: string) {
   const got = new Map(runs.map((r) => [r.task, r.pass]));
   const stable = Object.entries(c.stable).filter(([t]) => got.has(t));
   const failed = stable.filter(([t]) => !got.get(t));
-  // One chance of failing for every stable task, from their pooled history with one failure and one pass added
-  // (so that it is never zero). A prior on each task's own five runs would put each at 1 in 7 and hide a large
-  // regression; pooled, 0 failures in 120 runs gives 1 in 122.
-  const fails = stable.reduce((a, [, [k, n]]) => a + n - k, 0);
-  const total = stable.reduce((a, [, [, n]]) => a + n, 0);
+  // One chance of failing for every stable task, from rounds left out of the choice, with one failure and one pass
+  // added so that it is never zero. Their own history would understate it: they were chosen because it was good.
+  // A prior on each task's five runs (1 in 7 each) would hide a large regression.
+  let [fails, total] = c.heldOut ?? [0, 0];
+  if (!c.heldOut) {
+    fails = Object.values(c.stable).reduce((a, [k, n]) => a + n - k, 0);
+    total = Object.values(c.stable).reduce((a, [, n]) => a + n, 0);
+    console.log("canary.json has no held-out failure rate (run select again): the rate is taken from the history that chose the tasks, which makes false alarms more likely.");
+  }
   const p = stable.map(() => (fails + 1) / (total + 2));
   const pValue = atLeast(failed.length, p);
   const expected = p.reduce((a, b) => a + b, 0);
