@@ -6,7 +6,7 @@
 // SWE-bench tasks, one retrieved experience did best and more did worse, memory that was not checked did harm, and a
 // model's self-written skills lowered results. So: one note, written only after something ran and passed, and read
 // back as a hint that may be out of date. Off unless `lessons` is set. Not measured in Galley.
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { projectDir } from "../session/store.ts";
 
@@ -50,13 +50,18 @@ function locked<T>(lock: string, fn: () => T): T {
         // Writing a lesson takes milliseconds: a lock two seconds old was left by a process that died.
         const st = statSync(lock);
         if (Date.now() - st.mtimeMs > 2_000) {
+          const owner = readFileSync(lock, "utf8");
           const stale = `${lock}.${process.pid}.stale`;
           renameSync(lock, stale);
-          // Another process may have taken the stale lock over and made a fresh one between the look and the rename:
-          // then the fresh one is put back.
+          // Another process may have taken the stale lock over and made a fresh one between the look and the rename.
+          // Each lock holds its own token, and a fresh one is recent: anything else is put back, by a link that fails
+          // rather than replace a lock made in the meantime.
           const got = statSync(stale);
-          if (got.ino === st.ino) unlinkSync(stale);
-          else renameSync(stale, lock);
+          if (readFileSync(stale, "utf8") !== owner || Date.now() - got.mtimeMs <= 2_000)
+            try {
+              linkSync(stale, lock);
+            } catch {}
+          unlinkSync(stale);
         }
       } catch {}
       if (i > 500) throw new Error(`could not lock ${lock}`);

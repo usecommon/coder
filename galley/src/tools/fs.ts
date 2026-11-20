@@ -290,7 +290,10 @@ function filesContaining(root: string, text: string, mayRead: (p: string) => boo
       if (!mayRead(p)) return false;
       bytes += st.size;
       if (bytes > MAX_BYTES) return false;
-      const body = readFileSync(p, "utf8");
+      // A binary or non-UTF-8 file is no match: an edit would write it back mangled.
+      const buf = readFileSync(p);
+      const body = buf.toString("utf8");
+      if (isBinary(buf) || !Buffer.from(body, "utf8").equals(buf)) return true;
       // As edit compares: loosely, except with replace_all, which matches exactly.
       if (body.includes(text) || (!exact && loose(body).includes(want))) hits.push(p);
       return true;
@@ -410,7 +413,10 @@ export const editTool: Tool = {
     const { abs, shown, scratch } = resolveTarget(ctx, input.path, true);
     await permit(ctx, "edit", shown);
     if (!existsSync(abs)) throw new ToolError(`${input.path} does not exist; use write to create it`);
-    const text = readFileSync(abs, "utf8");
+    const raw = readFileSync(abs);
+    const text = raw.toString("utf8");
+    // Written back as text, a binary or non-UTF-8 file would be mangled.
+    if (isBinary(raw) || !Buffer.from(text, "utf8").equals(raw)) throw new ToolError(`${input.path} looks like a binary (or not UTF-8) file; edit changes text files only`);
     const oldS = String(input.old_string);
     const newS = String(input.new_string);
     if (oldS === newS) throw new ToolError("old_string and new_string are identical");

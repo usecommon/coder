@@ -108,7 +108,8 @@ const diff = (ws: string, extra: string[] = []) =>
 // Folders that hold dependencies, builds and tool caches: a test run rewrites .pytest_cache, which is no change to the
 // work. A folder marked with CACHEDIR.TAG (cargo, pytest and others write one) is skipped too.
 const SKIP = new Set([".git", "node_modules", "dist", "build", "target", "obj", "_build", "dist-newstyle", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
-const MAX_FILES = 5000;
+// Each file costs one stat: a hundred thousand take a fraction of a second, and only at the end of a turn.
+const MAX_FILES = 100_000;
 
 /** A fingerprint of the workspace's files: it changes when a file is added, removed or changed. Undefined when it
  *  cannot be taken cheaply, which callers treat as "may have changed". */
@@ -131,7 +132,22 @@ export function fingerprint(ws: string): string | undefined {
     };
     const [wsReal, topReal] = [real(ws), real(status.top)];
     const below = (p: string) => relative(wsReal, join(topReal, p)).split(sep);
-    const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && below(e.slice(3)).some((part) => SKIP.has(part))));
+    // A folder marked as a cache (CACHEDIR.TAG) is skipped too. Paths are relative to the workspace.
+    const tagged = new Map<string, boolean>();
+    const inCache = (f: string) => {
+      const parts = f.replace(/\/$/, "").split("/");
+      for (let i = 1; i <= parts.length; i++) {
+        const d = parts.slice(0, i).join("/");
+        if (!tagged.has(d)) tagged.set(d, existsSync(join(ws, d, "CACHEDIR.TAG")));
+        if (tagged.get(d)) return true;
+      }
+      return false;
+    };
+    const skipped = (p: string) => {
+      const parts = below(p);
+      return parts.some((part) => SKIP.has(part)) || (parts[0] !== ".." && inCache(parts.join("/")));
+    };
+    const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && skipped(e.slice(3))));
     h.update(entries.join("\0")).update(d.stdout).update(head?.stdout ?? "no-head");
     // Untracked files are not in the diff: their size and time stand in. Status gives paths from the repository's
     // top, which may be above the workspace.
@@ -142,24 +158,13 @@ export function fingerprint(ws: string): string | undefined {
           h.update(`${entry}:${s.size}:${s.mtimeMs}`);
         } catch {}
     // Ignored files are in neither: their size and time too, outside dependency and cache folders. Past MAX_FILES of
-    // them the rest are left out: a change there is missed, but a command that changes nothing does not count as a
-    // change, which would run the check after every command.
+    // them the fingerprint cannot be taken, which counts as "may have changed".
     const ignored = git(ws, ["ls-files", "-oi", "--exclude-standard", "-z", "--", "."]);
     if (!ignored) return undefined;
     let n = 0;
-    const tagged = new Map<string, boolean>();
-    const inCache = (f: string) => {
-      const parts = f.split("/").slice(0, -1);
-      for (let i = 1; i <= parts.length; i++) {
-        const d = parts.slice(0, i).join("/");
-        if (!tagged.has(d)) tagged.set(d, existsSync(join(ws, d, "CACHEDIR.TAG")));
-        if (tagged.get(d)) return true;
-      }
-      return false;
-    };
     for (const f of ignored.stdout.split("\0")) {
       if (!f || f.split("/").some((part) => SKIP.has(part)) || inCache(f)) continue;
-      if (++n > MAX_FILES) break;
+      if (++n > MAX_FILES) return undefined;
       try {
         const st = lstatSync(join(ws, f));
         h.update(`!! ${f}:${st.size}:${st.mtimeMs}`);
@@ -180,7 +185,6 @@ export function fingerprint(ws: string): string | undefined {
       if (e.isDirectory()) {
         if (!SKIP.has(e.name) && !existsSync(join(p, "CACHEDIR.TAG")) && !walk(p)) return false;
       } else if (e.isFile()) {
-        // Past MAX_FILES the rest are left out, as above.
         if (++files > MAX_FILES) return false;
         try {
           const s = lstatSync(p);
@@ -190,8 +194,7 @@ export function fingerprint(ws: string): string | undefined {
     }
     return true;
   };
-  walk(ws);
-  return h.digest("hex");
+  return walk(ws) ? h.digest("hex") : undefined;
 }
 
 /** What git says has changed in the workspace, clipped: for a model that takes over and cannot see the attempt.

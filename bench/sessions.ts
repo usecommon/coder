@@ -174,8 +174,14 @@ export function segments(recs: SessionRecord[] | undefined): Segment[] {
  *  where the provider is. Rounds before run.ts recorded checkout and flags count only the variant
  *  named plain "galley". */
 const NEUTRAL_KEYS = new Set(["effort", "providers", "model"]);
+/** Rounds run before results recorded Galley's checkout and flags in which the arm named "galley" was itself an
+ *  experiment: the development rounds r1 to r6 (each tried a change to Galley, some kept, most not) and fv1, fv2
+ *  (Galley with --verify). See IMPROVEMENT_LOG.md, rounds 1 to 7. */
+const LEGACY_EXPERIMENTS = /^(r\d+[ab]?(-.*)?|fv\d+)$/;
+
 export function isDefaultGalley(r: TaskRun): boolean {
   if (!r.config || !r.agent.startsWith("galley")) return false;
+  if (r.galley === undefined && LEGACY_EXPERIMENTS.test(r.round)) return false;
   if (r.galley === undefined ? r.agent !== "galley" : r.galley !== "default" || (r.galleyArgs ?? []).length > 0) return false;
   if (Object.keys(r.config).some((k) => !NEUTRAL_KEYS.has(k))) return false;
   const providers = (r.config.providers ?? {}) as Record<string, Record<string, unknown>>;
@@ -199,7 +205,7 @@ export function modelOf(r: TaskRun): string {
 }
 
 export const conditionKey = (r: TaskRun, model?: string) =>
-  [r.task, r.agent, model ?? modelOf(r), (r.config?.effort as string | undefined) ?? "", (r.config?.maxSteps as number | undefined) ?? 60, r.round.replace(/-\d+$/, "")].join("|");
+  [r.task, r.agent, model ?? modelOf(r), (r.config?.effort as string | undefined) ?? "", (r.config?.maxSteps as number | undefined) ?? 60, (isCanary(r.roundDir) ? r.round : r.round.replace(/-\d+$/, ""))].join("|");
 
 /** A canary round: picked tasks, not a sample. Marked by canary.sh, or named so. */
 export const isCanary = (round: string) => /canary/i.test(basename(round)) || existsSync(join(round, "CANARY"));

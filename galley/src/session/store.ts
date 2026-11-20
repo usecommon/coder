@@ -20,7 +20,7 @@ export type SessionRecord =
    *  kind fires on runs that pass and on runs that fail can be measured later (no published study measures them). */
   | { type: "signal"; kind: string; detail: string; step: number; model: string; acted: "advice" | "handover" | "none"; at: string }
   /** One run of the check command, so that how many rounds a turn needs can be measured (bench/calibrate.ts). */
-  | { type: "check"; command: string; exitCode: number | null; passed: boolean; round: number; turn?: number; at: string }
+  | { type: "check"; command: string; exitCode: number | null; passed: boolean; round: number; turn?: number; print?: string; at: string }
   /** The start of one `galley run`: a harness that runs a task twice in one session (a retry) shows as two. */
   | { type: "run"; at: string };
 
@@ -48,10 +48,10 @@ export class Session {
   status?: string;
   /** How the last turn ended ("end_turn", "other" for a cut-off one, ...), with the status. */
   statusDetail?: string;
-  /** The status and its detail when the session was loaded: "done" and "end_turn" mean the turn before finished
-   *  cleanly, and its check ran. */
-  loadedStatus?: string;
-  loadedDetail?: string;
+  /** The last check run in this session: its command and a fingerprint of the files just after it. */
+  lastCheck?: { command: string; print?: string };
+  /** Every tool the session has called, including in parts since compacted. */
+  readonly toolsUsed = new Set<string>();
 
   private constructor(
     readonly id: string,
@@ -82,8 +82,6 @@ export class Session {
     if (!meta || meta.type !== "meta") throw new Error(`Corrupt session file ${file}`);
     const s = new Session(meta.id, file, meta);
     s.replay(records);
-    s.loadedStatus = s.status;
-    s.loadedDetail = s.statusDetail;
     return s;
   }
 
@@ -109,7 +107,10 @@ export class Session {
 
   private replay(records: SessionRecord[]) {
     for (const r of records) {
-      if (r.type === "message") this.messages.push(r.message);
+      if (r.type === "message") {
+        this.messages.push(r.message);
+        if (r.message.role === "assistant") for (const c of r.message.toolCalls) this.toolsUsed.add(c.name);
+      } else if (r.type === "check") this.lastCheck = { command: r.command, print: r.print };
       else if (r.type === "usage") {
         this.usage = addUsage(this.usage, r.usage);
         this.costUsd += r.costUsd;
@@ -148,6 +149,7 @@ export class Session {
   }
 
   addMessage(m: Message) {
+    if (m.role === "assistant") for (const c of m.toolCalls) this.toolsUsed.add(c.name);
     this.messages.push(m);
     this.write({ type: "message", message: m });
   }
@@ -182,7 +184,8 @@ export class Session {
     this.write({ type: "run", at: new Date().toISOString() });
   }
 
-  addCheck(c: { command: string; exitCode: number | null; passed: boolean; round: number; turn?: number }) {
+  addCheck(c: { command: string; exitCode: number | null; passed: boolean; round: number; turn?: number; print?: string }) {
+    this.lastCheck = { command: c.command, print: c.print };
     this.write({ type: "check", ...c, at: new Date().toISOString() });
   }
 

@@ -779,3 +779,22 @@ Also fixed from the unverified one: the edit repair gives up before reading when
 Each fix was taken out in turn and its test run: all ten tests failed without their fix. Signal replay and calibration unchanged (5,904 first attempts). Tests: 213 pass.
 
 **Eight rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19. Confirmed of those checked: 14 in every round but the fourth (12). Four of this round's confirmed findings came from the seventh round's fixes, against two the round before: the count has stopped falling, and more of it is now in code written in response to the review itself. Most of those were in when the check re-runs, which has been changed in four of the last five rounds.
+
+## Ninth council review (20 November)
+
+Fresh agents, same lenses, told this time to look hardest at the fixes of the last three rounds. 15 findings, 11 distinct; 10 held and 1 was refuted (the takeover's message staying in the history is deliberate and tested).
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **The measured default-effort row pooled experiments.** Before 19 November results did not record Galley's flags, and the development rounds (r1 to r6) and the verifier rounds (fv1, fv2) ran a changed Galley under the plain name. `galley models` showed DeepSeek V4.1 Flash at default effort as 69.0% of 901 at $0.0100 a task, as Galley at its defaults | high | Those rounds are named as experiments and left out. The row is now 68.8% of 202 at $0.0066 a task, from the two confirmation rounds of that time. The high-effort rows are unchanged: their plain arm ran beside named variants |
+| **The resume rule, again.** It skipped the check after any turn that ended cleanly, though many such turns run none: no check configured then, plan mode, a declined check | medium | Replaced, not patched. A check record now holds a fingerprint of the files it saw. A resumed session is checked once unless its files are as that check left them, or it never called a tool that can change a file. How the last turn ended no longer counts |
+| The eighth round's partial fingerprint missed a shell edit to any file past the first 5,000 | medium | Back to "may have changed" past the limit, with the limit raised to 100,000 files (one stat each, at the end of a turn) |
+| The edit repair could pick a compiled `.pyc` as the only file holding the text, and edit wrote it back mangled | medium | The repair skips binary and non-UTF-8 files, and edit refuses them |
+| Same-day canary rounds were one series in the calibration's within-task comparison, pairing runs of different versions | medium | Each canary round is its own series |
+| The stale-lock takeover told the stale lock by inode alone, which a fresh lock can reuse, and its put-back could replace a lock made meanwhile | low | Told by its token and age; put back by a link, which fails rather than replace |
+| Inside a repository, an untracked cache folder (`CACHEDIR.TAG`) still changed the fingerprint | low | Skipped like an ignored one |
+| Three tests did less than their titles: the resume test never checked "once", the planted-hook test passed for another reason, and one claimed "nothing is searched" | low | Tests for the new rule from real runs (including checked once over two turns); the hook test asserts the late repository is not used; the title says what is tested |
+
+Each fix was taken out in turn and its test run: eight of nine tests failed without their fix. The ninth, the once-per-session guard, is now redundant: after the first check the files match its record, so a second turn is not checked again anyway. Signal replay and calibration unchanged (5,904 first attempts); canary selection unchanged. Tests: 217 pass.
+
+**Nine rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15; distinct 11, the fewest yet. The resume rule had been patched in rounds 5, 7 and 8 by how the last turn ended, and each patch missed a case; this round it was rebuilt on what the files are, which no front end or stop reason can get wrong.

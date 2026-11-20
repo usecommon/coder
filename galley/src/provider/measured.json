@@ -34,28 +34,28 @@
   "deepseek/deepseek-flash": [
    {
     "effort": "default",
-    "tasks": 901,
-    "solved": 622,
+    "tasks": 202,
+    "solved": 139,
     "ci": [
-     65.9,
-     72
+     62.1,
+     74.8
     ],
-    "costPerTask": 0.01001,
+    "costPerTask": 0.00658,
     "byLanguage": {
      "python": [
-      188,
-      344
+      37,
+      68
      ],
      "go": [
-      234,
-      321
+      55,
+      76
      ],
      "rust": [
-      200,
-      236
+      47,
+      58
      ]
     },
-    "rounds": 15,
+    "rounds": 2,
     "from": "unknown",
     "to": "unknown"
    },

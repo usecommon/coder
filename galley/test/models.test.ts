@@ -1003,6 +1003,8 @@ describe("fixes from the council review", () => {
     fingerprint(agent.workspace);
     gitChanges(agent.workspace);
     expect(gitFiles(agent.workspace)).toBeUndefined();
+    // Not used at all, whatever its config: the repository was not there when the agent started.
+    expect(isGitRepo(agent.workspace)).toBe(false);
     expect(existsSync(flag)).toBe(false);
   });
 
@@ -1451,20 +1453,6 @@ describe("fixes from the fifth council review", () => {
     expect(mock.requests).toHaveLength(2);
   });
 
-  test("a resumed session checks once, as a cut-off run may have left edits unchecked", async () => {
-    const ws = tempDir();
-    writeFileSync(join(ws, "out.txt"), "wrong\n");
-    const session = Session.create(ws, "mock/test");
-    session.addMessage({ role: "user", content: "fix out.txt" });
-    session.addMessage({ role: "assistant", content: "Working on it.", toolCalls: [] });
-    const mock = new MockProvider([{ text: "Finished." }, { text: "Still finished." }]);
-    registerProvider(mock);
-    const events: AgentEvent[] = [];
-    const agent = new Agent({ cfg: testConfig({ check: "grep -q right out.txt", sandbox: "off" }), workspace: ws, session, approver: async () => "once", onEvent: (e) => events.push(e) });
-    await agent.send("finish up");
-    expect(events.some((e) => e.type === "notice" && (e as { text: string }).text.startsWith("Check failed"))).toBe(true);
-  });
-
   test("the same command failing in different folders is not one repeated check", () => {
     const w = new Watch(60);
     const call = (path: string, i: number): ToolCall => ({ id: `c${i}`, name: "bash", input: { command: "npm test", path }, rawInput: JSON.stringify({ command: "npm test", path }) });
@@ -1739,7 +1727,7 @@ describe("seventh review", () => {
     expect(fingerprint(ws)).not.toBe(before);
   });
 
-  test("an edit that a path would not make valid is not mended, and nothing is searched", async () => {
+  test("an edit that a path would not make valid is not mended", async () => {
     const call: MockReply = { toolCalls: [{ name: "edit", input: { file_path: "a.txt", old_string: "version = 1", new_string: "version = 2" } }] };
     const { ws, mock, agent } = setup([call, { text: "Done." }], { sandbox: "off" });
     writeFileSync(join(ws, "a.txt"), "version = 1\n");
@@ -1754,34 +1742,6 @@ describe("eighth review", () => {
   const check = "grep -q right out.txt";
   const writeBroken: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
   const checkNotices = (n: string[]) => n.filter((x) => x.startsWith("Check"));
-  const resume = async (status: [string, string?] | undefined, cfg: Partial<Config> = {}) => {
-    const ws = tempDir();
-    writeFileSync(join(ws, "out.txt"), "wrong\n");
-    const old = Session.create(ws, "mock/test");
-    old.addMessage({ role: "user", content: "fix out.txt" });
-    old.addMessage({ role: "assistant", content: "Working on it.", toolCalls: [] });
-    if (status) old.setStatus(status[0] as "done", status[1]);
-    const mock = new MockProvider([{ text: "Nothing more to do." }, { text: "Still nothing." }]);
-    registerProvider(mock);
-    const events: AgentEvent[] = [];
-    await new Agent({ cfg: testConfig({ check, sandbox: "off", ...cfg }), workspace: ws, session: Session.load(ws, old.id), approver: async () => "once", onEvent: (e) => events.push(e) }).send("continue");
-    return events.filter((e) => e.type === "notice").map((e) => (e as { text: string }).text).filter((t) => t.startsWith("Check"));
-  };
-
-  test("a resumed session is checked once unless its last turn ended cleanly", async () => {
-    expect(await resume(["done", "end_turn"])).toEqual([]);
-    expect((await resume(["done", "other"]))[0]).toStartWith("Check failed");
-    expect((await resume(["done", "tool_use"]))[0]).toStartWith("Check failed");
-    expect((await resume(["running"]))[0]).toStartWith("Check failed");
-  });
-
-  test("every front end records how a turn ended, so a resumed REPL session is not checked for nothing", async () => {
-    const { ws, agent } = setup([{ text: "It is a file." }], { check, sandbox: "off" });
-    await agent.send("what is out.txt?");
-    const loaded = Session.load(ws, agent.session.id);
-    expect([loaded.loadedStatus, loaded.loadedDetail]).toEqual(["done", "end_turn"]);
-  });
-
   test("a second write to a file already changed this turn runs the check again, also in a folder the fingerprint skips", async () => {
     const c = "grep -q right build/x.txt";
     const w = (content: string): MockReply => ({ toolCalls: [{ name: "write", input: { path: "build/x.txt", content } }] });
@@ -1790,7 +1750,7 @@ describe("eighth review", () => {
     expect(checkNotices(notices())).toEqual([`Check failed (1 of 3): ${c}`, `Check passed: ${c}`]);
   });
 
-  test("a workspace with more files than the fingerprint takes is still measured: a command that changes nothing is no change", async () => {
+  test("a workspace of a few thousand files is fingerprinted whole: a command that changes nothing is no change", async () => {
     const ws = tempDir();
     for (let i = 0; i < 5100; i++) writeFileSync(join(ws, `f${String(i).padStart(5, "0")}.txt`), "x");
     const { fingerprint } = await import("../src/agent/workspace-state.ts");
@@ -1836,5 +1796,79 @@ describe("eighth review", () => {
     expect(asked).toEqual([]);
     // The same call without the stray key is searched, and mended.
     expect(editTool.repair!({ old_string: "version = 1", new_string: "version = 2" }, ctx)?.input.path).toBe("a.txt");
+  });
+});
+
+describe("ninth review", () => {
+  const check = "grep -q right out.txt";
+  const write = (content: string): MockReply => ({ toolCalls: [{ name: "write", input: { path: "out.txt", content } }] });
+  const look: MockReply = { toolCalls: [{ name: "read", input: { path: "out.txt" } }] };
+  /** A first run, then the session resumed with the check: what the resumed run says about the check. */
+  const resumed = async (first: MockReply[], firstCfg: Partial<Config>, between?: (ws: string) => void, sends = 1) => {
+    const one = setup(first, { sandbox: "off", ...firstCfg });
+    await one.agent.send("write out.txt");
+    between?.(one.ws);
+    const mock = new MockProvider([look, { text: "All finished." }, { text: "Nothing else." }]);
+    registerProvider(mock);
+    const events: AgentEvent[] = [];
+    const two = new Agent({ cfg: testConfig({ check, sandbox: "off" }), workspace: one.ws, session: Session.load(one.ws, one.agent.session.id), approver: async () => "once", onEvent: (e) => events.push(e) });
+    await two.send("continue");
+    for (let i = 1; i < sends; i++) await two.send("anything else?");
+    return events.filter((e) => e.type === "notice").map((e) => (e as { text: string }).text).filter((t) => t.startsWith("Check"));
+  };
+
+  test("edits made with no check configured are checked when the session is resumed with one", async () => {
+    expect(await resumed([write("wrong"), { text: "Done." }], {})).toEqual([`Check failed (1 of 3): ${check}`]);
+  });
+
+  test("a resumed session is checked once, not on every turn", async () => {
+    expect(await resumed([write("wrong"), { text: "Done." }], {}, undefined, 2)).toEqual([`Check failed (1 of 3): ${check}`]);
+  });
+
+  test("files as the last check left them are not checked again on resume; files changed since are", async () => {
+    expect(await resumed([write("right"), { text: "Done." }], { check })).toEqual([]);
+    expect(await resumed([write("right"), { text: "Done." }], { check }, (ws) => writeFileSync(join(ws, "out.txt"), "wrong\n"))).toEqual([`Check failed (1 of 3): ${check}`]);
+  });
+
+  test("a session that never called a tool that can change files is not checked on resume", async () => {
+    expect(await resumed([look, { text: "It says nothing yet." }], {}, (ws) => writeFileSync(join(ws, "out.txt"), "wrong\n"))).toEqual([]);
+  });
+
+  test("a check record names the files it saw, and is read back", async () => {
+    const { ws, agent } = setup([write("right"), { text: "Done." }], { check, sandbox: "off" });
+    await agent.send("write out.txt");
+    const loaded = Session.load(ws, agent.session.id);
+    expect(loaded.lastCheck?.command).toBe(check);
+    expect(loaded.lastCheck?.print).toBeString();
+    expect(loaded.toolsUsed.has("write")).toBe(true);
+  });
+
+  test("edit repair never picks a binary file, and edit refuses one", async () => {
+    const call: MockReply = { toolCalls: [{ name: "edit", input: { old_string: "MAGIC_CONSTANT_1", new_string: "MAGIC_CONSTANT_2" } }] };
+    const { ws, mock, agent } = setup([call, { toolCalls: [{ name: "edit", input: { path: "blob.pyc", old_string: "MAGIC_CONSTANT_1", new_string: "X" } }] }, { text: "Done." }], { sandbox: "off" });
+    const bin = Buffer.concat([Buffer.from([0x00, 0xff, 0xfe]), Buffer.from("MAGIC_CONSTANT_1"), Buffer.from([0x80, 0x00])]);
+    writeFileSync(join(ws, "blob.pyc"), bin);
+    await agent.send("rename the constant");
+    const first = (mock.requests[1]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(first.content).toContain("input.path is required");
+    const second = (mock.requests[2]!.messages.at(-1) as Extract<Message, { role: "tool" }>).results[0]!;
+    expect(second.content).toContain("binary");
+    expect(readFileSync(join(ws, "blob.pyc")).equals(bin)).toBe(true);
+  });
+
+  test("in a repository, an untracked folder marked as a cache is not a change", async () => {
+    const ws = tempDir();
+    const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+    sh("init", "-q");
+    writeFileSync(join(ws, "a.py"), "x");
+    sh("add", "a.py");
+    sh("commit", "-qm", "x");
+    mkdirSync(join(ws, "toolcache"));
+    writeFileSync(join(ws, "toolcache", "CACHEDIR.TAG"), "Signature: 8a477f597d28d172789f06886806bc55");
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, "toolcache", "blob"), "data");
+    expect(fingerprint(ws)).toBe(before);
   });
 });

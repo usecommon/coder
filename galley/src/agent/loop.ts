@@ -226,10 +226,15 @@ export class Agent {
     const checking = !!cfg.check && o.check !== false && !this.o.subagent && this.mode !== "plan";
     const checkRounds = Math.max(0, cfg.checkRounds ?? 3);
     if (cfg.check && !this.o.subagent && this.checkedPrint === undefined) {
-      this.checkedPrint = fingerprint(this.workspace) ?? "";
-      // A session resumed after a turn that was cut off (killed, stopped, out of steps) may hold edits that were
-      // never checked: check once. One whose last turn finished cleanly was checked then.
-      if (turnStart > 0 && !(this.session.loadedStatus === "done" && this.session.loadedDetail === "end_turn")) this.unchecked = true;
+      const now = fingerprint(this.workspace);
+      this.checkedPrint = now ?? "";
+      // A resumed session is checked once, unless its files are as this check last left them, or it never called a
+      // tool that can change a file. How its last turn ended says nothing either way: a turn may end cleanly without
+      // a check (none configured then, plan mode, a declined one), and edits may follow the last check.
+      const last = this.session.lastCheck;
+      const asChecked = last?.command === cfg.check && last.print !== undefined && now !== undefined && last.print === now;
+      const wrote = [...this.session.toolsUsed].some((n) => !this.tools.find((t) => t.spec.name === n)?.readOnly);
+      if (turnStart > 0 && !asChecked && wrote) this.unchecked = true;
     }
     let checkFails = 0;
     let checkReport: string | undefined;
@@ -303,7 +308,7 @@ export class Agent {
             else {
               checkReport = `$ ${cfg.check}\n${r.output}\n[exit code ${r.exitCode ?? "none"}]`;
               const passed = r.exitCode === 0 && !r.timedOut;
-              this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1, turn: this.turns });
+              this.session.addCheck({ command: cfg.check!, exitCode: r.exitCode, passed, round: checkFails + 1, turn: this.turns, print: this.checkedPrint || undefined });
               if (passed && checkFails > 0 && cfg.lessons && lastFailure !== undefined) await this.learn(cfg.check!, lastFailure, signal);
               if (passed) {
                 this.emit({ type: "notice", level: "info", text: `Check passed: ${cfg.check}` });
