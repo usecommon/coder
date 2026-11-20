@@ -47,7 +47,8 @@ const REPO_GALLEY = join(import.meta.dir, "..", "galley", "src", "cli.ts");
 // not Galley as it ships (bench/sessions.ts, isDefaultGalley).
 const gitOut = (args: string[]) => Bun.spawnSync(["git", "-C", join(import.meta.dir, ".."), ...args]).stdout.toString().trim();
 const GALLEY_COMMIT = gitOut(["rev-parse", "HEAD"]) || undefined;
-const GALLEY_DIRTY = gitOut(["status", "--porcelain", "--", "galley/src"]) !== "";
+// measured.json is left out: the bench rewrites it after every round (profiles.ts --write), and it changes no code.
+const GALLEY_DIRTY = gitOut(["status", "--porcelain", "--", "galley/src", ":(exclude)galley/src/provider/measured.json"]) !== "";
 const GALLEY = args.galley ?? REPO_GALLEY;
 const OPENCODE = args.opencode ?? process.env.OPENCODE_BIN!;
 const OC_CACHE_SEED = args["oc-cache"] ?? process.env.OC_CACHE_SEED;

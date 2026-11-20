@@ -6,6 +6,7 @@
    {
     "effort": "high",
     "tasks": 303,
+    "taskCount": 101,
     "solved": 265,
     "ci": [
      80.9,
@@ -35,6 +36,7 @@
    {
     "effort": "default",
     "tasks": 202,
+    "taskCount": 101,
     "solved": 139,
     "ci": [
      60.9,
@@ -62,6 +64,7 @@
    {
     "effort": "high",
     "tasks": 2717,
+    "taskCount": 804,
     "solved": 1659,
     "ci": [
      57.8,

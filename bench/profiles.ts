@@ -18,7 +18,10 @@ const SKIP_ROUNDS = /invalid|aborted|smoke|dry|dump|selftest|probe|try|fake|cana
 export interface Measured {
   /** Reasoning effort, or "default" when the run left it to Galley's default of the time. */
   effort: string;
+  /** Task-runs; the rounds run the same tasks again. */
   tasks: number;
+  /** Distinct tasks among them. */
+  taskCount?: number;
   solved: number;
   /** 95% interval for the share solved, in percent. */
   ci: [number, number];
@@ -69,7 +72,7 @@ export function measure(dirs: string[]): Record<string, Measured[]> {
     // Over tasks, not task-runs: the rounds run the same tasks again, and a task mostly passes every time or fails
     // every time, so runs are far from independent.
     const [lo, hi] = taskInterval([...a.byTask.values()]);
-    (out[ref] ??= []).push({ effort, tasks: a.tasks, solved: a.solved, ci: [+(lo * 100).toFixed(1), +(hi * 100).toFixed(1)], costPerTask: Number.isFinite(a.cost) ? +(a.cost / a.tasks).toFixed(5) : null, byLanguage: a.langs, rounds: a.rounds.size, from: day(a.from), to: day(a.to) });
+    (out[ref] ??= []).push({ effort, tasks: a.tasks, taskCount: a.byTask.size, solved: a.solved, ci: [+(lo * 100).toFixed(1), +(hi * 100).toFixed(1)], costPerTask: Number.isFinite(a.cost) ? +(a.cost / a.tasks).toFixed(5) : null, byLanguage: a.langs, rounds: a.rounds.size, from: day(a.from), to: day(a.to) });
   }
   return out;
 }
@@ -87,7 +90,7 @@ if (import.meta.main) {
   }
   const m = measure(dirs);
   for (const [ref, rows] of Object.entries(m))
-    for (const r of rows) console.log(`${ref.padEnd(32)} effort ${r.effort.padEnd(8)} ${((100 * r.solved) / r.tasks).toFixed(1).padStart(5)}% of ${String(r.tasks).padStart(5)} tasks (${r.ci[0]} to ${r.ci[1]}), ${r.costPerTask === null ? "cost unknown" : `$${r.costPerTask.toFixed(4)} a task`}, ${r.rounds} rounds, ${r.from} to ${r.to}`);
+    for (const r of rows) console.log(`${ref.padEnd(32)} effort ${r.effort.padEnd(8)} ${((100 * r.solved) / r.tasks).toFixed(1).padStart(5)}% of ${String(r.tasks).padStart(5)} runs on ${String(r.taskCount).padStart(4)} tasks (${r.ci[0]} to ${r.ci[1]}), ${r.costPerTask === null ? "cost unknown" : `$${r.costPerTask.toFixed(4)} a run`}, ${r.rounds} rounds, ${r.from} to ${r.to}`);
   if (write) {
     const file = join(import.meta.dir, "..", "galley", "src", "provider", "measured.json");
     if (!Object.keys(m).length) {

@@ -78,7 +78,7 @@ function ownLines(all: ReturnType<typeof profiles>): string[] {
   const out = ["", `Measured in Galley's own benchmark (${OWN.generated}): small tasks with hidden tests, first attempt, Galley at its defaults.`];
   for (const { ref, m } of rows) {
     const langs = Object.entries(m.byLanguage).sort((a, b) => b[1][1] - a[1][1]).slice(0, 4).map(([l, [k, n]]) => `${l} ${Math.round((100 * k) / n)}%`).join(", ");
-    out.push(`  ${ref}, effort ${m.effort}: ${((100 * m.solved) / m.tasks).toFixed(1)}% of ${m.tasks} (${m.ci[0]} to ${m.ci[1]}), ${m.costPerTask === null ? "cost unknown" : `${fmtUsd(m.costPerTask)} a task`}; ${langs}`);
+    out.push(`  ${ref}, effort ${m.effort}: ${((100 * m.solved) / m.tasks).toFixed(1)}% of ${m.tasks} runs${m.taskCount ? ` on ${m.taskCount} tasks` : ""} (${m.ci[0]} to ${m.ci[1]}), ${m.costPerTask === null ? "cost unknown" : `${fmtUsd(m.costPerTask)} a run`}; ${langs}`);
   }
   out.push("  Rows measured on different task sets are not comparable with each other, and none with the hard-task column.");
   return out;

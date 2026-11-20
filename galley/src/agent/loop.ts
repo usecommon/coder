@@ -233,8 +233,13 @@ export class Agent {
       // a check (none configured then, plan mode, a declined one), and edits may follow the last check.
       const last = this.session.lastCheck;
       const asChecked = last?.command === cfg.check && last.print !== undefined && now !== undefined && last.print === now;
+      // A tool that can change files, among those the session used: a name no tool has is none.
       const writes = (names: Set<string>, files = false) =>
-        [...names].some((n) => !(files && (n === "bash" || n.startsWith("mcp_"))) && !this.tools.find((t) => t.spec.name === n)?.readOnly);
+        [...names].some((n) => {
+          if (files && (n === "bash" || n.startsWith("mcp_"))) return false;
+          const t = this.tools.find((t) => t.spec.name === n);
+          return t !== undefined && !t.readOnly;
+        });
       // A file tool's write since that check is a change even where the fingerprint does not look (build folders).
       if (turnStart > 0 && writes(this.session.toolsUsed) && (!asChecked || writes(this.session.toolsSinceCheck, true))) this.unchecked = true;
     }

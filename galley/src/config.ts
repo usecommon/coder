@@ -142,7 +142,9 @@ export const DEFAULT_CONFIG: Config = {
 function readJson(path: string): Partial<Config> {
   if (!existsSync(path)) return {};
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    // "__proto__" and its kin are dropped at every level: merged in, they would set the prototype of the config, and
+    // with it any setting, past the check on what an untrusted file may set.
+    return JSON.parse(readFileSync(path, "utf8"), (k, v) => (k === "__proto__" || k === "constructor" || k === "prototype" ? undefined : v));
   } catch (err) {
     throw new Error(`Invalid JSON in ${path}: ${(err as Error).message}`);
   }
@@ -202,7 +204,7 @@ export function loadConfig(cwd: string, overrides: Partial<Config> = {}, ignored
   const cfg: Config = structuredClone(DEFAULT_CONFIG);
   for (const l of layers) {
     for (const [k, v] of Object.entries(l)) {
-      if (v === undefined) continue;
+      if (v === undefined || k === "__proto__" || k === "constructor" || k === "prototype") continue;
       const key = k as keyof Config;
       if (["providers", "permission", "mcp", "pricing", "models"].includes(k)) Object.assign(cfg[key] as object, v);
       else (cfg as unknown as Record<string, unknown>)[key] = v;

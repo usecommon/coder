@@ -12,7 +12,7 @@ import { Agent, checkFailedMessage } from "../src/agent/loop.ts";
 import { UndoLog } from "../src/tools/undo.ts";
 import { editTool } from "../src/tools/fs.ts";
 import { loadConfig, trustProjectConfig } from "../src/config.ts";
-import { confine } from "../src/safety/paths.ts";
+import { confine, OutsideError } from "../src/safety/paths.ts";
 import { LIMITS, Watch } from "../src/agent/signals.ts";
 import { parsePlan, runSteps } from "../src/agent/steps.ts";
 import { parseArgs } from "../src/args.ts";
@@ -823,7 +823,7 @@ describe("measured profiles", () => {
     // Each measured row is listed with its share, sample, interval and cost, matching the file.
     for (const m of own!) {
       const share = ((100 * m.solved) / m.tasks).toFixed(1);
-      expect(report).toContain(`${FLASH}, effort ${m.effort}: ${share}% of ${m.tasks} (${m.ci[0]} to ${m.ci[1]})`);
+      expect(report).toContain(`${FLASH}, effort ${m.effort}: ${share}% of ${m.tasks} runs on ${m.taskCount} tasks (${m.ci[0]} to ${m.ci[1]})`);
     }
     expect(report).not.toContain("NaN");
   });
@@ -1255,7 +1255,7 @@ describe("fixes from the third council review", () => {
   test("a measured row whose cost is unknown is listed as such", () => {
     const own = [{ effort: "high", tasks: 10, solved: 5, ci: [23.7, 76.3] as [number, number], costPerTask: null, byLanguage: { go: [5, 10] as [number, number] }, rounds: 1, from: "2026-11-01", to: "2026-11-01" }];
     const report = modelsReport(testConfig({ models: { "x/unpriced": { name: "X", own } } }), {});
-    expect(report).toContain("x/unpriced, effort high: 50.0% of 10 (23.7 to 76.3), cost unknown");
+    expect(report).toContain("x/unpriced, effort high: 50.0% of 10 runs (23.7 to 76.3), cost unknown");
   });
 });
 
@@ -1653,7 +1653,7 @@ describe("seventh review", () => {
     const score = (n: number) => ({ name: "m", agentic: { score: n, ci: 3, harness: "x", effort: "high", date: "2026-11-14" } });
     const weak = setup([stuck, stuck, stuck, { text: "Still me." }], { escalateModel: "up72/weak", models: { "mock/test": score(40), "up72/weak": score(7) } });
     await weak.agent.send("read the file");
-    expect(weak.agent.session.signals().map((r) => r.acted)).not.toContain("handover");
+    expect(weak.agent.session.signals().map((r) => [r.kind, r.model, r.acted])).toEqual([["same-call", "mock/test", "none"]]);
   });
 
   test("after a takeover the session's size counts the part the stronger model did not read", async () => {
@@ -2042,7 +2042,7 @@ describe("eleventh review", () => {
       expect(trustProjectConfig(b)).toBeUndefined();
     }));
 
-  test("a session file cut off in its last line is repaired, so later records stay readable", () => {
+  test("a session file cut off in its last line is repaired by the next write, so later records stay readable", () => {
     const ws = tempDir();
     const s = Session.create(ws, "mock/test");
     s.addMessage({ role: "user", content: "hello" });
@@ -2101,5 +2101,129 @@ describe("eleventh review", () => {
     expect(fingerprint(ws)).toBe(before);
     writeFileSync(join(ws, "local.cfg"), "bb");
     expect(fingerprint(ws)).not.toBe(before);
+  });
+});
+
+describe("twelfth review", () => {
+  test("loading a session never changes its file; the next write repairs a cut-off line", () => {
+    const ws = tempDir();
+    const s = Session.create(ws, "mock/test");
+    s.addMessage({ role: "user", content: "hello" });
+    appendFileSync(s.file, '{"type":"message","message":{"role":"assis');
+    const before = readFileSync(s.file, "utf8");
+    Session.load(ws, s.id);
+    Session.list(ws);
+    expect(readFileSync(s.file, "utf8")).toBe(before);
+    const again = Session.load(ws, s.id);
+    again.addMessage({ role: "user", content: "again" });
+    expect(Session.load(ws, s.id).messages).toHaveLength(2);
+  });
+
+  test("a __proto__ key in galley.json sets nothing", () => {
+    const keep = { data: process.env.GALLEY_DATA_DIR, config: process.env.XDG_CONFIG_HOME };
+    process.env.GALLEY_DATA_DIR = tempDir();
+    process.env.XDG_CONFIG_HOME = tempDir();
+    try {
+      const ws = tempDir();
+      writeFileSync(join(ws, "galley.json"), '{"__proto__": {"check": "echo pwned", "lessons": true}, "models": {"__proto__": {"polluted": 1}}, "maxSteps": 9}');
+      const cfg = loadConfig(ws);
+      expect(cfg.check).toBeUndefined();
+      expect(cfg.lessons).toBeUndefined();
+      expect(cfg.maxSteps).toBe(9);
+      expect(Object.getPrototypeOf(cfg)).toBe(Object.prototype);
+      // Nested too: models are merged key by key.
+      expect(Object.getPrototypeOf(cfg.models)).toBe(Object.prototype);
+    } finally {
+      for (const [k, v] of [["GALLEY_DATA_DIR", keep.data], ["XDG_CONFIG_HOME", keep.config]] as const)
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+    }
+  });
+
+  test("a new untracked source file in a folder named build is a change; a test run's coverage file is not", async () => {
+    const ws = tempDir();
+    const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+    sh("init", "-q");
+    writeFileSync(join(ws, "main.go"), "package main\n");
+    sh("add", "main.go");
+    sh("commit", "-qm", "x");
+    const { recordGit, fingerprint } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, ".coverage"), "run 1");
+    expect(fingerprint(ws)).toBe(before);
+    mkdirSync(join(ws, "internal", "build"), { recursive: true });
+    writeFileSync(join(ws, "internal", "build", "version.go"), "package build\n");
+    expect(fingerprint(ws)).not.toBe(before);
+  });
+
+  test("without git too, a test run's coverage file is not a change", async () => {
+    const ws = tempDir();
+    writeFileSync(join(ws, "a.py"), "x");
+    const { fingerprint } = await import("../src/agent/workspace-state.ts");
+    const before = fingerprint(ws);
+    writeFileSync(join(ws, ".coverage"), "run 2");
+    expect(fingerprint(ws)).toBe(before);
+  });
+
+  test("only a call that succeeded counts as a tool the session used", () => {
+    const ws = tempDir();
+    const s = Session.create(ws, "mock/test");
+    s.addMessage({ role: "assistant", content: "", toolCalls: [{ id: "a", name: "write", input: {}, rawInput: "{}" }, { id: "b", name: "apply_patch", input: {}, rawInput: "{}" }, { id: "c", name: "read", input: {}, rawInput: "{}" }] });
+    s.addMessage({ role: "tool", results: [{ callId: "a", name: "write", isError: true, content: "refused" }, { callId: "b", name: "apply_patch", isError: true, content: "no such tool" }, { callId: "c", name: "read", content: "x" }] });
+    expect([...Session.load(ws, s.id).toolsUsed]).toEqual(["read"]);
+  });
+
+  test("a /tmp path that is a dangling link on the host is still outside the workspace, so it can go to the scratch folder", () => {
+    const ws = tempDir();
+    const name = `galley-dangling-${Math.random().toString(36).slice(2)}`;
+    symlinkSync(join(tempDir(), "missing"), join("/tmp", name));
+    try {
+      expect(() => confine(ws, `/tmp/${name}`, { write: true })).toThrow(OutsideError);
+    } finally {
+      Bun.spawnSync(["rm", "-f", join("/tmp", name)]);
+    }
+  });
+
+  test("the advisor's review is not asked for when no step is left to answer it", async () => {
+    const adv = second("advlast12", () => ({ text: "out.txt is wrong." }));
+    const write: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+    const { agent } = setup([write, { text: "Done." }], { sandbox: "off", maxSteps: 2, advisor: { model: "advlast12/strong", review: true, every: 0, onStuck: false } });
+    await agent.send("write out.txt");
+    expect(adv.requests).toHaveLength(0);
+    expect(agent.session.messages.at(-1)!.role).toBe("assistant");
+  });
+
+  const repo = () => {
+    const ws = tempDir();
+    const sh = (...a: string[]) => Bun.spawnSync(["git", "-C", ws, "-c", "user.email=t@t", "-c", "user.name=t", ...a]);
+    sh("init", "-q");
+    mkdirSync(join(ws, "src"));
+    writeFileSync(join(ws, "src", "add.py"), "def add(a, b):\n    return a - b\n");
+    writeFileSync(join(ws, ".gitignore"), "node_modules/\n");
+    sh("add", ".");
+    sh("commit", "-qm", "x");
+    mkdirSync(join(ws, "node_modules", "pkg"), { recursive: true });
+    return ws;
+  };
+  const repairCtx = (ws: string, asked: string[]) =>
+    ({ workspace: ws, sandbox: "none", cfg: { sandbox: "off" }, gate: { allows: (r: { tool: string; subject: string }) => (asked.push(`${r.tool} ${r.subject}`), true) } }) as unknown as Parameters<NonNullable<Tool["repair"]>>[1];
+
+  test("edit repair works in a repository with a small ignored dependency folder", async () => {
+    const ws = repo();
+    writeFileSync(join(ws, "node_modules", "pkg", "index.js"), "module.exports = 1;\n");
+    const { recordGit } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    expect(editTool.repair!({ old_string: "    return a - b", new_string: "    return a + b" }, repairCtx(ws, []))?.input.path).toBe("src/add.py");
+  });
+
+  test("edit repair gives up on an ignored folder past its limit without reading a file", async () => {
+    const ws = repo();
+    for (let i = 0; i < 5100; i++) writeFileSync(join(ws, "node_modules", "pkg", `f${i}.js`), "x");
+    const { recordGit } = await import("../src/agent/workspace-state.ts");
+    recordGit(ws);
+    const asked: string[] = [];
+    expect(editTool.repair!({ old_string: "    return a - b", new_string: "    return a + b" }, repairCtx(ws, asked))).toBeUndefined();
+    expect(asked.filter((a) => a.startsWith("read "))).toEqual([]);
   });
 });

@@ -31,6 +31,8 @@ export interface OwnMeasure {
   /** Null when the cost could not be priced. */
   costPerTask: number | null;
   byLanguage: Record<string, [number, number]>;
+  /** Distinct tasks among the runs counted in `tasks`. */
+  taskCount?: number;
   rounds: number;
   from: string;
   to: string;

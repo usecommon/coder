@@ -31,7 +31,14 @@ export function confine(root: string, p: string, opts: { write?: boolean } = {})
   if (typeof p !== "string" || !p) throw new PathError("path is required");
   const realRoot = realpathSync(root);
   const abs = resolve(realRoot, p);
-  const real = realish(abs);
+  let real: string;
+  try {
+    real = realish(abs);
+  } catch (e) {
+    // A path that is outside even before links are followed is outside, whatever it is.
+    if (e instanceof PathError && !inside(realRoot, abs)) throw new OutsideError(`${p} is outside the workspace (${realRoot})`);
+    throw e;
+  }
   if (!inside(realRoot, real)) throw new OutsideError(`${p} is outside the workspace (${realRoot})`);
   if (opts.write) {
     const rel = relative(realRoot, real).split(sep);

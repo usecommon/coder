@@ -843,3 +843,23 @@ Fresh agents, same lenses. 16 findings, 15 distinct; 13 held and 1 was refuted (
 Each fix was taken out in turn and its test run: all of them failed without their fix (the two trust guards together, as each alone is enough). Verdict on the fourth confirmation unchanged. Tests: 232 pass.
 
 **Eleven rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22, 16. Three of this round's confirmed findings were in the tenth round's fixes, one of them high. A security fix written quickly to close a hole was the one that had a hole.
+
+## Twelfth council review (20 November)
+
+Fresh agents, same lenses; cut off by a usage limit and resumed. 14 findings, 11 distinct; all 11 held. None high. Four were in the eleventh round's fixes.
+
+| Finding | Severity | Fix |
+|---|---|---|
+| **Rounds after the first counted as experiments (the eleventh round's fix).** Each round rewrites `galley/src/provider/measured.json`, so the next round saw uncommitted changes under `galley/src` and every Galley run in it was left out of the profiles and the canary history, for good | medium | That file is left out of the check for changes |
+| **Loading a session could delete records (the eleventh round's fix).** `galley sessions` and `galley show` cut a "broken" last line, which may be a record another process is still writing: 16 of 300 large records were lost in a reproduction | medium | Loading only reads. The process that writes next repairs the line before its first write |
+| **An untrusted `galley.json` could set the check and lessons through a `__proto__` key,** which passed the trust filter and became the config's prototype | medium | `__proto__`, `constructor` and `prototype` are dropped when the file is parsed, at every level, and skipped in the merge |
+| A new untracked source file in a folder named `build`, `vendor`, `dist`, `target`, `obj` or `coverage` (`internal/build/version.go`) was no change, so the check was skipped (the eleventh round's fix, and the sixth's) | medium | For files git reports as untracked and not ignored, only folders that never hold source (dependencies, caches) are skipped |
+| Files a test run rewrites (`.coverage`, `.phpunit.result.cache`, `lcov.info`) counted as a change, so a failing check ran again and was fed back though nothing changed | medium | Left out of the fingerprint |
+| On resume, a refused call, or a call to a tool that does not exist, counted as a file write | low | Only a call that succeeded counts, and only to a tool that can write |
+| A `/tmp` path that is a dangling link on the host no longer fell back to the sandbox's scratch folder (the tenth round's fix) | low | A path outside the workspace before links are followed is outside, whatever it is |
+| The profiles called task-runs "tasks" | low | Rows say runs and distinct tasks: DeepSeek V4.1 Flash at high effort is 2,717 runs on 804 tasks |
+| Three tests missing or too weak: the advisor review on the last step, the edit repair's sizing before reading, the refused handover's signal | low | Added or tightened |
+
+Each fix was taken out in turn and its test run: all of them failed without their fix (the `__proto__` test once it also covered nested settings). Tests: 241 pass.
+
+**Twelve rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22, 16, 14; distinct 11, and for the first time since the third round none high.

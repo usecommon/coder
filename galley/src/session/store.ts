@@ -75,20 +75,8 @@ export class Session {
     const match = existsSync(dir) ? readdirSync(dir).filter((f) => f.startsWith(id) && f.endsWith(".jsonl")) : [];
     if (match.length !== 1) throw new Error(match.length ? `"${id}" matches ${match.length} sessions` : `No session "${id}" in this workspace`);
     const file = join(dir, match[0]!);
+    // Loading only reads: `galley sessions` and `galley show` load sessions another process may be writing.
     const text = readFileSync(file, "utf8");
-    // A last line cut off when the process was killed mid-write is removed from the file, so that the next record
-    // is not glued onto it.
-    if (text && !text.endsWith("\n")) {
-      const tail = text.slice(text.lastIndexOf("\n") + 1);
-      let whole = true;
-      try {
-        JSON.parse(tail);
-      } catch {
-        whole = false;
-      }
-      if (whole) appendFileSync(file, "\n");
-      else truncateSync(file, Buffer.byteLength(text.slice(0, text.lastIndexOf("\n") + 1)));
-    }
     const records = text
       .split("\n")
       .filter(Boolean)
@@ -132,11 +120,7 @@ export class Session {
     for (const r of records) {
       if (r.type === "message") {
         this.messages.push(r.message);
-        if (r.message.role === "assistant")
-          for (const c of r.message.toolCalls) {
-            this.toolsUsed.add(c.name);
-            this.toolsSinceCheck.add(c.name);
-          }
+        this.noteTools(r.message);
       } else if (r.type === "check") {
         this.lastCheck = { command: r.command, print: r.print };
         this.toolsSinceCheck.clear();
@@ -154,7 +138,40 @@ export class Session {
     }
   }
 
+  private repaired = false;
+  private pendingCalls = new Map<string, string>();
+
+  /** A tool counts as used once its result shows the call succeeded: a refused or failed call changed nothing. */
+  private noteTools(m: Message) {
+    if (m.role === "assistant") for (const c of m.toolCalls) this.pendingCalls.set(c.id, c.name);
+    else if (m.role === "tool")
+      for (const r of m.results) {
+        const name = this.pendingCalls.get(r.callId) ?? r.name;
+        this.pendingCalls.delete(r.callId);
+        if (r.isError) continue;
+        this.toolsUsed.add(name);
+        this.toolsSinceCheck.add(name);
+      }
+  }
+
   private write(r: SessionRecord) {
+    // The first write of this process: a last line cut off when an earlier process was killed mid-write is removed,
+    // so that this record is not glued onto it. Only a process that writes does this, never one that only reads.
+    if (!this.repaired) {
+      this.repaired = true;
+      const text = existsSync(this.file) ? readFileSync(this.file, "utf8") : "";
+      if (text && !text.endsWith("\n")) {
+        const tail = text.slice(text.lastIndexOf("\n") + 1);
+        let whole = true;
+        try {
+          JSON.parse(tail);
+        } catch {
+          whole = false;
+        }
+        if (whole) appendFileSync(this.file, "\n");
+        else truncateSync(this.file, Buffer.byteLength(text.slice(0, text.lastIndexOf("\n") + 1)));
+      }
+    }
     appendFileSync(this.file, JSON.stringify(r) + "\n");
   }
 
@@ -179,11 +196,7 @@ export class Session {
   }
 
   addMessage(m: Message) {
-    if (m.role === "assistant")
-      for (const c of m.toolCalls) {
-        this.toolsUsed.add(c.name);
-        this.toolsSinceCheck.add(c.name);
-      }
+    this.noteTools(m);
     this.messages.push(m);
     this.write({ type: "message", message: m });
   }

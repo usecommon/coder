@@ -127,19 +127,27 @@ const diff = (ws: string, extra: string[] = []) =>
 
 // Folders that hold dependencies, builds and tool caches: a test run rewrites .pytest_cache, which is no change to the
 // work. A folder marked with CACHEDIR.TAG (cargo, pytest and others write one) is skipped too.
-const SKIP = new Set([".git", "node_modules", "dist", "build", "target", "obj", "_build", "dist-newstyle", ".venv", "venv", "__pycache__", ".gradle", "vendor", ".next", "coverage", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox"]);
+/** Folders that never hold source: dependencies and caches. */
+const DEPS = new Set([".git", "node_modules", "dist-newstyle", ".venv", "venv", "__pycache__", ".gradle", ".next", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".hypothesis", ".tox", ".nox", ".nyc_output"]);
+/** Those, and folders that usually hold build output but may hold source (internal/build/version.go): skipped where
+ *  git ignores them, or where there is no git, but not for a file git reports as untracked and not ignored. */
+const SKIP = new Set([...DEPS, "dist", "build", "target", "obj", "_build", "vendor", "coverage"]);
+/** Files a test run rewrites every time: its output, not a change to the work. */
+const RUN_OUTPUT = /^(\.coverage(\..*)?|\.phpunit\.result\.cache|cover\.out|coverage\.out|lcov\.info)$/;
+const runOutput = (path: string) => RUN_OUTPUT.test(path.replace(/\/$/, "").split("/").pop() ?? "");
 // Each file costs one stat: a hundred thousand take a fraction of a second, and only at the end of a turn.
 const MAX_FILES = 100_000;
 /** Pathspecs that keep git from listing the skipped folders at all: a dependency tree of hundreds of thousands of
  *  files would otherwise be listed in full, and overflow, before being left out. */
 const NOT_SKIPPED = [...SKIP].map((d) => `:(exclude,glob)**/${d}/**`);
+const NOT_DEPS = [...DEPS].map((d) => `:(exclude,glob)**/${d}/**`);
 
 /** A fingerprint of the workspace's files: it changes when a file is added, removed or changed. Undefined when it
  *  cannot be taken cheaply, which callers treat as "may have changed". */
 export function fingerprint(ws: string): string | undefined {
   const h = createHash("sha256");
   if (isGitRepo(ws)) {
-    const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", ".", ...NOT_SKIPPED]);
+    const status = git(ws, ["status", "--porcelain=v1", "-uall", "--ignore-submodules=all", "-z", "--", ".", ...NOT_DEPS]);
     const d = diff(ws, ["--binary"]);
     if (!status || !d) return undefined;
     // The commit too: changes committed through the shell leave a clean tree but are changes all the same.
@@ -168,7 +176,7 @@ export function fingerprint(ws: string): string | undefined {
     };
     const skipped = (p: string) => {
       const parts = below(p);
-      return parts.some((part) => SKIP.has(part)) || (parts[0] !== ".." && inCache(parts.join("/")));
+      return parts.some((part) => DEPS.has(part)) || runOutput(p) || (parts[0] !== ".." && inCache(parts.join("/")));
     };
     const entries = status.stdout.split("\0").filter((e) => !(e.startsWith("?? ") && skipped(e.slice(3))));
     h.update(entries.join("\0")).update(d.stdout).update(head?.stdout ?? "no-head");
@@ -186,7 +194,7 @@ export function fingerprint(ws: string): string | undefined {
     if (!ignored) return undefined;
     let n = 0;
     for (const f of ignored.stdout.split("\0")) {
-      if (!f || f.split("/").some((part) => SKIP.has(part)) || inCache(f)) continue;
+      if (!f || f.split("/").some((part) => SKIP.has(part)) || runOutput(f) || inCache(f)) continue;
       if (++n > MAX_FILES) return undefined;
       try {
         const st = lstatSync(join(ws, f));
@@ -207,7 +215,7 @@ export function fingerprint(ws: string): string | undefined {
       const p = join(dir, e.name);
       if (e.isDirectory()) {
         if (!SKIP.has(e.name) && !existsSync(join(p, "CACHEDIR.TAG")) && !walk(p)) return false;
-      } else if (e.isFile()) {
+      } else if (e.isFile() && !runOutput(e.name)) {
         if (++files > MAX_FILES) return false;
         try {
           const s = lstatSync(p);
