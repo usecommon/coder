@@ -33,6 +33,11 @@ const AGENT_TIMEOUT = Number(args.timeout ?? 600) * 1000;
 // Attempts per task. 1: the agent works once and hidden tests decide. 2: as in Aider's own benchmark, an agent whose
 // first attempt fails is shown the failing test output and works once more, in the same session.
 const ATTEMPTS = Number(args.attempts ?? process.env.BENCH_ATTEMPTS ?? 1);
+// BENCH_VISIBLE_TESTS=1: the tests stay in the workspace (all of them enabled), as in a real project, and a Galley
+// variant whose config says "check": "$TESTS" gets the task's own test command as its check. Grading still puts the
+// official tests back first, so editing them gains nothing. A different protocol from the hidden-test one: its
+// results are not comparable with rounds run without it.
+const VISIBLE_TESTS = process.env.BENCH_VISIBLE_TESTS === "1";
 const MODEL = args.model ?? "deepseek/deepseek-flash";
 const PROXY = args.proxy ?? "http://127.0.0.1:8799";
 const PROVIDER = MODEL.split("/")[0]!;
@@ -170,10 +175,13 @@ function prepare(t: Task, ws: string, run: string) {
   cpSync(t.dir, ws, { recursive: true });
   // .meta holds the reference solution; a few exercises also ship write-ups of solution approaches.
   for (const d of [".meta", ".approaches", ".articles"]) rmSync(join(ws, d), { recursive: true, force: true });
-  for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
-  if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
-  // The other tracks keep a few test-like files their config does not list (a test template, a benchmark test).
-  if (OTHER_TRACKS.has(t.lang)) for (const f of walkFiles(ws)) if (TEST_LIKE.test(f)) rmSync(join(ws, f), { force: true });
+  if (VISIBLE_TESTS) unskip(t, ws);
+  else {
+    for (const f of hidden(t)) rmSync(join(ws, f), { force: true });
+    if (t.lang === "rust") rmSync(join(ws, "tests"), { recursive: true, force: true });
+    // The other tracks keep a few test-like files their config does not list (a test template, a benchmark test).
+    if (OTHER_TRACKS.has(t.lang)) for (const f of walkFiles(ws)) if (TEST_LIKE.test(f)) rmSync(join(ws, f), { force: true });
+  }
   if (t.lang === "typescript") symlinkSync(TS_MODULES, join(ws, "node_modules"));
   // JavaScript: the exercises expect node_modules (jest, babel) next to the code.
   if (t.lang === "javascript") symlinkSync(JS_MODULES, join(ws, "node_modules"));
@@ -467,7 +475,13 @@ async function runAgent(agent: string, t: Task, ws: string, run: string, retry?:
     // Anthropic's SDK appends /v1/messages itself; OpenAI-compatible clients append /chat/completions.
     // GALLEY_PROVIDER_OPTS (JSON) adds provider options for every Galley arm; a variant can add its own.
     const extra = { ...JSON.parse(process.env.GALLEY_PROVIDER_OPTS ?? "{}"), ...(v.providerOpts ?? {}) };
-    writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, ...(v.config ?? {}), providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
+    // "$TESTS" as the check: the task's own test command (only where the tests are in the workspace).
+    const config = { ...(v.config ?? {}) };
+    if (config.check === "$TESTS") {
+      if (!VISIBLE_TESTS) throw new Error(`${agent}: "check": "$TESTS" needs BENCH_VISIBLE_TESTS=1`);
+      config.check = shellLine(testCommand(t));
+    }
+    writeFileSync(join(run, "config", "galley", "config.json"), JSON.stringify({ effort, ...config, providers: { [PROVIDER]: { baseURL: `${PROXY}/${tag}`, ...extra } } }));
     Object.assign(env, { XDG_CONFIG_HOME: join(run, "config"), GALLEY_DATA_DIR: join(run, "galley-data") });
     const session = retry ? galleySession(run) : undefined;
     // Without a first session to continue (the agent died before it had one), the second attempt starts from the task.
@@ -487,14 +501,8 @@ async function runAgent(agent: string, t: Task, ws: string, run: string, retry?:
   return runInAgentBox(cmd, { agent, ws, state: stateDirs, env, timeoutMs: AGENT_TIMEOUT, stdout: join(run, retry === undefined ? "agent.log" : "agent-2.log") });
 }
 
-async function grade(t: Task, ws: string, run: string, log = "grade.log") {
-  // Restore the official tests (overwriting anything the agent wrote with the same names).
-  for (const f of hidden(t)) {
-    mkdirSync(dirname(join(ws, f)), { recursive: true });
-    cpSync(join(t.dir, f), join(ws, f));
-  }
-  unskip(t, ws);
-  // The same commands as Aider's benchmark, with Gradle and npm kept offline.
+/** The task's test command: the same commands as Aider's benchmark, with Gradle and npm kept offline. */
+function testCommand(t: Task): string[] {
   const cmds: Record<string, string[]> = {
     python: ["pytest", "-q", "-p", "no:cacheprovider"],
     go: ["go", "test", "./..."],
@@ -513,7 +521,20 @@ async function grade(t: Task, ws: string, run: string, log = "grade.log") {
     lua: ["busted"],
     tcl: ["bash", "-c", 'for f in "$@"; do RUN_ALL=1 tclsh "$f" || exit 1; done', "bash", ...t.files.test],
   };
-  const cmd = cmds[t.lang] ?? [];
+  return cmds[t.lang] ?? [];
+}
+
+/** The test command as one line for a shell, for Galley's check. */
+const shellLine = (cmd: string[]) => cmd.map((a) => (/^[\w./=:@%+-]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`)).join(" ");
+
+async function grade(t: Task, ws: string, run: string, log = "grade.log") {
+  // Restore the official tests (overwriting anything the agent wrote with the same names).
+  for (const f of hidden(t)) {
+    mkdirSync(dirname(join(ws, f)), { recursive: true });
+    cpSync(join(t.dir, f), join(ws, f));
+  }
+  unskip(t, ws);
+  const cmd = testCommand(t);
   mkdirSync(join(run, "cache"), { recursive: true });
   const env = baseEnv(run, t.lang);
   if (t.lang === "java") {
@@ -853,6 +874,7 @@ await pool(jobs, CONC, async ({ agent, t }) => {
   pruneArtifacts(run, BUILD_DIRS[t.lang]);
   const pass2 = pass || (second !== undefined && second.g.code === 0 && !second.g.timedOut);
   const r = {
+    ...(VISIBLE_TESTS ? { visibleTests: true } : {}),
     agent, lang: t.lang, name: t.name, pass, agentExit: a.code, agentTimedOut: a.timedOut, agentMs: a.ms, gradeExit: g.code, startedAt: started,
     memoryKills: a.memoryKills + g.memoryKills + (second ? second.a.memoryKills + second.g.memoryKills : 0),
     // How Galley was run, beyond its config file: which checkout and which extra flags. The measured profiles and

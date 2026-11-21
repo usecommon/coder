@@ -863,3 +863,14 @@ Fresh agents, same lenses; cut off by a usage limit and resumed. 14 findings, 11
 Each fix was taken out in turn and its test run: all of them failed without their fix (the `__proto__` test once it also covered nested settings). Tests: 241 pass.
 
 **Twelve rounds compared.** Findings 60, 39, 32, 25, 19, 18, 18, 19, 15, 22, 16, 14; distinct 11, and for the first time since the third round none high.
+
+## The check from the project, and handing over when it keeps failing (21 November)
+
+Asked what would raise Galley's pass rate, the measurements so far point one way: on these tasks the model sets the pass rate, and nothing in the loop moved it (self-review, a verifier, prompt guidance, tests first, reasoning effort), while feedback from running the tests did (a second attempt shown the test output fixed about nine failures in ten for both agents). Two general changes follow from that, both in Galley, neither specific to this benchmark:
+
+- **`check: "auto"`** uses the test command the project declares (a Makefile `test` target, a `package.json` test script, cargo, go, mix, pytest). Without a check, `galley run` mentions one it finds. Off unless asked for: a detected command that fails for reasons of its own (no network in the sandbox, tests that already failed) would send the model after failures it did not cause.
+- **`escalateOnCheck`** (default 2, with `escalateModel`): after that many failed checks in a turn the stronger model takes over, shown the failure. A failing check is a real sign that the turn is going wrong; the trouble signals were measured to be no better than chance (AUC 0.50). The takeover is now one function for both triggers.
+
+**A mistake of mine in proposing how to measure the second.** I offered DeepSeek V4.1 Flash with DeepSeek V4 Pro as the stronger model, needing no new approval. Galley's own profiles put V4 Pro at 6.7% on Terminal-Bench 4.1 against Flash's 38.5%: it is the older, weaker model, and Galley rightly refuses that handover. DeepSeek has no model stronger than Flash, so escalation cannot be measured with DeepSeek alone. Nothing was spent.
+
+**What the benchmark now has for measuring it.** With `BENCH_VISIBLE_TESTS=1` the tests stay in the workspace, all enabled, as in a real project, and a Galley variant whose config says `"check": "$TESTS"` gets the task's own test command as its check. Grading still puts the official tests back first. It is a different protocol from the hidden-test one and its results are not comparable with those rounds. Checked without a model: the reference solutions pass in this mode, and the check lines Galley would get pass in Galley's own sandbox. Tests: 247 pass (a sandbox test that compiles Go now has a 60-second limit; it timed out on a cold build cache, on the previous commit too).
