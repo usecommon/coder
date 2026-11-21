@@ -63,13 +63,14 @@ export const reviewMessage = (advisor: string, report: string) =>
 /** What a stronger model reads when it takes over without the transcript: the request, where the work stands
  *  (the files as they are now) and why it was brought in. A model that inherits the whole transcript was measured to
  *  recover less than half of what it adds on its own; given only the edits, 64 to 84% (research/reports, area 1). */
-export const freshStartMessage = (o: { from: string; why: string; request: string; earlier?: string; files: string; environment: string }) =>
+export const freshStartMessage = (o: { from: string; why: string; request: string; earlier?: string; files: string; environment: string; check?: string }) =>
   `${o.environment}\n\n${o.earlier ? `Earlier in this session:\n\n${o.earlier}\n\nThe current request:\n\n` : ""}${o.request}\n\n` +
   `You are taking over this task from another model (${o.from}) because ${o.why}. You are not shown its attempt, only where the files stand. ` +
   "Work from the request and the files as they are now: keep what is right, change what is not." +
   (o.files
     ? `\n\nWhat has been changed so far:\n\n<files_changed>\n${o.files}\n</files_changed>`
-    : "\n\nNo file was changed with the write or edit tools in this turn. Commands or earlier turns may still have changed files: look before you assume the code is as it was.");
+    : "\n\nNo file was changed with the write or edit tools in this turn. Commands or earlier turns may still have changed files: look before you assume the code is as it was.") +
+  (o.check ? `\n\nThe project's check, run on the files as they are now:\n\n${o.check}` : "");
 
 /** Messages Galley adds to a turn itself (a failed check, a review, advice, a takeover, a plan's review): not requests. */
 const INJECTED = [

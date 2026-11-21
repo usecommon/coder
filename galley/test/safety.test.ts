@@ -121,7 +121,8 @@ describe.skipIf(!hasSandbox)("bubblewrap sandbox", () => {
     expect(r.output).toContain("built");
     expect(r.output).toContain("HOME_RO");
     expect(existsSync(join(cacheDir, "go-build"))).toBe(true);
-  });
+    // A cold Go build takes longer than the test runner's default limit of five seconds.
+  }, 60_000);
   test("/tmp persists between commands but is private to the sandbox", async () => {
     const tmpDir = tempDir("galley-tmp-");
     expect((await run("echo scratch > /tmp/t.py", { tmpDir })).exitCode).toBe(0);

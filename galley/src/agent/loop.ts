@@ -246,6 +246,47 @@ export class Agent {
     let checkFails = 0;
     let checkReport: string | undefined;
     let lastFailure: string | undefined;
+    /** Hand the rest of the turn to the stronger model, if there is one that has not taken over yet and the profiles
+     *  do not say it is weaker. `check` is the failed check's message, shown to it. True if it took over. */
+    const handOver = (why: string, record: (acted: "handover" | "none") => void, check?: string): boolean => {
+      const up = cfg.escalateModel;
+      if (!up || up === ref || handedOver) return false;
+      handedOver = true;
+      // Knowing when not to switch: a model that is not stronger gains nothing a plain retry would not.
+      const weaker = weakerWarning(ref, up, profiles(cfg.models));
+      if (weaker) {
+        this.emit({ type: "notice", level: "warn", text: `Not handing over to ${up}: ${weaker}` });
+        return false;
+      }
+      record("handover");
+      const reread = rereadCost(up, this.lastInputTokens, { ...DEFAULT_PRICES, ...cfg.pricing });
+      if (cfg.escalateContext === "transcript") {
+        this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${why}.${reread !== undefined ? ` It reads the session afresh: about ${usd(reread)}.` : ""}` });
+        this.session.addMessage({ role: "user", content: handoverMessage(ref, why) + (check ? `\n\n${check}` : "") });
+      } else {
+        // The stronger model starts from the request and the files, not from the attempt that went wrong.
+        this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${why}. It starts from the request and the files as they are now.` });
+        // Earlier turns only: if compaction has taken this turn's opening message, a summary would cover this
+        // attempt too, so nothing earlier is quoted.
+        const at = turnAt();
+        const earlier = at > 0 ? earlierTurns(this.session.messages.slice(0, at)) : "";
+        // What changed: git's view where there is one (it sees what commands and earlier turns did too), else
+        // the file tools' own record.
+        const files = gitChanges(this.workspace) || changes(this.workspace, this.undo.snapshots(), 20_000);
+        // If it is not shown a failed check, it may stop having changed nothing: the check runs again then, and its
+        // failure reaches it.
+        if (checking && lastFailure !== undefined) this.unchecked = true;
+        this.baseTokens = this.lastInputTokens;
+        this.viewFrom = this.session.messages.length;
+        this.session.addMessage({
+          role: "user",
+          content: freshStartMessage({ from: ref, why, request: text, earlier: earlier || undefined, files, environment: environmentNote(this.workspace), check }),
+        });
+      }
+      ref = up;
+      watch.rearm();
+      return true;
+    };
     const failed = new Set<string>();
     const maxSteps = this.o.maxSteps ?? cfg.maxSteps;
     const watch = new Watch(maxSteps);
@@ -334,7 +375,13 @@ export class Agent {
                 checkFails++;
                 lastFailure = r.output;
                 this.emit({ type: "notice", level: "warn", text: `Check failed (${checkFails} of ${checkRounds}): ${cfg.check}` });
-                this.session.addMessage({ role: "user", content: checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds) });
+                const failed = checkFailedMessage(cfg.check!, r.exitCode, r.output, checkFails, checkRounds);
+                // A check that keeps failing: the stronger model takes over, shown the failure.
+                const after = cfg.escalateOnCheck ?? 2;
+                const why = `the project's check has failed ${checkFails} times in this turn`;
+                const record = (acted: "handover" | "none") => this.session.addSignal({ kind: "check-failing", detail: why, step, model: ref, acted });
+                if (after > 0 && checkFails >= after && !this.o.subagent && handOver(why, record, failed)) continue;
+                this.session.addMessage({ role: "user", content: failed });
                 continue;
               } else {
                 this.emit({ type: "notice", level: "warn", text: `Check still failing after ${checkRounds} rounds: ${cfg.check}` });
@@ -402,41 +449,7 @@ export class Agent {
             this.session.addMessage({ role: "user", content: adviceMessage(adv!.model, sig.detail, advice) });
             watch.rearm();
           }
-        } else if (canHandOver) {
-          handedOver = true;
-          // Knowing when not to switch: a model that is not stronger gains nothing a plain retry would not.
-          const weaker = weakerWarning(ref, up!, profiles(cfg.models));
-          if (weaker) this.emit({ type: "notice", level: "warn", text: `Not handing over to ${up}: ${weaker}` });
-          else {
-            record("handover");
-            const reread = rereadCost(up!, this.lastInputTokens, { ...DEFAULT_PRICES, ...cfg.pricing });
-            if (cfg.escalateContext === "transcript") {
-              this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}.${reread !== undefined ? ` It reads the session afresh: about ${usd(reread)}.` : ""}` });
-              this.session.addMessage({ role: "user", content: handoverMessage(ref, sig.detail) });
-            } else {
-              // The stronger model starts from the request and the files, not from the attempt that went wrong.
-              this.emit({ type: "notice", level: "info", text: `Handing the rest of this turn to ${up} because ${sig.detail}. It starts from the request and the files as they are now.` });
-              // Earlier turns only: if compaction has taken this turn's opening message, a summary would cover this
-              // attempt too, so nothing earlier is quoted.
-              const at = turnAt();
-              const earlier = at > 0 ? earlierTurns(this.session.messages.slice(0, at)) : "";
-              // What changed: git's view where there is one (it sees what commands and earlier turns did too), else
-              // the file tools' own record.
-              const files = gitChanges(this.workspace) || changes(this.workspace, this.undo.snapshots(), 20_000);
-              // It is not shown the failed check, so it may stop having changed nothing: the check runs again then,
-              // and its failure reaches it.
-              if (checking && lastFailure !== undefined) this.unchecked = true;
-              this.baseTokens = this.lastInputTokens;
-              this.viewFrom = this.session.messages.length;
-              this.session.addMessage({
-                role: "user",
-                content: freshStartMessage({ from: ref, why: sig.detail, request: text, earlier: earlier || undefined, files, environment: environmentNote(this.workspace) }),
-              });
-            }
-            ref = up!;
-            watch.rearm();
-          }
-        }
+        } else if (canHandOver) handOver(sig.detail, record);
         sinceLook = 0;
         lookFrom = this.session.messages.length;
       } else if (cfg.advisor?.every && !this.o.subagent && !signal?.aborted && step < maxSteps - 1 && ++sinceLook >= lookAfter && this.consults < maxConsults(cfg.advisor)) {

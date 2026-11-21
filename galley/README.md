@@ -132,10 +132,14 @@ The choices in this mode follow published research: a reviewer stronger than the
 
 ```bash
 galley run "fix the date parser" --check "npm test"
+galley run "fix the date parser" --check auto     # the project's own test command
 ```
+
+`--check auto` uses the test command the project declares: a Makefile `test` target, a `package.json` test script (run with npm, pnpm, yarn or bun, by the lock file), `cargo test`, `go test ./...`, `mix test`, or pytest where the project configures it or has test files. Galley says which it found. Without `--check`, `galley run` mentions a test command it finds. The command must work offline: the sandbox has no network.
 
 When a turn that changed files ends (through the file tools, or a command that left the workspace different), Galley runs the check command in the sandbox with the network off; without a sandbox it asks first, as `bash` does. If the check fails, its output goes back to the model, which fixes the cause and stops again, and the check runs again. Up to three failures a turn (`checkRounds`) are fed back; if it still fails after that, or no step is left, the turn ends with a warning. A check may run for 300 seconds (`checkTimeout`; 0 or a value that is not a positive number means the default); the end of its output, where test runners print their summary, is what is kept. The steps of a `--steps` plan are checked together after the last one.
 
+- **A check that keeps failing hands the turn to `escalateModel`,** after two failed checks in a turn (`escalateOnCheck`; 0 never). The stronger model is shown the failure, and its own fix is checked like any other. A failing check is a real sign that the turn is going wrong; the trouble signals that also hand over were measured to be no better than chance at telling a failing run from a passing one.
 - **The model is told not to edit tests or special-case their inputs, and that it may say a test is wrong instead.** In one study, giving the model that way out cut gaming of tests from 54% to 9%.
 - **A reviewer reads the check's output beside the diff,** so its review rests on something that ran.
 - **Every check run is recorded in the session file,** so that how many rounds turns need can be measured (`bench/calibrate.ts`).
@@ -182,7 +186,8 @@ galley serve --port 4096              # HTTP + SSE server (see below)
   "network": "ask",          // approval policy for commands that request network access
   "sandbox": "auto",         // "off" runs commands unsandboxed (each one then asks)
   "compactAt": 120000,
-  "check": "npm test",       // optional: run when a turn that changed files ends; failures go back to the model
+  "check": "npm test",       // optional: run when a turn that changed files ends; failures go back to the model ("auto": the project's own)
+  "escalateOnCheck": 2,      // with escalateModel: hand over after this many failed checks in a turn (0: never)
   "checkRounds": 3,
   "checkTimeout": 300,       // seconds
   "lessons": false,          // keep one-line notes when a failing check comes to pass, and read the most related one back

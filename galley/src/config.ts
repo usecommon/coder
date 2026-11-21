@@ -64,7 +64,12 @@ export interface Config {
    *  other model's attempt. "transcript": the whole session. Measured on SWE-bench Verified, the first recovered 64 to
    *  84% of the stronger model's advantage and the second 36 to 47%, at a higher price (research/reports, area 1). */
   escalateContext?: "edits" | "transcript";
-  /** A command that checks the work, e.g. "npm test" or "pytest -q". When a turn that changed files ends, it is run
+  /** Hand the turn to `escalateModel` once the project's check has failed this many times in it (default 2; 0 never).
+   *  A failing check is a real sign the turn is going wrong; the trouble signals were measured to be no better than
+   *  chance at telling a failing run from a passing one. */
+  escalateOnCheck?: number;
+  /** A command that checks the work, e.g. "npm test" or "pytest -q", or "auto" for the project's own test command
+   *  (a Makefile test target, a package.json test script, cargo, go, mix or pytest). When a turn that changed files ends, it is run
    *  in the sandbox (without one, only after asking); if it fails, its output goes back to the model, up to
    *  `checkRounds` times a turn. */
   check?: string;

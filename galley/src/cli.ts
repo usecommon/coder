@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 // galley: a safety-first, model-agnostic coding agent.
+import { detectCheck } from "./agent/check-detect.ts";
 import { addWorktree } from "./agent/workspace-state.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, openSync, realpathSync } from "node:fs";
@@ -106,6 +107,13 @@ async function main() {
   }
   const ignored: string[] = [];
   const cfg = loadConfig(workspace, overrides, ignored);
+  // "auto": the project's own test command. Without a check, a test command the project declares is mentioned.
+  const found = detectCheck(workspace);
+  if (cfg.check === "auto") {
+    cfg.check = found;
+    console.error(c.dim(found ? `check: ${found} (found in the project)` : "check auto: no test command found in the project; no check is run"));
+  } else if (!cfg.check && found && (cmd === "run" || cmd === "chat"))
+    console.error(c.dim(`Tests found: \`${found}\`. \`--check auto\` runs them when a turn that changed files ends, and sends failures back.`));
   if (ignored.length)
     console.error(
       c.yellow(`galley.json sets ${ignored.join(", ")}, which are not used: the file is not trusted (the model can write it, so it may not be yours). Read it, then run \`galley trust\` to use them.`),

@@ -10,6 +10,7 @@ import { detectSandbox } from "../src/safety/sandbox.ts";
 import { loadLessons, pickLesson, saveLesson } from "../src/agent/lessons.ts";
 import { Agent, checkFailedMessage } from "../src/agent/loop.ts";
 import { UndoLog } from "../src/tools/undo.ts";
+import { detectCheck } from "../src/agent/check-detect.ts";
 import { editTool } from "../src/tools/fs.ts";
 import { loadConfig, trustProjectConfig } from "../src/config.ts";
 import { confine, OutsideError } from "../src/safety/paths.ts";
@@ -2225,5 +2226,86 @@ describe("twelfth review", () => {
     const asked: string[] = [];
     expect(editTool.repair!({ old_string: "    return a - b", new_string: "    return a + b" }, repairCtx(ws, asked))).toBeUndefined();
     expect(asked.filter((a) => a.startsWith("read "))).toEqual([]);
+  });
+});
+
+describe("the check from the project, and handing over when it keeps failing", () => {
+  const project = (files: Record<string, string>) => {
+    const ws = tempDir();
+    for (const [f, body] of Object.entries(files)) {
+      mkdirSync(join(ws, f, ".."), { recursive: true });
+      writeFileSync(join(ws, f), body);
+    }
+    return ws;
+  };
+
+  test("the project's own test command is found", () => {
+    expect(detectCheck(project({ Makefile: "build:\n\tcc x.c\ntest: build\n\t./run-tests\n", "package.json": '{"scripts":{"test":"jest"}}' }))).toBe("make test");
+    expect(detectCheck(project({ "package.json": '{"scripts":{"test":"vitest run"}}' }))).toBe("npm test");
+    expect(detectCheck(project({ "package.json": '{"scripts":{"test":"vitest run"}}', "pnpm-lock.yaml": "" }))).toBe("pnpm test");
+    expect(detectCheck(project({ "package.json": '{"scripts":{"test":"bun test"}}', "bun.lock": "" }))).toBe("bun run test");
+    expect(detectCheck(project({ "Cargo.toml": "[package]\n" }))).toBe("cargo test");
+    expect(detectCheck(project({ "go.mod": "module m\n" }))).toBe("go test ./...");
+    expect(detectCheck(project({ "mix.exs": "" }))).toBe("mix test");
+    expect(detectCheck(project({ "tests/test_parser.py": "def test_x(): pass\n" }))).toBe("python3 -m pytest -q");
+    expect(detectCheck(project({ "pyproject.toml": "[tool.pytest.ini_options]\n" }))).toBe("python3 -m pytest -q");
+  });
+
+  test("nothing is found where the project declares no tests", () => {
+    expect(detectCheck(project({ "package.json": '{"scripts":{"test":"echo \\"Error: no test specified\\" && exit 1"}}' }))).toBeUndefined();
+    expect(detectCheck(project({ Makefile: "build:\n\tcc x.c\n", "main.py": "print(1)\n" }))).toBeUndefined();
+    expect(detectCheck(project({}))).toBeUndefined();
+  });
+
+  const c = "grep -q right out.txt";
+  const wrong: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "wrong" } }] };
+  const right: MockReply = { toolCalls: [{ name: "write", input: { path: "out.txt", content: "right" } }] };
+
+  test("after two failed checks the stronger model takes over, shown the failure, and its fix is checked", async () => {
+    const strong = second("upchk1", [right, { text: "Fixed." }]);
+    const { mock, agent, notices } = setup([wrong, { text: "Done." }, wrong, { text: "Done again." }], { check: c, sandbox: "off", escalateModel: "upchk1/strong" });
+    const r = await agent.send("write out.txt");
+    expect(mock.requests).toHaveLength(4);
+    const first = lastUser(strong.requests[0]!);
+    expect(first).toContain("You are taking over this task from another model (mock/test) because the project's check has failed 2 times in this turn");
+    expect(first).toContain("The check `grep -q right out.txt` failed");
+    expect(notices().filter((n) => n.startsWith("Check"))).toEqual([`Check failed (1 of 3): ${c}`, `Check failed (2 of 3): ${c}`, `Check passed: ${c}`]);
+    expect(r.text).toBe("Fixed.");
+    expect(agent.session.signals().map((s) => [s.kind, s.acted])).toEqual([["check-failing", "handover"]]);
+  });
+
+  test("with the transcript, the stronger model reads the session and the failure", async () => {
+    const strong = second("upchk2", [right, { text: "Fixed." }]);
+    const { agent } = setup([wrong, { text: "Done." }, wrong, { text: "Done again." }], { check: c, sandbox: "off", escalateModel: "upchk2/strong", escalateContext: "transcript" });
+    await agent.send("write out.txt");
+    const msg = lastUser(strong.requests[0]!);
+    expect(msg).toStartWith("You are taking over this session from another model (mock/test)");
+    expect(msg).toContain("The check `grep -q right out.txt` failed");
+  });
+
+  test("escalateOnCheck sets when, and 0 never hands over for a failing check", async () => {
+    const late = second("upchk3", [right, { text: "Fixed." }]);
+    // Each attempt writes something different, so that no "same call" signal hands over first.
+    const w = (n: number): MockReply => ({ toolCalls: [{ name: "write", input: { path: "out.txt", content: `wrong ${n}` } }] });
+    const one = setup([w(1), { text: "Done." }, w(2), { text: "Done." }, w(3), { text: "Done." }], { check: c, sandbox: "off", escalateModel: "upchk3/strong", escalateOnCheck: 3 });
+    await one.agent.send("write out.txt");
+    expect(one.mock.requests).toHaveLength(6);
+    expect(late.requests).toHaveLength(2);
+    const never = second("upchk4", [{ text: "never asked" }]);
+    const two = setup([w(1), { text: "Done." }, w(2), { text: "Done." }, w(3), { text: "Done." }, { text: "Giving up." }], { check: c, sandbox: "off", escalateModel: "upchk4/strong", escalateOnCheck: 0 });
+    await two.agent.send("write out.txt");
+    expect(never.requests).toHaveLength(0);
+  });
+
+  test("no handover for a failing check without a stronger model, or to one the profiles say is weaker", async () => {
+    const plain = setup([wrong, { text: "Done." }, wrong, { text: "Done." }, wrong, { text: "Done." }, { text: "Giving up." }], { check: c, sandbox: "off" });
+    await plain.agent.send("write out.txt");
+    expect(plain.notices().filter((n) => n.startsWith("Check failed")).length).toBe(3);
+    const weak = second("upchk5", [{ text: "never asked" }]);
+    const score = (n: number) => ({ name: "m", agentic: { score: n, ci: 3, harness: "x", effort: "high", date: "2026-11-14" } });
+    const w = setup([wrong, { text: "Done." }, wrong, { text: "Done." }, wrong, { text: "Done." }, { text: "Giving up." }], { check: c, sandbox: "off", escalateModel: "upchk5/weak", models: { "mock/test": score(40), "upchk5/weak": score(7) } });
+    await w.agent.send("write out.txt");
+    expect(weak.requests).toHaveLength(0);
+    expect(w.notices().some((n) => n.startsWith("Not handing over to upchk5/weak"))).toBe(true);
   });
 });
